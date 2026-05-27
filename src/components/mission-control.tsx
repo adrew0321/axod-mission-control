@@ -145,7 +145,53 @@ export default function MissionControl({
         setSendError(body.error ?? `Send failed (${res.status})`);
         return;
       }
-      startTransition(() => router.refresh());
+
+      const streamingId = `stream_${Date.now()}`;
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: streamingId,
+          role: "agent",
+          agentId: "sage",
+          senderName: "Sage",
+          content: "",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          isStreaming: true,
+        },
+      ]);
+      setIsTyping(true);
+
+      const es = new EventSource(`/api/sessions/${session.id}/stream`);
+      es.onmessage = (ev) => {
+        try {
+          const evt = JSON.parse(ev.data) as {
+            type: string;
+            content?: string;
+            message?: string;
+          };
+          if (evt.type === "token" && typeof evt.content === "string") {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
+              ),
+            );
+          } else if (evt.type === "error") {
+            setSendError(evt.message ?? "Agent error");
+          } else if (evt.type === "persisted") {
+            es.close();
+            setIsTyping(false);
+            setMessages((prev) => prev.filter((m) => m.id !== streamingId));
+            startTransition(() => router.refresh());
+          }
+        } catch {
+          // ignore non-JSON keepalives
+        }
+      };
+      es.onerror = () => {
+        es.close();
+        setIsTyping(false);
+        setSendError((prev) => prev ?? "Stream disconnected");
+      };
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
       setInputText(text);

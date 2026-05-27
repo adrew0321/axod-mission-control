@@ -451,6 +451,27 @@ You type "list files in src/components" and Sage's response streams token-by-tok
 - `EventSource` doesn't support custom headers — auth cookie must be on the same origin and auto-sent (it will be since you're hitting `/api/...` on `127.0.0.1`)
 - On Windows, `spawn('claude', ...)` may need `shell: true` if PATH resolution is finicky
 
+### Day 4 — what actually happened (2026-05-27)
+
+- **CLI stream-json schema (v2.1.150)** is different from the plan's example:
+  - Plain `--output-format stream-json` emits whole `{type:"assistant", message:{content:[...]}}` events, NOT per-token deltas
+  - Token-by-token streaming requires the **`--include-partial-messages`** flag (paired with `--verbose`, also required)
+  - With partial messages, tokens arrive as `{type:"stream_event", event:{type:"content_block_delta", delta:{type:"text_delta", text:"..."}}}`
+  - Final summary arrives as `{type:"result", subtype:"success", result:"...", total_cost_usd:N, usage:{input_tokens, output_tokens}}`
+  - The parser in `src/lib/agent-runner-stub.ts` reads both shapes defensively.
+- **Cost per spawn is non-trivial.** First probe (1-output-token "HELLO") cost $0.14 because of ~22k cache-creation tokens at SessionStart (skill hooks inject the superpowers skill content). Steady-state spawns with cache hits drop to ~$0.05. This is why week 2 must migrate to `@anthropic-ai/claude-agent-sdk` with long-lived sessions — every CLI spawn re-bills setup tokens.
+- **Cost/tokens are persisted per agent message** (`messages.cost_usd`, `messages.token_count_in/out`) so the top-bar stats now reflect real spend, not seed values. Source: the `result` event's `total_cost_usd` and `usage`.
+- **Windows spawn** worked with `shell: true` and no path manipulation. The apostrophe in the working dir (`c:/Users/A'KeemDrew/AXOD/landing`) is safe because args are passed as an array (Node quotes them for `cmd.exe`) and the user prompt goes via stdin, never argv.
+- The `--add-dir` flag fails loudly if the path doesn't exist; runner checks `existsSync()` first and omits the flag rather than crashing the stream.
+- SSE event schema for the wire (data: lines):
+  - `{"type":"start","messageId":"..."}` — emitted once when stream opens
+  - `{"type":"token","content":"..."}` — per-token chunks
+  - `{"type":"done","fullText":"...","costUsd":N,"tokensIn":N,"tokensOut":N}` — agent finished
+  - `{"type":"persisted"}` — DB write completed; client should close the EventSource and `router.refresh()`
+  - `{"type":"error","message":"..."}` — any failure (stderr from CLI, parser exception, etc.)
+- Client wiring (`mission-control.tsx`): on send, inserts an empty "streaming" assistant bubble, opens `EventSource`, appends each token's `content` to that bubble's content, on `persisted` closes the source and `router.refresh()` so the Server Component re-reads the canonical message from SQLite (which removes the optimistic bubble and replaces it with the real one).
+- Verified end-to-end via curl: prompt "Reply with exactly the word READY..." streamed back as `READ` + `Y` chunks, persisted as `msg_452a07796e2a7af5` in `messages` with `cost_usd=0.054, token_count_in=5417, token_count_out=4`.
+
 ---
 
 ## Day 5 — Polish, decision review, week 2 prep
