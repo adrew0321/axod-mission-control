@@ -1,7 +1,7 @@
-allowBuilds:
-  msw: set this to true or false
-  sharp: set this to true or false
-  unrs-resolver: set this to true or false
-ignoredBuiltDependencies:
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
   - sharp
   - unrs-resolver
+
+verifyDepsBeforeRun: false

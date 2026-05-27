@@ -55,6 +55,9 @@ logs/
 !.vscode/extensions.json
 .idea/
 
+# claude code local overrides
+.claude/settings.local.json
+
 # os
 desktop.ini
 

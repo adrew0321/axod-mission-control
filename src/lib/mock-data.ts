@@ -16,7 +16,9 @@ export interface Session {
   title: string;
   project: string;
   branch: string;
-  status: 'active' | 'paused' | 'completed';
+  repoPath: string;
+  worktreePath: string;
+  status: 'active' | 'paused' | 'completed' | 'errored';
   costUsd: number;
   tokensIn: number;
   tokensOut: number;
@@ -131,6 +133,8 @@ export const mockSession: Session = {
   title: 'Testimonial Card Borders',
   project: 'AXOD CREATIVE',
   branch: 'feature/testimonials-borders',
+  repoPath: "c:/Users/A'KeemDrew/AXOD/landing",
+  worktreePath: '/srv/worktrees/sess_a4f9',
   status: 'active',
   costUsd: 0.18,
   tokensIn: 12450,
