@@ -1,0 +1,70 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 98%);
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+:root {
+  --background: 220 30% 6%;       /* #0a0e14 */
+  --foreground: 213 18% 92%;      /* #e6edf3 */
+  --card: 215 22% 9%;             /* #11161d */
+  --card-foreground: 213 18% 92%;
+  --popover: 215 22% 9%;
+  --popover-foreground: 213 18% 92%;
+  --primary: 188 100% 50%;        /* #00e0ff cyan accent */
+  --primary-foreground: 0 0% 0%;
+  --secondary: 215 22% 13%;
+  --secondary-foreground: 213 18% 92%;
+  --muted: 215 18% 18%;
+  --muted-foreground: 215 14% 55%;
+  --border: 215 22% 16%;
+  --input: 215 22% 16%;
+  --accent: 217 91% 60%;          /* #3b82f6 blue */
+  --accent-foreground: 213 18% 92%;
+  --ring: 188 100% 50%;
+  --radius: 0.5rem;
+}
+
+body {
+  background: hsl(220 30% 4%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
