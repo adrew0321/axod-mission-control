@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>AXOD Mission Control — Hybrid (team-of-agents)</title>
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #11161d;
+    --panel-2: #161c25;
+    --panel-3: #1c2330;
+    --border: #1e2632;
+    --border-2: #2a3441;
+    --text: #e6edf3;
+    --text-2: #8b949e;
+    --muted: #5c6470;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --cyan: #00e0ff;
+    --blue: #3b82f6;
+    --blue-2: #93c5fd;
+    --violet: #a371f7;
+    --pink: #ff8eb3;
+    --mint: #6cd6c5;
+    --gold: #ffc857;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #060810;
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .page-intro {
+    max-width: 1500px;
+    margin: 24px auto 16px;
+    padding: 0 16px;
+  }
+  .page-intro h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    margin: 0 0 6px;
+  }
+  .page-intro p {
+    color: var(--text-2);
+    margin: 0;
+    font-size: 13px;
+    max-width: 820px;
+  }
+  .page-intro p strong { color: var(--cyan); }
+
+  .scene-label {
+    max-width: 1500px;
+    margin: 32px auto 8px;
+    padding: 0 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .scene-label .chip {
+    background: rgba(255, 200, 87, 0.12);
+    border: 1px solid rgba(255, 200, 87, 0.4);
+    color: var(--gold);
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .scene-label h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    margin: 0;
+  }
+  .scene-label .hint {
+    color: var(--muted);
+    font-size: 12px;
+    margin-left: auto;
+  }
+
+  /* ─── App shell ─── */
+  .app {
+    max-width: 1500px;
+    margin: 0 auto 24px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 60px rgba(59, 130, 246, 0.06);
+    display: grid;
+    grid-template-columns: 280px 1fr 1fr;
+    grid-template-rows: 48px 1fr 38px;
+    height: 780px;
+  }
+
+  /* ─── Top bar (spans all 3 cols) ─── */
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 14px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .logo .mark {
+    width: 24px; height: 24px;
+    background: linear-gradient(135deg, var(--blue), var(--cyan));
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; color: #001; font-weight: 800;
+  }
+  .project-switcher {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+  }
+  .project-switcher .label { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+  .project-switcher .name { color: var(--text); font-weight: 500; }
+  .project-switcher .chev { color: var(--muted); }
+
+  .gw-pills { display: flex; gap: 6px; }
+  .gw-pill {
+    background: var(--panel-2);
+    border: 1px solid var(--border-2);
+    padding: 4px 10px;
+    border-radius: 4px;
+    display: flex; align-items: center; gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-2);
+  }
+  .gw-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 5px rgba(63, 185, 80, 0.6);
+  }
+  .gw-pill .name { color: var(--text); }
+
+  .topbar .spacer { flex: 1; }
+  .topbar .quick-metric {
+    display: flex; gap: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-2);
+  }
+  .quick-metric .m { display: flex; gap: 5px; align-items: center; }
+  .quick-metric .m .k { color: var(--muted); letter-spacing: 0.08em; }
+  .quick-metric .m .v.cyan { color: var(--cyan); }
+  .quick-metric .m .v.amber { color: var(--amber); }
+  .quick-metric .m .v.green { color: var(--green); }
+
+  .topbar .icon-btn {
+    background: transparent;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    width: 28px; height: 28px;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    cursor: pointer;
+    position: relative;
+  }
+  .topbar .icon-btn .badge {
+    position: absolute;
+    top: -3px; right: -3px;
+    background: var(--amber);
+    color: #1a1500;
+    border-radius: 8px;
+    padding: 0 4px;
+    font-size: 9px;
+    font-weight: 700;
+    min-width: 14px;
+    text-align: center;
+  }
+
+  /* ─── LEFT: TEAM ROSTER ─── */
+  .team {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .team-head {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .team-head .title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .team-head .count {
+    background: var(--panel-2);
+    border: 1px solid var(--border-2);
+    color: var(--text);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+  .team-head .spacer { flex: 1; }
+  .team-head .add {
+    color: var(--cyan);
+    cursor: pointer;
+    font-size: 14px;
+  }
+
+  /* Orchestrator card (always top) */
+  .orchestrator {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(0, 224, 255, 0.04), transparent);
+    position: relative;
+    cursor: pointer;
+  }
+  .orchestrator::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 3px;
+    background: linear-gradient(180deg, var(--cyan), var(--blue));
+    border-radius: 0 3px 3px 0;
+  }
+  .orch-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--cyan);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .orch-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .avatar {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: #001;
+    flex-shrink: 0;
+    position: relative;
+  }
+  .avatar.sage { background: linear-gradient(135deg, #00e0ff, #3b82f6); }
+  .avatar.atlas { background: linear-gradient(135deg, #93c5fd, #3b82f6); }
+  .avatar.nova { background: linear-gradient(135deg, #6cd6c5, #00e0ff); }
+  .avatar.echo { background: linear-gradient(135deg, #a371f7, #6c4ed9); }
+  .avatar.pixel { background: linear-gradient(135deg, #ff8eb3, #a371f7); }
+  .avatar.forge { background: linear-gradient(135deg, #ffc857, #d29922); }
+  .avatar .status-pip {
+    position: absolute;
+    bottom: -2px; right: -2px;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--panel);
+  }
+  .status-pip.green { background: var(--green); box-shadow: 0 0 5px rgba(63,185,80,0.6); animation: breathe 1.6s ease-in-out infinite; }
+  .status-pip.amber { background: var(--amber); }
+  .status-pip.muted { background: var(--muted); }
+  .status-pip.violet { background: var(--violet); }
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .orch-info { flex: 1; min-width: 0; }
+  .orch-name {
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 1px;
+  }
+  .orch-role {
+    color: var(--text-2);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .orch-state {
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-2);
+    line-height: 1.4;
+  }
+  .orch-state .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 6px;
+  }
+
+  /* Team member rows */
+  .team-list {
+    overflow-y: auto;
+    flex: 1;
+  }
+  .member {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .member:hover { background: var(--panel-2); }
+  .member.active {
+    background: var(--panel-2);
+    border-left-color: var(--cyan);
+  }
+  .member .avatar.small {
+    width: 32px; height: 32px;
+    font-size: 12px;
+    border-radius: 6px;
+  }
+  .member-info { flex: 1; min-width: 0; }
+  .member-name {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 12.5px;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .member-role {
+    color: var(--text-2);
+    font-size: 10.5px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 1px;
+  }
+  .member-task {
+    color: var(--muted);
+    font-size: 10.5px;
+    margin-top: 4px;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .member-task.working { color: var(--text-2); }
+  .member-task.working::before {
+    content: '◢ ';
+    color: var(--green);
+  }
+  .member-task.waiting::before {
+    content: '◐ ';
+    color: var(--amber);
+  }
+  .member-task.idle::before {
+    content: '○ ';
+    color: var(--muted);
+  }
+
+  .member-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--muted);
+  }
+  .member-meta .model {
+    color: var(--blue-2);
+    background: rgba(59, 130, 246, 0.08);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .member-meta .ts {
+    margin-left: auto;
+  }
+
+  .add-member {
+    padding: 10px 14px;
+    border: 1px dashed var(--border-2);
+    margin: 10px 14px;
+    border-radius: 6px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 11px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .add-member:hover { border-color: var(--cyan); color: var(--cyan); }
+
+  /* ─── CENTER: ORCHESTRATOR CHAT ─── */
+  .chat {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--border);
+  }
+  .chat-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .chat-head .who {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 14px;
+  }
+  .chat-head .ctx {
+    color: var(--muted);
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .chat-head .ctx code {
+    color: var(--blue-2);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+  .chat-head .spacer { flex: 1; }
+  .chat-head .branch {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-2);
+  }
+
+  .chat-log {
+    overflow-y: auto;
+    flex: 1;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .msg {
+    max-width: 100%;
+  }
+  .msg-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+  }
+  .msg-meta .who { font-weight: 600; }
+  .msg-meta .who.user { color: var(--text); }
+  .msg-meta .who.sage { color: var(--cyan); }
+  .msg-meta .who.atlas { color: var(--blue-2); }
+  .msg-meta .who.nova { color: var(--mint); }
+  .msg-meta .who.echo { color: var(--violet); }
+  .msg-meta .who.pixel { color: var(--pink); }
+  .msg-meta .who.forge { color: var(--gold); }
+  .msg-meta .ts { color: var(--muted); }
+  .msg-meta .from {
+    color: var(--muted);
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 2px;
+  }
+  .msg-body {
+    color: var(--text-2);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .msg-body p { margin: 0 0 6px; }
+  .msg-body strong { color: var(--text); }
+  .msg-body code {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--blue-2);
+  }
+  .msg.user .msg-body {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 10px 12px;
+    border-radius: 6px;
+    color: var(--text);
+  }
+
+  /* Dispatch card (shows the orchestrator handing off work) */
+  .dispatch {
+    background: rgba(0, 224, 255, 0.04);
+    border: 1px solid rgba(0, 224, 255, 0.2);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 8px;
+  }
+  .dispatch .dh {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .dispatch .dh .arrow { color: var(--muted); }
+  .dispatch .dh-status {
+    margin-left: auto;
+    color: var(--green);
+  }
+  .dispatch .db {
+    color: var(--text-2);
+    font-size: 12px;
+  }
+  .dispatch-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .dispatch-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-2);
+    padding: 4px 0;
+  }
+  .dispatch-row .av-mini {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    color: #001;
+    flex-shrink: 0;
+  }
+  .dispatch-row .name { color: var(--text); font-weight: 600; }
+  .dispatch-row .task { color: var(--text-2); }
+  .dispatch-row .status {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .dispatch-row .status.green { color: var(--green); }
+
+  /* Approval inline */
+  .approval {
+    background: rgba(210, 153, 34, 0.08);
+    border: 1px solid rgba(210, 153, 34, 0.4);
+    border-radius: 6px;
+    padding: 12px;
+    margin-top: 10px;
+  }
+  .approval .ap-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--amber);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .approval .ap-head .from-agent {
+    margin-left: auto;
+    color: var(--text-2);
+  }
+  .approval .ap-body {
+    color: var(--text);
+    font-size: 12.5px;
+    margin-bottom: 10px;
+  }
+  .approval .ap-body code {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--blue-2);
+  }
+  .approval .ap-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .approval .ap-actions button {
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid;
+  }
+  .approval .ap-actions .approve {
+    background: rgba(63, 185, 80, 0.15);
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .approval .ap-actions .deny {
+    background: transparent;
+    border-color: var(--border-2);
+    color: var(--text-2);
+  }
+  .approval .ap-actions .always {
+    background: transparent;
+    border-color: var(--border-2);
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  /* Composer */
+  .composer {
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  .composer-tools {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .composer-tools .ct {
+    background: var(--panel-2);
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .composer-tools .ct.active { color: var(--cyan); border-color: var(--cyan); background: rgba(0,224,255,0.08); }
+  .composer-input {
+    background: var(--bg);
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-size: 13px;
+    min-height: 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .composer-input .typed {
+    color: var(--text);
+    line-height: 1.45;
+  }
+  .composer-input .typed .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 14px;
+    background: var(--cyan);
+    margin-left: 2px;
+    animation: blink 1s steps(1) infinite;
+    vertical-align: middle;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .composer-input .placeholder { color: var(--muted); }
+  .composer-actions {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .composer-actions .left {
+    display: flex; gap: 6px; color: var(--muted);
+  }
+  .composer-actions .b {
+    background: transparent;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .composer-actions .b.mention {
+    color: var(--cyan);
+    border-color: var(--cyan);
+  }
+  .composer-actions .spacer { flex: 1; }
+  .composer-actions .hint {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .composer-actions .send {
+    background: var(--cyan);
+    color: #001b22;
+    border: none;
+    padding: 7px 16px;
+    border-radius: 5px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  /* ─── RIGHT: WORKSPACE ─── */
+  .ws {
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .ws-tabs {
+    height: 38px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: stretch;
+    padding: 0 12px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .ws-tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .ws-tab.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+  }
+  .ws-tab .by-mini {
+    background: var(--panel-2);
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 9px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .ws-tab .new {
+    background: var(--cyan);
+    color: #001;
+    padding: 1px 5px;
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .ws-tabs .meta {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .ws-tabs .live {
+    display: flex; align-items: center; gap: 4px;
+    color: var(--green);
+  }
+  .ws-tabs .live .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .ws-body {
+    flex: 1;
+    overflow: auto;
+  }
+
+  /* Preview tab content */
+  .preview-frame {
+    background: #0e1116;
+    min-height: 100%;
+    padding: 24px 28px;
+  }
+  .preview-attribution {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding: 8px 12px;
+    background: rgba(147, 197, 253, 0.06);
+    border: 1px solid rgba(147, 197, 253, 0.2);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-2);
+  }
+  .preview-attribution .av-mini {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 10px;
+    color: #001;
+    flex-shrink: 0;
+  }
+  .preview-attribution .name { color: var(--blue-2); font-weight: 600; }
+  .preview-attribution .spacer { flex: 1; }
+  .preview-attribution .mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .preview-controls {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+  .preview-controls .pc {
+    background: var(--panel);
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .preview-controls .pc.active {
+    color: var(--cyan);
+    border-color: var(--cyan);
+    background: rgba(0,224,255,0.05);
+  }
+
+  .preview-card {
+    background: linear-gradient(135deg, #0a0e14, #11161d);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 32px 24px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .preview-card .label-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--blue);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .preview-card h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0 0 18px;
+  }
+  .quote-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .quote-card {
+    background: #11161d;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    position: relative;
+    text-align: left;
+  }
+  .quote-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 8px;
+    border: 1px solid;
+    border-image: linear-gradient(135deg, var(--blue), var(--cyan)) 1;
+    opacity: 0.5;
+    animation: trace 3s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes trace {
+    0% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.3; }
+  }
+  .quote-card .qmark {
+    color: var(--blue-2);
+    font-size: 14px;
+    font-weight: 700;
+    margin-right: 4px;
+    text-shadow: 0 0 6px rgba(59,130,246,0.6);
+  }
+  .quote-card .q {
+    font-size: 11.5px;
+    color: var(--text-2);
+    font-style: italic;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .quote-card .name {
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .quote-card .role {
+    color: var(--muted);
+    font-size: 9.5px;
+  }
+
+  .iteration-note {
+    background: rgba(0, 224, 255, 0.05);
+    border: 1px solid rgba(0, 224, 255, 0.2);
+    border-radius: 6px;
+    padding: 9px 12px;
+    color: var(--text-2);
+    font-size: 11px;
+    margin-top: 14px;
+  }
+  .iteration-note .label {
+    color: var(--cyan);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-right: 6px;
+  }
+
+  /* ─── BOTTOM ─── */
+  .bottom {
+    grid-column: 1 / -1;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .bottom .item { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+  .bottom .item .k { color: var(--muted); }
+  .bottom .item .v.green { color: var(--green); }
+  .bottom .item .v.cyan { color: var(--cyan); }
+  .bottom .item .v.amber { color: var(--amber); }
+  .bottom .spacer { flex: 1; }
+  .bottom .live-pill {
+    display: flex; align-items: center; gap: 5px;
+    color: var(--green);
+  }
+  .bottom .live-pill .ld {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-intro">
+  <h1>AXOD Mission Control — Hybrid (team-of-agents)</h1>
+  <p>You talk to the <strong>orchestrator</strong>. The orchestrator dispatches work to your named team members (Atlas the Dev, Nova the Researcher, Echo the QA Critic, etc). You see the team on the left, conversation in the middle, artifacts on the right. <strong>One screen.</strong></p>
+</div>
+
+<div class="scene-label">
+  <span class="chip">Hybrid</span>
+  <h2>3-column workspace · Team Roster · Orchestrator Chat · Live Artifact</h2>
+  <span class="hint">Borrowed from workspace + ops + builderz · best of all three</span>
+</div>
+
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="logo">
+      <div class="mark">A</div>
+      <span>Mission Control</span>
+    </div>
+    <div class="project-switcher">
+      <span class="label">project</span>
+      <span class="name">AXOD CREATIVE</span>
+      <span class="chev">▾</span>
+    </div>
+    <div class="gw-pills">
+      <div class="gw-pill"><span class="dot"></span><span class="name">openclaw</span><span>:18789</span></div>
+      <div class="gw-pill"><span class="dot"></span><span class="name">claude-code</span></div>
+    </div>
+    <div class="spacer"></div>
+    <div class="quick-metric">
+      <div class="m"><span class="k">TEAM</span><span class="v"><span class="green">4</span>/6 active</span></div>
+      <div class="m"><span class="k">$/HR</span><span class="v cyan">0.42</span></div>
+      <div class="m"><span class="k">TOK</span><span class="v">28.4k today</span></div>
+    </div>
+    <button class="icon-btn"><span class="badge">2</span>◐</button>
+    <button class="icon-btn">⚙</button>
+    <button class="icon-btn">⛶</button>
+  </div>
+
+  <!-- LEFT: TEAM ROSTER -->
+  <div class="team">
+    <div class="team-head">
+      <span class="title">Agent Team</span>
+      <span class="count">6</span>
+      <span class="spacer"></span>
+      <span class="add">+ add</span>
+    </div>
+
+    <!-- Orchestrator -->
+    <div class="orchestrator">
+      <div class="orch-tag">⌁ orchestrator</div>
+      <div class="orch-row">
+        <div class="avatar sage">S<div class="status-pip green"></div></div>
+        <div class="orch-info">
+          <div class="orch-name">Sage</div>
+          <div class="orch-role">Plans · Delegates · Reports</div>
+        </div>
+      </div>
+      <div class="orch-state">
+        <span class="label">Now</span>
+        Coordinating Testimonials build · 2 agents dispatched
+      </div>
+    </div>
+
+    <!-- Team members -->
+    <div class="team-list">
+      <div class="member active">
+        <div class="avatar atlas small">A<div class="status-pip green"></div></div>
+        <div class="member-info">
+          <div class="member-name">Atlas</div>
+          <div class="member-role">Lead Developer</div>
+          <div class="member-task working">Implementing traced borders on Testimonials</div>
+          <div class="member-meta">
+            <span class="model">sonnet 4.6</span>
+            <span>·</span>
+            <span>14.2k tok</span>
+            <span class="ts">04:21</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="member">
+        <div class="avatar nova small">N<div class="status-pip green"></div></div>
+        <div class="member-info">
+          <div class="member-name">Nova</div>
+          <div class="member-role">Researcher</div>
+          <div class="member-task working">Researching agentbay.space deploy patterns</div>
+          <div class="member-meta">
+            <span class="model">sonnet 4.6</span>
+            <span>·</span>
+            <span>12.3k tok</span>
+            <span class="ts">12:08</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="member">
+        <div class="avatar echo small">E<div class="status-pip violet"></div></div>
+        <div class="member-info">
+          <div class="member-name">Echo</div>
+          <div class="member-role">QA Critic</div>
+          <div class="member-task waiting">Waiting for Atlas to finish · queued for review</div>
+          <div class="member-meta">
+            <span class="model">sonnet 4.6</span>
+            <span>·</span>
+            <span>0 tok</span>
+            <span class="ts">queued</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="member">
+        <div class="avatar pixel small">P<div class="status-pip muted"></div></div>
+        <div class="member-info">
+          <div class="member-name">Pixel</div>
+          <div class="member-role">Designer · Mockups</div>
+          <div class="member-task idle">idle · ready for /design dispatch</div>
+          <div class="member-meta">
+            <span class="model">sonnet 4.6</span>
+            <span>·</span>
+            <span>—</span>
+            <span class="ts">idle</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="member">
+        <div class="avatar forge small">F<div class="status-pip green"></div></div>
+        <div class="member-info">
+          <div class="member-name">Forge</div>
+          <div class="member-role">DevOps · CI/Deploy</div>
+          <div class="member-task working">Watching CI on feature/testimonials-borders</div>
+          <div class="member-meta">
+            <span class="model">haiku 4.5</span>
+            <span>·</span>
+            <span>1.2k tok</span>
+            <span class="ts">running</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="add-member">+ add team member</div>
+    </div>
+  </div>
+
+  <!-- CENTER: ORCHESTRATOR CHAT -->
+  <div class="chat">
+    <div class="chat-head">
+      <div class="avatar sage" style="width: 28px; height: 28px; font-size: 12px; border-radius: 6px;">S</div>
+      <div>
+        <div class="who">Sage</div>
+        <div class="ctx">on <code>adrew0321/AXODCREATIVE</code></div>
+      </div>
+      <div class="spacer"></div>
+      <span class="branch">feature/testimonials-borders</span>
+    </div>
+
+    <div class="chat-log">
+      <div class="msg user">
+        <div class="msg-meta"><span class="who user">you</span><span class="ts">14:08</span></div>
+        <div class="msg-body">add the traced borders treatment to Testimonials section. blue palette, animate on scroll-in, gate behind <code>prefers-reduced-motion</code></div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-meta"><span class="who sage">sage</span><span class="ts">14:08</span><span class="from">orchestrator</span></div>
+        <div class="msg-body">
+          <p>Planning: this is a small frontend task, single component file, no spec needed beyond Atlas's normal workflow. Dispatching Atlas for the build and queuing Echo for a quick review when he's done.</p>
+          <div class="dispatch">
+            <div class="dh"><span>⌁ dispatch</span><span class="arrow">→</span><span>2 agents</span><span class="dh-status">started</span></div>
+            <div class="dispatch-rows">
+              <div class="dispatch-row">
+                <div class="av-mini atlas" style="background: linear-gradient(135deg, #93c5fd, #3b82f6);">A</div>
+                <span class="name">Atlas</span>
+                <span class="task">→ implement traced borders · branch <code style="font-size: 10px;">feature/testimonials-borders</code></span>
+                <span class="status green">working</span>
+              </div>
+              <div class="dispatch-row">
+                <div class="av-mini" style="background: linear-gradient(135deg, #a371f7, #6c4ed9);">E</div>
+                <span class="name">Echo</span>
+                <span class="task">→ review when Atlas opens PR</span>
+                <span class="status">queued</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-meta"><span class="who atlas">atlas</span><span class="ts">14:11</span><span class="from">via sage</span></div>
+        <div class="msg-body">
+          <p>First iteration rendered in the workspace → marching-ants border that completes a cycle on scroll-in then settles. Hover replays the animation. Quote-mark glow added per your usual pattern.</p>
+          <p>One question before I keep going: should the static settled border stay <strong>visible at low opacity</strong>, or fade out entirely after the trace completes? Either reads fine — leaning low-opacity to keep the cards feeling grouped.</p>
+        </div>
+      </div>
+
+      <div class="msg user">
+        <div class="msg-meta"><span class="who user">you</span><span class="ts">14:12</span></div>
+        <div class="msg-body">low-opacity. also have Nova hold off on the deploy research until i tell her to start.</div>
+      </div>
+
+      <div class="msg">
+        <div class="msg-meta"><span class="who sage">sage</span><span class="ts">14:12</span><span class="from">orchestrator</span></div>
+        <div class="msg-body">
+          <p>Done. Pausing Nova — she's at a clean checkpoint, no work lost. Atlas is locking in the low-opacity settle now.</p>
+          <div class="approval">
+            <div class="ap-head">⚠ approval needed<span class="from-agent">from Forge</span></div>
+            <div class="ap-body">Forge wants to run <code>pnpm build</code> + push <code>feature/testimonials-borders</code> for Cloudflare preview. ~30s + a CI minute.</div>
+            <div class="ap-actions">
+              <button class="approve">Approve</button>
+              <button class="deny">Hold</button>
+              <button class="always">Always allow Forge for this project</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <div class="composer-tools">
+        <button class="ct active">/build</button>
+        <button class="ct">/design</button>
+        <button class="ct">/research</button>
+        <button class="ct">/plan</button>
+        <button class="ct">/spec</button>
+        <button class="ct">/ship</button>
+        <button class="ct">/team</button>
+      </div>
+      <div class="composer-input">
+        <div class="typed">@Atlas dial the marching-ants speed down 25%<span class="cursor"></span></div>
+      </div>
+      <div class="composer-actions">
+        <div class="left">
+          <button class="b">📎</button>
+          <button class="b">🖼</button>
+          <button class="b mention">@Atlas</button>
+        </div>
+        <div class="spacer"></div>
+        <span class="hint">⌘↵ to send · @ to address a team member · / for commands</span>
+        <button class="send">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: WORKSPACE (Preview tab active) -->
+  <div class="ws">
+    <div class="ws-tabs">
+      <div class="ws-tab active">◰ Preview <span class="new">live</span></div>
+      <div class="ws-tab">⇋ Code <span class="by-mini">Atlas</span></div>
+      <div class="ws-tab">▤ Plan <span class="by-mini">Sage</span></div>
+      <div class="ws-tab">⛒ Research <span class="by-mini">Nova</span></div>
+      <div class="ws-tab">▶ Terminal <span class="by-mini">Forge</span></div>
+      <div class="meta">
+        <span class="live"><span class="dot"></span> live</span>
+      </div>
+    </div>
+
+    <div class="ws-body">
+      <div class="preview-frame">
+        <div class="preview-attribution">
+          <div class="av-mini" style="width: 18px; height: 18px; background: linear-gradient(135deg, #93c5fd, #3b82f6); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 10px; color: #001;">A</div>
+          <span>rendered by <span class="name">Atlas</span></span>
+          <span class="spacer"></span>
+          <span class="mono">iteration 2 · 14:11:42</span>
+        </div>
+
+        <div class="preview-controls">
+          <button class="pc active">desktop 1440</button>
+          <button class="pc">tablet 768</button>
+          <button class="pc">mobile 375</button>
+          <span style="flex: 1;"></span>
+          <button class="pc">▶ replay reveal</button>
+          <button class="pc">prefers-reduced-motion: <span style="color: var(--cyan);">off</span></button>
+        </div>
+
+        <div class="preview-card">
+          <div class="label-mono">What People Say</div>
+          <h2>Words from the work.</h2>
+          <div class="quote-row">
+            <div class="quote-card">
+              <div class="q"><span class="qmark">"</span>From scoping the agent architecture to shipping production code — the work spoke for itself.</div>
+              <div class="name">Real client name</div>
+              <div class="role">Engineering Lead</div>
+            </div>
+            <div class="quote-card">
+              <div class="q"><span class="qmark">"</span>Designed thoughtfully, shipped reliably, communicated clearly. The kind of partner you actually want on your roadmap.</div>
+              <div class="name">Real client name</div>
+              <div class="role">Product Manager</div>
+            </div>
+            <div class="quote-card">
+              <div class="q"><span class="qmark">"</span>Mission-control mindset applied to delivery — every checkpoint had a status, every status had an owner.</div>
+              <div class="name">Real client name</div>
+              <div class="role">Founder</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="iteration-note">
+          <span class="label">atlas note</span>marching-ants animates ~1.4s on scroll-in then settles to <strong>15% opacity</strong> static border. Quote-mark glow (single pop, 0.9s ease-out) on each card. Hover replays both.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom">
+    <div class="item"><span class="k">SESSION</span><span class="v">sess_a4f9 · 16m elapsed</span></div>
+    <div class="item"><span class="k">RUNTIME</span><span class="v green">claude code · sonnet 4.6 · haiku 4.5</span></div>
+    <div class="item"><span class="k">WORKTREES</span><span class="v">2 active · isolated</span></div>
+    <div class="spacer"></div>
+    <div class="item"><span class="k">TOKENS</span><span class="v">28.4k today</span></div>
+    <div class="item"><span class="k">SPEND</span><span class="v cyan">$0.84</span></div>
+    <div class="item live-pill"><span class="ld"></span><span class="v green">live · ws + sse</span></div>
+  </div>
+</div>
+
+<div class="page-intro" style="margin-top: 24px;">
+  <p style="font-size: 12px; color: var(--muted);">
+    <strong style="color: var(--text-2);">What's hybrid about it:</strong>
+    Workspace mockup's chat + tabs = retained. Fleet mockup's status awareness = absorbed into the left team roster. Builderz's gateway pills, role chips, and SQLite-backed sessions = adopted. What's new: <strong style="color: var(--text-2);">named, role-based team members</strong> (Sage, Atlas, Nova, Echo, Pixel, Forge) instead of `agt_xxxx` IDs. You talk to <strong style="color: var(--text-2);">Sage the orchestrator</strong>; Sage breaks down your request and routes work to specialists. `@Atlas` to address one member directly, `/team` to manage the roster, `+ add team member` to spawn a new specialist with a chosen model + role + skill set.
+  </p>
+</div>
+
+</body>
+</html>

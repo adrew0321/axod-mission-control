@@ -1,0 +1,73 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+
+# next.js
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# production
+/dist
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env / secrets
+.env
+.env*.local
+.env.production
+.env.development
+
+# database
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# drizzle
+/drizzle/meta/_journal.json.bak
+
+# logs
+*.log
+logs/
+
+# typescript
+*.tsbuildinfo
+
+# editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+
+# os
+desktop.ini
+
+# vercel
+.vercel
+
+# turbopack
+.turbo/
+
+# tests
+coverage/
+.nyc_output/
+
+# misc local
+/scratch/
+TODO.local.md
