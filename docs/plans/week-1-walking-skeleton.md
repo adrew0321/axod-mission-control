@@ -210,6 +210,15 @@ The UI looks identical to day 1, but the data now comes from SQLite. You can `sq
 - Foreign keys must be explicitly enabled per connection (`PRAGMA foreign_keys = ON`)
 - Drizzle's `text(..., { mode: 'json' })` is the right way to store JSON in SQLite
 
+### Day 2 — what actually happened (2026-05-27)
+
+- The project's `.npmrc` has `ignore-scripts=true` as a hardening default. This silently blocks `better-sqlite3`'s native build, and `pnpm rebuild` doesn't override it. Workaround: `cd node_modules/.pnpm/better-sqlite3@<ver>/node_modules/better-sqlite3 && npx --no prebuild-install` once, then it's cached for the lifetime of `node_modules`.
+- pnpm 11 also runs a "deps status check" before any `pnpm <script>`, which throws `[ERR_PNPM_IGNORED_BUILDS]` and exits 1 even when the script doesn't need the build. Fix: add `verifyDepsBeforeRun: false` to `pnpm-workspace.yaml`. Also add the native package to `onlyBuiltDependencies:` in the same file (NOT in `package.json` — pnpm 11 reads the workspace file).
+- Page refactor was bigger than the plan suggests: the Day 1 `page.tsx` was one giant client component. Split it into `src/app/page.tsx` (async Server Component fetching from SQLite) and `src/components/mission-control.tsx` (the existing interactive UI, now accepting `team / session / messages / artifacts` as props).
+- Drizzle 0.45's `primaryKey({ columns: [...] })` is now passed as an **array** to the second arg of `sqliteTable`, not as `(t) => ({ pk: ... })`. Plan example was slightly out of date.
+- Used `dotenv` in `drizzle.config.ts` so `pnpm db:*` picks up `DATABASE_PATH` from `.env` instead of relying on the literal default.
+- Added `.claude/settings.local.json` to `.gitignore` (Claude Code's local-only settings file).
+
 ---
 
 ## Day 3 — Auth + basic API routes
@@ -278,6 +287,18 @@ You're logged in. You type a message. It persists. You refresh and it's still th
 - Don't use `bcrypt` on Node 22+ on Windows — native build is finicky. `@noble/hashes` is pure JS, works everywhere.
 - Middleware runs in Edge runtime by default — make sure your auth verify is Edge-compatible. `jose` is.
 - HTTP-only cookies + `Secure: true` will block on `http://127.0.0.1` in some browsers. Make `Secure` conditional on `process.env.NODE_ENV === 'production'`.
+
+### Day 3 — what actually happened (2026-05-27)
+
+- **Next 16 renamed middleware → proxy.** The file is `src/proxy.ts` (not `src/middleware.ts`) and the export is `proxy` (not `middleware`). Functionality identical. See `node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md`.
+- Proxy runs in the Edge runtime, so it can't import `src/lib/auth.ts` (which pulls in `better-sqlite3`). Solution: tiny `src/lib/auth-edge.ts` that exports only the cookie-name constant. Proxy does an optimistic cookie-exists check; real session verification happens in pages + route handlers via `verifySession()` (Node runtime).
+- `@noble/hashes` v2 requires the `.js` suffix on subpath imports — `@noble/hashes/scrypt.js` and `@noble/hashes/utils.js`. The plain `@noble/hashes/scrypt` style fails type resolution in TS 5.
+- The composer was already a `<form>` (from Day 1) — wired its submit handler to `fetch('/api/sessions/:id/messages', POST)` with optimistic insert + rollback on failure, then `router.refresh()` to re-fetch the Server Component. Also wired the existing Lock icon in the header to logout via `/api/auth/logout`.
+- `scripts/seed-admin.ts` uses a `readline` mute hack to hide the password input. This works interactively but breaks when stdin is piped — so for the Day 3 curl test I inserted the admin via a one-off `node -e` script instead. Real operator setup still uses `pnpm seed:admin` in a TTY.
+- A test admin (`test@axodcreative.com` / `TestPassword123!`) was seeded during verification. Delete before deploy.
+- Used `zod` for both `/api/auth/login` and `/api/sessions/[id]/messages` body validation. Returns generic "Invalid credentials" on login parse failure (don't leak which field was wrong).
+- Login is rate-limited at **5 attempts per 15 min per IP** via an in-memory `Map` (`src/lib/rate-limit.ts`). In-memory is fine for single-process v1; will need Redis (or similar) if/when we scale beyond one node.
+- Restarting the dev server (any time `proxy.ts` is added/changed) requires killing both the pnpm wrapper and the underlying `next dev` child process — `pnpm` doesn't propagate signals cleanly on Windows.
 
 ---
 
