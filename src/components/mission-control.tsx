@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Compass,
   ChevronDown,
@@ -32,6 +33,7 @@ export default function MissionControl({
   initialMessages,
   artifacts: initialArtifacts,
 }: MissionControlProps) {
+  const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [artifacts] = useState<Artifact[]>(initialArtifacts);
@@ -39,6 +41,12 @@ export default function MissionControl({
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
   const [isTyping, setIsTyping] = useState<boolean>(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setMessages(initialMessages);
+  }, [initialMessages]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -49,6 +57,12 @@ export default function MissionControl({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+    router.refresh();
+  }
 
   const handleApproval = (id: string, action: "approved" | "denied") => {
     setMessages((prev) =>
@@ -101,36 +115,42 @@ export default function MissionControl({
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim()) return;
+    const text = inputText.trim();
+    if (!text) return;
 
-    const userMsg: Message = {
-      id: `u_${Date.now()}`,
+    const optimisticId = `u_${Date.now()}`;
+    const optimistic: Message = {
+      id: optimisticId,
       role: "user",
       senderName: "adrew0321",
-      content: inputText,
+      content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
-
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => [...prev, optimistic]);
     setInputText("");
+    setSendError(null);
 
-    setIsTyping(true);
-    setTimeout(() => {
-      setIsTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `sage_r_${Date.now()}`,
-          role: "agent",
-          agentId: "sage",
-          senderName: "Sage",
-          content: `I've received your instruction: "${inputText}". I am dispatching this to Atlas to implement and coordinate. Tracking progress inside this session.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-    }, 1800);
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+        setInputText(text);
+        setSendError(body.error ?? `Send failed (${res.status})`);
+        return;
+      }
+      startTransition(() => router.refresh());
+    } catch (err) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      setInputText(text);
+      setSendError(err instanceof Error ? err.message : "Network error");
+    }
   };
 
   const applyPreset = (preset: string) => {
@@ -184,7 +204,11 @@ export default function MissionControl({
             </div>
           </div>
 
-          <button className="relative w-8 h-8 rounded-md border border-[#2a3441] flex items-center justify-center text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161c25] transition-colors">
+          <button
+            onClick={handleLogout}
+            title="Sign out"
+            className="relative w-8 h-8 rounded-md border border-[#2a3441] flex items-center justify-center text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#161c25] transition-colors"
+          >
             <Lock className="w-4 h-4" />
           </button>
         </div>
@@ -462,19 +486,26 @@ export default function MissionControl({
               />
               <button
                 type="submit"
-                className="bg-[#00e0ff] hover:bg-[#00c0dd] text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
+                disabled={isPending}
+                className="bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>Send</span>
               </button>
             </div>
 
+            {sendError && (
+              <div className="mt-2 px-2 py-1 rounded text-[10px] font-mono bg-red-500/10 border border-red-500/40 text-red-400">
+                {sendError}
+              </div>
+            )}
+
             <div className="flex justify-between items-center mt-2.5 text-[9px] font-mono text-[#5c6470] select-none">
               <div className="flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-[#00e0ff]" />
                 <span>Routing to Sage by default</span>
               </div>
-              <span>Press Enter to send</span>
+              <span>{isPending ? "Saving..." : "Press Enter to send"}</span>
             </div>
           </form>
         </section>
