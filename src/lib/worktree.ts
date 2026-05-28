@@ -9,6 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 
 const exec = promisify(execFile);
 
@@ -110,6 +111,74 @@ export async function diffWorktree(wtPath: string, baseBranch = 'dev'): Promise<
     });
 
   return { diff, files };
+}
+
+export interface WorktreeFileDiff {
+  path: string;
+  /** git name-status code: A(dded) / M(odified) / D(eleted) / R(enamed)… */
+  status: string;
+  /** File contents at the base branch tip ('' for added files). */
+  original: string;
+  /** File contents in the worktree now ('' for deleted files). */
+  modified: string;
+  /** True when skipped for being binary or too large; original/modified are then a placeholder. */
+  skipped?: boolean;
+}
+
+const MAX_DIFF_FILE_BYTES = 256 * 1024;
+
+async function gitShow(wtPath: string, ref: string, path: string): Promise<string> {
+  try {
+    const { stdout } = await exec('git', ['-C', wtPath, 'show', `${ref}:${path}`], {
+      maxBuffer: 10 * 1024 * 1024,
+    });
+    return stdout;
+  } catch {
+    // Path doesn't exist at that ref (e.g. an added file at base) — treat as empty.
+    return '';
+  }
+}
+
+/**
+ * Per-file original/modified contents for a side-by-side diff view (Monaco).
+ * `original` is the file at the base branch tip; `modified` is the worktree copy.
+ * Binary/oversized files are flagged `skipped` rather than streamed.
+ */
+export async function diffWorktreeFiles(
+  wtPath: string,
+  baseBranch = 'dev',
+): Promise<WorktreeFileDiff[]> {
+  if (!wtPath || !existsSync(wtPath)) return [];
+
+  const { files } = await diffWorktree(wtPath, baseBranch);
+
+  return Promise.all(
+    files.map(async (f) => {
+      const isDeleted = f.status.startsWith('D');
+      const isAdded = f.status.startsWith('A');
+      const original = isAdded ? '' : await gitShow(wtPath, baseBranch, f.path);
+      let modified = '';
+      if (!isDeleted) {
+        const abs = path.join(wtPath, f.path);
+        try {
+          modified = existsSync(abs) ? await readFile(abs, 'utf8') : '';
+        } catch {
+          modified = '';
+        }
+      }
+      const tooBig =
+        Buffer.byteLength(original, 'utf8') > MAX_DIFF_FILE_BYTES ||
+        Buffer.byteLength(modified, 'utf8') > MAX_DIFF_FILE_BYTES;
+      // A NUL byte is the standard heuristic for binary content.
+      const nul = String.fromCharCode(0);
+      const looksBinary = original.includes(nul) || modified.includes(nul);
+      if (tooBig || looksBinary) {
+        const note = looksBinary ? '// binary file — not shown' : '// file too large to display';
+        return { path: f.path, status: f.status, original: note, modified: note, skipped: true };
+      }
+      return { path: f.path, status: f.status, original, modified };
+    }),
+  );
 }
 
 /** List worktree paths currently registered on the repo. */
