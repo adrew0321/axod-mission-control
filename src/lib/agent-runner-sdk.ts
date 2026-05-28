@@ -1,9 +1,10 @@
 import 'server-only';
 import { existsSync } from 'node:fs';
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 
 export type AgentEvent =
   | { type: 'token'; content: string }
+  | { type: 'tool'; name: string; input?: Record<string, unknown> }
   | { type: 'done'; fullText: string; costUsd?: number; tokensIn?: number; tokensOut?: number }
   | { type: 'error'; message: string };
 
@@ -28,15 +29,36 @@ export interface RunAgentOptions {
    * dormant, ready to wire to `canUseTool` once the gate works.
    */
   allowedTools?: string[];
+  /**
+   * In-process MCP servers exposing custom tools (e.g. Sage's `dispatch_agent`).
+   * Their tools are named `mcp__<serverName>__<toolName>` and must also be
+   * listed in `extraAllowedTools` to auto-run without a permission round-trip.
+   */
+  mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
+  /**
+   * Fully-qualified MCP tool names to auto-run (e.g.
+   * `mcp__mission_control__dispatch_agent`). Kept separate from `allowedTools`
+   * because `tools` (the built-in capability set) only accepts built-in names.
+   */
+  extraAllowedTools?: string[];
+  /**
+   * Extra environment variables merged over `process.env` for the CLI subprocess.
+   * Used to raise `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` for an orchestrator whose
+   * `dispatch_agent` MCP call blocks while a specialist works (>60s default).
+   */
+  extraEnv?: Record<string, string>;
   signal?: AbortSignal;
 }
 
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'];
 
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
-  const { prompt, workingDir, model, systemPrompt, signal } = opts;
+  const { prompt, workingDir, model, systemPrompt, signal, mcpServers, extraAllowedTools, extraEnv } =
+    opts;
   const allowedTools =
     opts.allowedTools && opts.allowedTools.length > 0 ? opts.allowedTools : DEFAULT_ALLOWED_TOOLS;
+  // Built-ins (capability set) plus any MCP tool names the caller wants auto-run.
+  const autoRun = extraAllowedTools?.length ? [...allowedTools, ...extraAllowedTools] : allowedTools;
 
   const abortController = new AbortController();
   if (signal) {
@@ -56,10 +78,13 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         model: model ?? 'claude-opus-4-7',
         ...(systemPrompt ? { systemPrompt } : {}),
         includePartialMessages: true,
-        // Same set for capability (model only sees these) and auto-run
-        // (no permission round-trip → no hang). See RunAgentOptions.allowedTools.
+        // `tools` is the built-in capability set the model can see; `allowedTools`
+        // is what auto-runs (no permission round-trip → no hang). MCP tools are
+        // added via `mcpServers` and auto-run through `extraAllowedTools`.
         tools: allowedTools,
-        allowedTools,
+        allowedTools: autoRun,
+        ...(mcpServers ? { mcpServers } : {}),
+        ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}),
         abortController,
       },
     });
@@ -74,9 +99,33 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
             yield { type: 'token', content: text };
           }
         }
-      } else if (message.type === 'assistant' && message.error) {
-        // auth_failed | rate_limit | billing_error | model_not_found | etc.
-        yield { type: 'error', message: `agent error: ${message.error}` };
+      } else if (message.type === 'assistant') {
+        if (message.error) {
+          // auth_failed | rate_limit | billing_error | model_not_found | etc.
+          yield { type: 'error', message: `agent error: ${message.error}` };
+        } else {
+          // Surface each tool the agent invokes so the UI can show live activity
+          // ("Reading X", "Editing Y", "Running …"). tool_use blocks carry the
+          // complete name + input on the assistant message.
+          const content = message.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block && typeof block === 'object' && (block as { type?: string }).type === 'tool_use') {
+                const tu = block as { name?: string; input?: unknown };
+                if (tu.name) {
+                  yield {
+                    type: 'tool',
+                    name: tu.name,
+                    input:
+                      tu.input && typeof tu.input === 'object'
+                        ? (tu.input as Record<string, unknown>)
+                        : undefined,
+                  };
+                }
+              }
+            }
+          }
+        }
       } else if (message.type === 'result') {
         if (message.subtype === 'success') {
           if (!fullText && message.result) {

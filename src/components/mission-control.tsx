@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useTransition } from "react";
+import React, { useState, useRef, useEffect, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Compass,
@@ -27,6 +27,80 @@ export interface MissionControlProps {
   artifacts: Artifact[];
 }
 
+// Each agent has its own voice in the STATE panel. The persona flavors the verb,
+// but the exact target (file / command / pattern) always stays visible so the
+// operator knows precisely what's happening.
+const IDLE_STATE: Record<string, string> = {
+  sage: "Awaiting your word",
+  atlas: "Tools down — ready to build",
+};
+function idleState(agentId: string): string {
+  return IDLE_STATE[agentId] ?? "Idle — standing by";
+}
+
+function friendlyActivity(agentId: string, tool: string, input?: Record<string, unknown>): string {
+  const basename = (p: unknown) => (typeof p === "string" ? p.split(/[\\/]/).pop() || p : "");
+  const clip = (s: unknown, n = 40) => {
+    const str = typeof s === "string" ? s : "";
+    return str.length > n ? str.slice(0, n) + "…" : str;
+  };
+  const file = basename(input?.file_path ?? input?.notebook_path);
+  const genericFallback = () =>
+    tool.startsWith("mcp__") ? tool.split("__").pop() ?? tool : tool;
+
+  if (agentId === "atlas") {
+    // Atlas — the builder/smith.
+    switch (tool) {
+      case "Read":
+        return `Studying ${file}`;
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Forging changes → ${file}`;
+      case "Glob":
+        return "Scouring the codebase…";
+      case "Grep":
+        return input?.pattern ? `Hunting for "${clip(input.pattern, 28)}"` : "Hunting through the code…";
+      case "Bash":
+        return `At the anvil: ${clip(input?.command)}`;
+      case "WebFetch":
+      case "WebSearch":
+        return "Consulting the archives…";
+      case "TodoWrite":
+        return "Drawing up the plan…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  // Sage — the calm navigator/orchestrator (and default voice).
+  switch (tool) {
+    case "Read":
+      return `Surveying ${file}`;
+    case "Edit":
+    case "MultiEdit":
+    case "Write":
+    case "NotebookEdit":
+      return `Editing ${file}`;
+    case "Glob":
+      return "Surveying the repo…";
+    case "Grep":
+      return input?.pattern ? `Searching for "${clip(input.pattern, 28)}"` : "Searching…";
+    case "Bash":
+      return `Running: ${clip(input?.command)}`;
+    case "WebFetch":
+    case "WebSearch":
+      return "Consulting outside sources…";
+    case "TodoWrite":
+      return "Charting the course…";
+    default:
+      if (tool.includes("dispatch_agent"))
+        return `Handing the build to ${input?.agent_id ?? "a specialist"} →`;
+      return genericFallback();
+  }
+}
+
 export default function MissionControl({
   team: initialTeam,
   session: initialSession,
@@ -44,6 +118,37 @@ export default function MissionControl({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Live worktree diff (Day 4 — operator reviews what the dispatched agent changed).
+  const [diffText, setDiffText] = useState<string>("");
+  const [diffFiles, setDiffFiles] = useState<Array<{ status: string; path: string }>>([]);
+  const [diffBase, setDiffBase] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  // Live agent state for the left pane: which agents are actively working, and
+  // a one-line "what they're doing right now" string per agent. Driven by SSE.
+  const [workingAgents, setWorkingAgents] = useState<string[]>([]);
+  const [agentActivity, setAgentActivity] = useState<Record<string, string>>({});
+
+  const fetchDiff = useCallback(async () => {
+    setDiffLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${initialSession.id}/diff`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        base: string | null;
+        files: Array<{ status: string; path: string }>;
+        diff: string;
+      };
+      setDiffText(data.diff ?? "");
+      setDiffFiles(data.files ?? []);
+      setDiffBase(data.base);
+    } catch {
+      // leave the previous diff in place on a transient fetch error
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [initialSession.id]);
+
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages]);
@@ -55,6 +160,8 @@ export default function MissionControl({
     esRef.current?.close();
     esRef.current = null;
     setIsTyping(false);
+    setWorkingAgents([]);
+    setAgentActivity({});
     setMessages((prev) => prev.filter((m) => !m.isStreaming));
     startTransition(() => router.refresh());
   }
@@ -66,6 +173,11 @@ export default function MissionControl({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  // Refresh the worktree diff whenever the operator opens the Code Diff tab.
+  useEffect(() => {
+    if (activeTab === "code") fetchDiff();
+  }, [activeTab, fetchDiff]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -112,6 +224,8 @@ export default function MissionControl({
     setMessages((prev) => [...prev, optimistic]);
     setInputText("");
     setSendError(null);
+    setWorkingAgents(["sage"]);
+    setAgentActivity({ sage: "Charting the course…" });
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -142,6 +256,15 @@ export default function MissionControl({
       ]);
       setIsTyping(true);
 
+      // Tracks the live "Atlas · via Sage" bubble while a dispatch is streaming.
+      let dispatchStreamId: string | null = null;
+      // The Sage bubble currently receiving tokens. After a dispatch, Sage's
+      // continuation goes into a NEW bubble placed *below* the specialist's, so
+      // the live order (Sage-pre → specialist → Sage-post) matches what's saved.
+      let currentSageId = streamingId;
+      let pendingNewSageBubble = false;
+      const clientBubbleIds = [streamingId];
+
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
       esRef.current = es;
       es.onmessage = (ev) => {
@@ -154,13 +277,132 @@ export default function MissionControl({
             toolName?: string;
             toolInput?: unknown;
             decision?: string;
+            agent_id?: string;
+            agent_name?: string;
+            task?: string;
+            errored?: boolean;
+            tool?: string;
+            input?: Record<string, unknown>;
           };
-          if (evt.type === "token" && typeof evt.content === "string") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
-              ),
+          if (evt.type === "activity" && evt.agent_id && evt.tool) {
+            const agentId = evt.agent_id;
+            const label = friendlyActivity(agentId, evt.tool, evt.input);
+            setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+          } else if (evt.type === "dispatch_activity" && evt.agent_id && evt.tool) {
+            const agentId = evt.agent_id;
+            const label = friendlyActivity(agentId, evt.tool, evt.input);
+            setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+          } else if (evt.type === "token" && typeof evt.content === "string") {
+            const tokenText = evt.content;
+            if (pendingNewSageBubble) {
+              // First token after a dispatch — open a fresh Sage bubble below the
+              // specialist's, rather than appending to the pre-dispatch bubble.
+              pendingNewSageBubble = false;
+              currentSageId = `stream_post_${Date.now()}`;
+              clientBubbleIds.push(currentSageId);
+              const newId = currentSageId;
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: newId,
+                  role: "agent" as const,
+                  agentId: "sage",
+                  senderName: "Sage",
+                  content: tokenText,
+                  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  isStreaming: true,
+                },
+              ]);
+            } else {
+              const sageId = currentSageId;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === sageId ? { ...m, content: m.content + tokenText } : m)),
+              );
+            }
+          } else if (evt.type === "dispatch_start" && evt.agent_id) {
+            // Sage handed off to a specialist: tag Sage's bubble with a dispatch
+            // card and open a fresh streaming bubble for the specialist.
+            const dispatchAgentId = evt.agent_id;
+            const dispatchAgentName = evt.agent_name ?? dispatchAgentId;
+            const task = evt.task ?? "";
+            setIsTyping(false);
+            setWorkingAgents((prev) =>
+              prev.includes(dispatchAgentId) ? prev : [...prev, dispatchAgentId],
             );
+            setAgentActivity((prev) => ({
+              ...prev,
+              [dispatchAgentId]: dispatchAgentId === "atlas" ? "Warming the forge…" : "Spinning up…",
+              sage: `Handing the build to ${dispatchAgentName} →`,
+            }));
+            dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
+            const newBubbleId = dispatchStreamId;
+            clientBubbleIds.push(newBubbleId);
+            const cardSageId = currentSageId;
+            setMessages((prev) => [
+              ...prev.map((m) =>
+                m.id === cardSageId
+                  ? {
+                      ...m,
+                      dispatch: {
+                        agentId: dispatchAgentId,
+                        agentName: dispatchAgentName,
+                        task,
+                        status: "working" as const,
+                      },
+                    }
+                  : m,
+              ),
+              {
+                id: newBubbleId,
+                role: "agent" as const,
+                agentId: dispatchAgentId,
+                senderName: dispatchAgentName,
+                attribution: "via Sage",
+                content: "",
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                isStreaming: true,
+              },
+            ]);
+          } else if (evt.type === "dispatch_token" && typeof evt.content === "string") {
+            const bubbleId = dispatchStreamId;
+            if (bubbleId) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === bubbleId ? { ...m, content: m.content + evt.content } : m,
+                ),
+              );
+            }
+          } else if (evt.type === "dispatch_done") {
+            const bubbleId = dispatchStreamId;
+            const failed = Boolean(evt.errored);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === bubbleId) return { ...m, isStreaming: false };
+                if (m.dispatch && m.dispatch.status === "working")
+                  return {
+                    ...m,
+                    dispatch: { ...m.dispatch, status: failed ? "failed" : "completed" },
+                  };
+                return m;
+              }),
+            );
+            dispatchStreamId = null;
+            pendingNewSageBubble = true; // Sage's continuation opens a new bubble below
+            setIsTyping(true); // Sage resumes the turn
+            // Specialist is done: drop it from the roster, hand state back to Sage.
+            if (evt.agent_id) {
+              const finishedId = evt.agent_id;
+              setWorkingAgents((prev) => prev.filter((a) => a !== finishedId));
+              setAgentActivity((prev) => {
+                const next = { ...prev };
+                delete next[finishedId];
+                next.sage = `Reviewing ${finishedId === "atlas" ? "Atlas" : "the specialist"}'s work…`;
+                return next;
+              });
+            }
+            fetchDiff(); // the specialist just edited the worktree — refresh the diff
+          } else if (evt.type === "dispatch_error") {
+            setSendError(evt.message ?? "Dispatched agent error");
           } else if (evt.type === "approval_requested" && evt.approvalId) {
             const approvalId = evt.approvalId;
             const toolName = evt.toolName ?? "unknown";
@@ -186,7 +428,14 @@ export default function MissionControl({
             es.close();
             esRef.current = null;
             setIsTyping(false);
-            setMessages((prev) => prev.filter((m) => m.id !== streamingId));
+            setWorkingAgents([]);
+            setAgentActivity({});
+            // Drop every client-side streaming bubble created this turn (Sage-pre,
+            // specialist, Sage-post); router.refresh() repopulates them from the DB.
+            setMessages((prev) =>
+              prev.filter((m) => !clientBubbleIds.includes(m.id) && !m.id.startsWith("dispatch_")),
+            );
+            fetchDiff();
             startTransition(() => router.refresh());
           }
         } catch {
@@ -196,6 +445,8 @@ export default function MissionControl({
       es.onerror = () => {
         es.close();
         setIsTyping(false);
+        setWorkingAgents([]);
+        setAgentActivity({});
         setSendError((prev) => prev ?? "Stream disconnected");
       };
     } catch (err) {
@@ -298,15 +549,13 @@ export default function MissionControl({
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
                 <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATE</span>
-                {isTyping ? (
+                {workingAgents.includes("sage") || isTyping ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Analyzing input request...
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
                   </span>
                 ) : (
-                  <span className="text-[#e6edf3] line-clamp-2">
-                    {sage.currentTask ?? "Idle — awaiting next instruction."}
-                  </span>
+                  <span className="text-[#8b949e] line-clamp-2">{idleState("sage")}</span>
                 )}
               </div>
             </div>
@@ -314,11 +563,14 @@ export default function MissionControl({
 
           <ScrollArea className="flex-1">
             <div className="p-1.5 flex flex-col gap-1">
-              {otherAgents.map((member) => (
+              {otherAgents.map((member) => {
+                const isWorking = workingAgents.includes(member.id);
+                const activity = agentActivity[member.id];
+                return (
                 <div
                   key={member.id}
                   className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${
-                    member.status === "working"
+                    isWorking
                       ? "bg-[#161c25]/75 border-[#00e0ff]/20 hover:border-[#00e0ff]/40 shadow-inner"
                       : "border-transparent hover:bg-[#161c25]/40 hover:border-[#1e2632]"
                   }`}
@@ -330,7 +582,7 @@ export default function MissionControl({
                       {member.avatar}
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#11161d] ${
-                          member.status === "working" ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950]" : "bg-[#5c6470]"
+                          isWorking ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950] animate-pulse" : "bg-[#5c6470]"
                         }`}
                       />
                     </div>
@@ -338,21 +590,31 @@ export default function MissionControl({
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline">
                         <span className="font-semibold text-xs text-[#e6edf3] font-heading">{member.name}</span>
-                        <span className="text-[9px] font-mono text-[#5c6470]">{member.lastActive}</span>
+                        <span className="text-[9px] font-mono text-[#5c6470]">
+                          {isWorking ? "now" : member.lastActive}
+                        </span>
                       </div>
                       <div className="text-[10px] font-mono text-[#8b949e]">{member.role}</div>
                     </div>
                   </div>
 
-                  {member.currentTask && (
-                    <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
-                      <div className="text-[#3fb950] font-semibold flex items-center gap-1 mb-0.5">
-                        <span className="inline-block w-1 h-1 rounded-full bg-[#3fb950] animate-ping" />
-                        ACTIVE
-                      </div>
-                      <p className="line-clamp-2 leading-normal">{member.currentTask}</p>
+                  <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
+                    <div
+                      className={`font-semibold flex items-center gap-1 mb-0.5 ${
+                        isWorking ? "text-[#3fb950]" : "text-[#5c6470]"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block w-1 h-1 rounded-full ${
+                          isWorking ? "bg-[#3fb950] animate-ping" : "bg-[#5c6470]"
+                        }`}
+                      />
+                      {isWorking ? "ACTIVE" : "STATE"}
                     </div>
-                  )}
+                    <p className="line-clamp-2 leading-normal">
+                      {isWorking ? activity ?? "Working…" : idleState(member.id)}
+                    </p>
+                  </div>
 
                   <div className="flex justify-between items-center text-[9px] font-mono text-[#5c6470]">
                     <span className="bg-[#1c2330] text-[#8b949e] px-1.5 py-0.5 rounded border border-[#2a3441]">
@@ -360,7 +622,8 @@ export default function MissionControl({
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </section>
@@ -424,25 +687,40 @@ export default function MissionControl({
                   >
                     {msg.content}
 
-                    {msg.dispatch && (
-                      <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
-                        <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
-                        <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5" />
-                            Orchestrated Dispatch
+                    {msg.dispatch && (() => {
+                      const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
+                      const status = msg.dispatch.status;
+                      return (
+                        <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
+                          <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
+                          <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5" />
+                              Orchestrated Dispatch
+                            </div>
+                            {status === "working" ? (
+                              <span className="text-[#3fb950] animate-pulse">Running</span>
+                            ) : status === "failed" ? (
+                              <span className="text-red-500">Failed</span>
+                            ) : (
+                              <span className="text-[#3fb950]">Done</span>
+                            )}
                           </div>
-                          <span className="text-[#3fb950] animate-pulse">Running</span>
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
+                            <span
+                              className={`w-5 h-5 rounded bg-gradient-to-br ${
+                                dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
+                              } flex items-center justify-center text-[10px] text-black`}
+                            >
+                              {dispatchAgent?.avatar ?? "⚒"}
+                            </span>
+                            {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
+                            {dispatchAgent?.role ?? "Specialist"}
+                          </div>
+                          <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
                         </div>
-                        <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
-                          <span className="w-5 h-5 rounded bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-[10px] text-black">
-                            ⚒
-                          </span>
-                          {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" /> Lead Developer
-                        </div>
-                        <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -605,9 +883,11 @@ export default function MissionControl({
               >
                 <Compass className="w-3.5 h-3.5" />
                 Code Diff
-                <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
-                  1
-                </span>
+                {diffFiles.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {diffFiles.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -651,52 +931,79 @@ export default function MissionControl({
             {activeTab === "code" && (
               <div className="h-full flex flex-col bg-[#11161d] border border-[#1e2632] rounded-lg overflow-hidden">
                 <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-4 flex items-center justify-between text-xs select-none">
-                  <div className="font-mono text-[10px] text-[#e6edf3]">
-                    📂 src/components/<span className="text-[#00e0ff] font-bold">Testimonials.astro</span>
+                  <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 overflow-x-auto">
+                    {diffFiles.length > 0 ? (
+                      <>
+                        {diffBase && (
+                          <span className="text-[#5c6470] shrink-0">
+                            vs <span className="text-[#00e0ff]">{diffBase}</span>
+                          </span>
+                        )}
+                        {diffFiles.slice(0, 4).map((f) => (
+                          <span key={f.path} className="shrink-0">
+                            <span
+                              className={
+                                f.status.startsWith("A")
+                                  ? "text-[#3fb950]"
+                                  : f.status.startsWith("D")
+                                    ? "text-red-400"
+                                    : "text-[#d29922]"
+                              }
+                            >
+                              {f.status}
+                            </span>{" "}
+                            {f.path}
+                          </span>
+                        ))}
+                        {diffFiles.length > 4 && (
+                          <span className="text-[#5c6470] shrink-0">+{diffFiles.length - 4} more</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[#5c6470]">No changes in this session&apos;s worktree</span>
+                    )}
                   </div>
-                  <span className="text-[9.5px] font-mono text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.2 rounded border border-[#3fb950]/30">
-                    DIFF READY
-                  </span>
+                  <button
+                    onClick={() => fetchDiff()}
+                    disabled={diffLoading}
+                    className="shrink-0 flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#11161d] border border-[#2a3441] px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${diffLoading ? "animate-spin text-[#00e0ff]" : ""}`} />
+                    Refresh
+                  </button>
                 </div>
 
                 <ScrollArea className="flex-1 font-mono p-4 text-[11px] leading-relaxed bg-[#060810] overflow-x-auto">
-                  <div className="whitespace-pre min-w-max text-[#8b949e]">
-                    {artifacts
-                      .find((a) => a.type === "code")
-                      ?.content.split("\n")
-                      .map((line, idx) => {
-                        const isDeleted = line.startsWith("-") || line.includes("<<<< ORIGINAL");
-                        const isAdded =
-                          line.startsWith("+") ||
-                          line.includes("====") ||
-                          line.includes(">>>>") ||
-                          line.includes("<!--");
+                  {diffText.trim() ? (
+                    <div className="whitespace-pre min-w-max text-[#8b949e]">
+                      {diffText.split("\n").map((line, idx) => {
                         let lineClass = "text-[#8b949e]";
                         let bgClass = "";
-
-                        if (
-                          line.includes("<<<< ORIGINAL") ||
-                          line.includes("====") ||
-                          line.includes(">>>>")
-                        ) {
-                          lineClass =
-                            "text-yellow-500 font-bold border-y border-yellow-500/20 block py-0.5 my-1";
-                          bgClass = "bg-yellow-500/5";
-                        } else if (line.trim().startsWith("-") || isDeleted) {
+                        if (line.startsWith("@@")) {
+                          lineClass = "text-[#00e0ff]";
+                        } else if (line.startsWith("diff --git") || line.startsWith("index ")) {
+                          lineClass = "text-[#5c6470]";
+                        } else if (line.startsWith("---") || line.startsWith("+++")) {
+                          lineClass = "text-[#5c6470] font-bold";
+                        } else if (line.startsWith("-")) {
                           lineClass = "text-red-400";
                           bgClass = "bg-red-500/10 block";
-                        } else if (line.trim().startsWith("+") || isAdded) {
+                        } else if (line.startsWith("+")) {
                           lineClass = "text-[#3fb950]";
                           bgClass = "bg-[#3fb950]/10 block";
                         }
-
                         return (
                           <div key={idx} className={`${bgClass} px-2`}>
-                            <span className={`${lineClass}`}>{line}</span>
+                            <span className={lineClass}>{line || " "}</span>
                           </div>
                         );
                       })}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-[#5c6470] text-xs font-mono">
+                      {diffLoading ? "Loading diff…" : "No changes yet — dispatch a specialist to edit files."}
+                    </div>
+                  )}
                 </ScrollArea>
               </div>
             )}
