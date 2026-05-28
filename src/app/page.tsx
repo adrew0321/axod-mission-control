@@ -55,7 +55,9 @@ export default async function HomePage() {
     .select()
     .from(messages)
     .where(eq(messages.session_id, currentSessionRow.id))
-    .orderBy(asc(messages.created_at));
+    // rowid (insertion order) breaks created_at ties so a dispatch turn keeps
+    // its true order: Sage-pre → specialist → Sage-post, even within one second.
+    .orderBy(asc(messages.created_at), asc(sql`rowid`));
 
   const approvalRows = await db
     .select()
@@ -73,7 +75,6 @@ export default async function HomePage() {
     .then((rows) => rows[0]);
 
   const sageRow = teamRows.find((a) => a.id === "sage");
-  const atlasRow = teamRows.find((a) => a.id === "atlas");
   const atlasWorking = messageRows.some((m) => m.agent_id === "atlas");
 
   const team: Agent[] = teamRows.map((a) => {
@@ -121,9 +122,6 @@ export default async function HomePage() {
     const attribution =
       m.agent_id && m.agent_id !== "sage" && m.role === "agent" ? "via Sage" : undefined;
 
-    const isOrchestratorWithDispatch =
-      m.agent_id === "sage" && m.content.toLowerCase().includes("dispatch") && atlasRow;
-
     return {
       id: m.id,
       role: m.role as Message["role"],
@@ -132,15 +130,6 @@ export default async function HomePage() {
       content: m.content,
       timestamp: formatTime(m.created_at),
       attribution,
-      dispatch: isOrchestratorWithDispatch
-        ? {
-            agentId: "atlas",
-            agentName: atlasRow!.name,
-            task:
-              "Inspect src/components/Testimonials.astro, implement high-fidelity marching-ants gradient borders, and verify the build.",
-            status: "working" as const,
-          }
-        : undefined,
     };
   });
 

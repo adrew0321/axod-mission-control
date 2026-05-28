@@ -139,6 +139,14 @@ Operator flagged during Day-4 testing that the left pane showed frozen seed text
 - UI drives the roster from live SSE, not seed `status`/`currentTask`: `workingAgents` + `agentActivity` state, a `friendlyActivity(tool, input)` mapper (Read→"Reading X", Edit/Write→"Editing X", Bash→"Running: …", Grep→"Searching for …", dispatch_agent→"Dispatching …", etc.). Sage STATE box and Atlas's roster card now show the current action live; cleared on persist/stop/error. Seed placeholders no longer shown when idle.
 - Verified: `tsc` + build clean; dev server serving, diff endpoint returning 200s. Browser confirmation of the live activity ticking pending operator drive.
 
+### Bug fix (2026-05-28): dispatch turns rendered out of order
+Operator saw the specialist's reply appear **above** Sage's on reload. Root cause: the stream route saved Sage's *entire* turn as one message at turn-end (late timestamp) while the specialist's message was saved mid-turn (earlier timestamp); `page.tsx` ordered by `created_at ASC`, so the specialist sorted above Sage. Live had the inverse (one merged Sage bubble above the specialist), so the two views disagreed. A second bug: `page.tsx` attached a hardcoded seed dispatch card ("Inspect Testimonials.astro… marching-ants") to any Sage message containing "dispatch".
+Fix:
+- Stream route splits Sage's turn at each dispatch boundary — `flushSage()` persists pre-dispatch text before the specialist runs (`onBeforeDispatch` on the dispatch server), specialist message lands next, post-dispatch text flushes at turn end. DB order = Sage-pre → specialist → Sage-post.
+- `page.tsx` orders by `created_at ASC, rowid ASC` (insertion order tiebreak for same-second rows) and no longer fabricates the seed dispatch card.
+- Live UI routes post-dispatch Sage tokens into a *new* bubble below the specialist (`currentSageId` + `pendingNewSageBubble`), so live matches reload.
+- Note: only **new** dispatch turns are correct; rows persisted under the old single-message scheme keep their original timestamps.
+
 ### Tasks
 - [x] Left pane reflects real agent state (Sage orchestrating / Atlas working) from live session data, not seed placeholders.
 - [ ] `@Atlas` direct addressing (optional; bypasses Sage for tight iterations — see team-of-agents doc).

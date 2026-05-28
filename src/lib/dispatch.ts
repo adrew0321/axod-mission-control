@@ -36,6 +36,12 @@ export interface DispatchContext {
   emit: (event: { type: string; [k: string]: unknown }) => void;
   /** Persist the dispatched agent's final message to the DB (role 'agent', its own agent_id). */
   persistMessage: (agentId: string, content: string, usage: DispatchTokenUsage) => Promise<void>;
+  /**
+   * Flush the orchestrator's text accumulated so far as its own persisted message,
+   * BEFORE the specialist runs. This keeps chronological order in the DB: Sage-pre
+   * → specialist → Sage-post, instead of one Sage message saved after the specialist.
+   */
+  onBeforeDispatch?: () => Promise<void>;
 }
 
 function buildTaskPrompt(task: string, context?: string): string {
@@ -86,6 +92,10 @@ export function createDispatchServer(ctx: DispatchContext) {
         ctx.emit({ type: 'dispatch_error', agent_id: args.agent_id, message });
         return { content: [{ type: 'text', text: message }], isError: true };
       }
+
+      // Persist Sage's pre-dispatch narration first, so it lands in the DB
+      // before the specialist's message (correct chronological order on reload).
+      if (ctx.onBeforeDispatch) await ctx.onBeforeDispatch();
 
       ctx.emit({
         type: 'dispatch_start',

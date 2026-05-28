@@ -59,10 +59,33 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     async start(controller) {
       try {
         controller.enqueue(sseEncode({ type: 'start', messageId: lastUserMessage.id }));
-        let fullText = '';
+        // Sage's text accumulates here and is flushed as a distinct message at
+        // each dispatch boundary (and once at the end), so a dispatch turn lands
+        // in the DB as Sage-pre → specialist → Sage-post in true chronological
+        // order. usage from the final `done` is attributed to the closing flush.
+        let sageBuffer = '';
+        let sageEmitted = false;
         let costUsd: number | undefined;
         let tokensIn: number | undefined;
         let tokensOut: number | undefined;
+
+        const flushSage = async (usage?: { costUsd?: number; tokensIn?: number; tokensOut?: number }) => {
+          if (!sageBuffer.trim()) return;
+          const now = new Date();
+          await db.insert(messages).values({
+            id: `msg_${bytesToHex(randomBytes(8))}`,
+            session_id: sessionId,
+            agent_id: 'sage',
+            role: 'agent',
+            content: sageBuffer,
+            token_count_in: usage?.tokensIn,
+            token_count_out: usage?.tokensOut,
+            cost_usd: usage?.costUsd,
+            created_at: now,
+          });
+          sageBuffer = '';
+          sageEmitted = true;
+        };
 
         // Run the agent inside this session's own git worktree (isolation: edits
         // land on a throwaway mc/<session> branch, never the project's base
@@ -115,6 +138,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
               created_at: now,
             });
           },
+          onBeforeDispatch: () => flushSage(),
         });
 
         // Interactive approval gates aren't achievable on this SDK (see the
@@ -134,7 +158,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
           if (event.type === 'token') {
-            fullText += event.content;
+            sageBuffer += event.content;
           } else if (event.type === 'tool') {
             // Sage's own tool activity (Read/Grep/dispatch_agent…) → live STATE box.
             controller.enqueue(
@@ -144,25 +168,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             costUsd = event.costUsd;
             tokensIn = event.tokensIn;
             tokensOut = event.tokensOut;
-            if (!fullText && event.fullText) fullText = event.fullText;
+            if (!sageBuffer && event.fullText) sageBuffer = event.fullText;
           }
           controller.enqueue(sseEncode(event));
         }
 
-        if (fullText) {
-          const now = new Date();
-          await db.insert(messages).values({
-            id: `msg_${bytesToHex(randomBytes(8))}`,
-            session_id: sessionId,
-            agent_id: 'sage',
-            role: 'agent',
-            content: fullText,
-            token_count_in: tokensIn,
-            token_count_out: tokensOut,
-            cost_usd: costUsd,
-            created_at: now,
-          });
-          await db.update(sessions).set({ updated_at: now }).where(eq(sessions.id, sessionId));
+        // Flush Sage's closing text (post-dispatch summary, or its whole reply
+        // when no dispatch happened); the turn's usage rides on this message.
+        await flushSage({ costUsd, tokensIn, tokensOut });
+        if (sageEmitted) {
+          await db.update(sessions).set({ updated_at: new Date() }).where(eq(sessions.id, sessionId));
         }
 
         controller.enqueue(sseEncode({ type: 'persisted' }));

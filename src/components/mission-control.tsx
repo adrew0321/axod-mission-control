@@ -219,6 +219,12 @@ export default function MissionControl({
 
       // Tracks the live "Atlas · via Sage" bubble while a dispatch is streaming.
       let dispatchStreamId: string | null = null;
+      // The Sage bubble currently receiving tokens. After a dispatch, Sage's
+      // continuation goes into a NEW bubble placed *below* the specialist's, so
+      // the live order (Sage-pre → specialist → Sage-post) matches what's saved.
+      let currentSageId = streamingId;
+      let pendingNewSageBubble = false;
+      const clientBubbleIds = [streamingId];
 
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
       esRef.current = es;
@@ -248,11 +254,32 @@ export default function MissionControl({
             const label = friendlyActivity(evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
           } else if (evt.type === "token" && typeof evt.content === "string") {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
-              ),
-            );
+            const tokenText = evt.content;
+            if (pendingNewSageBubble) {
+              // First token after a dispatch — open a fresh Sage bubble below the
+              // specialist's, rather than appending to the pre-dispatch bubble.
+              pendingNewSageBubble = false;
+              currentSageId = `stream_post_${Date.now()}`;
+              clientBubbleIds.push(currentSageId);
+              const newId = currentSageId;
+              setMessages((prev) => [
+                ...prev,
+                {
+                  id: newId,
+                  role: "agent" as const,
+                  agentId: "sage",
+                  senderName: "Sage",
+                  content: tokenText,
+                  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  isStreaming: true,
+                },
+              ]);
+            } else {
+              const sageId = currentSageId;
+              setMessages((prev) =>
+                prev.map((m) => (m.id === sageId ? { ...m, content: m.content + tokenText } : m)),
+              );
+            }
           } else if (evt.type === "dispatch_start" && evt.agent_id) {
             // Sage handed off to a specialist: tag Sage's bubble with a dispatch
             // card and open a fresh streaming bubble for the specialist.
@@ -270,9 +297,11 @@ export default function MissionControl({
             }));
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
             const newBubbleId = dispatchStreamId;
+            clientBubbleIds.push(newBubbleId);
+            const cardSageId = currentSageId;
             setMessages((prev) => [
               ...prev.map((m) =>
-                m.id === streamingId
+                m.id === cardSageId
                   ? {
                       ...m,
                       dispatch: {
@@ -310,7 +339,7 @@ export default function MissionControl({
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id === bubbleId) return { ...m, isStreaming: false };
-                if (m.id === streamingId && m.dispatch)
+                if (m.dispatch && m.dispatch.status === "working")
                   return {
                     ...m,
                     dispatch: { ...m.dispatch, status: failed ? "failed" : "completed" },
@@ -319,6 +348,7 @@ export default function MissionControl({
               }),
             );
             dispatchStreamId = null;
+            pendingNewSageBubble = true; // Sage's continuation opens a new bubble below
             setIsTyping(true); // Sage resumes the turn
             // Specialist is done: drop it from the roster, hand state back to Sage.
             if (evt.agent_id) {
@@ -361,10 +391,10 @@ export default function MissionControl({
             setIsTyping(false);
             setWorkingAgents([]);
             setAgentActivity({});
-            // Drop the client-side streaming bubbles (Sage + any dispatched
-            // specialist); router.refresh() repopulates them from the DB.
+            // Drop every client-side streaming bubble created this turn (Sage-pre,
+            // specialist, Sage-post); router.refresh() repopulates them from the DB.
             setMessages((prev) =>
-              prev.filter((m) => m.id !== streamingId && !m.id.startsWith("dispatch_")),
+              prev.filter((m) => !clientBubbleIds.includes(m.id) && !m.id.startsWith("dispatch_")),
             );
             fetchDiff();
             startTransition(() => router.refresh());
