@@ -1,10 +1,18 @@
 # v1 MVP Spec — AXOD Mission Control
 
-> **Status:** Spec · pre-build
+> **Status:** Build in progress · Weeks 1–3 complete (as of 2026-05-28)
 > **Created:** 2026-05-27
 > **Owner:** [@adrew0321](https://github.com/adrew0321)
 > **Target ship:** 5 weeks from build start
 > **Companion:** [Week 1 Walking Skeleton plan](../plans/week-1-walking-skeleton.md)
+
+## Build progress
+
+- **Week 1 — walking skeleton:** ✅ Next.js app, single-user scrypt auth + protected routes, SQLite/Drizzle schema, SSE plumbing, health endpoint, ADRs.
+- **Week 2 — single agent (SDK):** ✅ Sage runs on the Claude Agent SDK, real orchestrator prompt, DB-driven tool allowlist, message persistence, stop/abort. Approval-gate infra built but dormant (see below).
+- **Week 3 — team of agents:** ✅ Sage dispatches **Atlas** via an in-process `dispatch_agent` MCP tool; Atlas runs in an isolated git worktree, streams live ("Atlas · via Sage"), and reports back. Live worktree **diff review** in the Code tab. Live **per-agent state** in the roster. Message ordering fixed (Sage-pre → specialist → Sage-post).
+- **Decision (Week 3 Day 1, operator-approved):** the inline `canUseTool` approval gate is **not achievable on SDK 0.3.x** (callback never fires; streaming-input hangs). v1 safety is therefore a **static model**: per-agent capability allowlist + worktree isolation + operator diff review. The inline-card infra stays in the repo, dormant, to be wired if a future SDK fixes the control protocol. See [week-3 plan](../plans/week-3-team-of-agents.md) Day 1.
+- **Remaining:** Week 4 — workspace tabs (Preview iframe, Monaco diff, xterm terminal). Week 5 — VPS deploy + polish.
 
 ## Vision
 
@@ -17,7 +25,7 @@ You can answer YES to all of these after week 5:
 1. I can dispatch Sage from the web UI to make a code change in AXOD CREATIVE.
 2. Sage routes the work to Atlas (the developer) without me typing Atlas's name.
 3. I see the diff in the Code tab before anything's committed.
-4. I can approve / deny / "always allow" tool calls inline in the chat.
+4. ~~I can approve / deny / "always allow" tool calls inline in the chat.~~ **Revised (Week 3 Day 1):** inline gates aren't achievable on SDK 0.3.x. v1 safety = capability allowlist + worktree isolation + operator **diff review** before merge. (Inline-card infra remains dormant for a future SDK.)
 5. Atlas's work happens in an isolated git worktree (so parallel agents won't collide when added).
 6. I can close the browser and resume the session later.
 7. I can see how much the session cost in tokens and dollars.
@@ -35,7 +43,7 @@ If any one of these isn't true, v1 isn't done.
 ✅ **Single project** — AXOD CREATIVE hardcoded for v1 (project switcher is a stub)
 ✅ **SQLite (WAL mode)** via Drizzle ORM for sessions, messages, approvals, agents
 ✅ **Server-Sent Events** for streaming agent output to the workspace
-✅ **Approval gates** inline in chat — block on tool calls, surface approve/deny/always
+⚠️ **Approval gates** — *planned* inline; **revised to a static safety model** (capability allowlist + worktree isolation + operator diff review) because `canUseTool` doesn't fire on SDK 0.3.x. Inline-card infra is built but dormant.
 ✅ **Git worktree isolation** per agent (one worktree per active session)
 ✅ **Workspace tabs** — Preview (sandboxed iframe), Code (Monaco diff), Plan (markdown), Terminal (xterm.js)
 ✅ **Auth** — session cookie + scrypt password, single-user
@@ -55,7 +63,7 @@ If any one of these isn't true, v1 isn't done.
 | Multi-runtime (CrewAI / LangGraph / Antigravity simultaneously) | Adds complexity; Claude Agent SDK covers v1 use cases | v2.0 |
 | RBAC / multi-user | Solo tool for now; decide if/when to share with clients | v2.0 |
 | MCP audit / trust scoring | Builderz-style security panels; useful but not core to the MVP loop | v2.0 |
-| Memory knowledge graph | Visualization of agent memory across sessions | v2.0 |
+| Memory knowledge graph | Agent memory + cross-session recall, with a knowledge-graph visualization | v2.2 |
 | Recurring scheduler | Cron-driven agent dispatches | v2.0 |
 | 32-panel ops dashboard | The hybrid UX rejects this aesthetic anyway | never |
 

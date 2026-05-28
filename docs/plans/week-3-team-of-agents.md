@@ -1,6 +1,8 @@
 # Week 3 — Sage + team-of-agents (Atlas as first specialist)
 
-> **Goal:** Turn the single read-only Sage into a real orchestrator that dispatches **Atlas** (developer) to make actual code changes — in an isolated git worktree, behind a working approval gate. By Friday: type a request → Sage plans → dispatches Atlas → Atlas edits in a worktree → each risky tool call gates for operator approval → the diff shows up. This is the v1 spec's core loop.
+> **Status:** ✅ Complete (2026-05-28). Core loop works end-to-end: Sage plans → dispatches Atlas via `dispatch_agent` → Atlas edits in an isolated worktree, streaming live → diff is reviewable in the Code tab → Sage reports back. The "approval gate" goal was **revised to a static safety model** (see Day 1) since inline `canUseTool` isn't achievable on SDK 0.3.x. Plus: live per-agent state in the roster and a message-ordering fix. See the per-day "what actually happened" notes below.
+>
+> **Goal (as originally written):** Turn the single read-only Sage into a real orchestrator that dispatches **Atlas** (developer) to make actual code changes — in an isolated git worktree, behind a working approval gate. By Friday: type a request → Sage plans → dispatches Atlas → Atlas edits in a worktree → each risky tool call gates for operator approval → the diff shows up. This is the v1 spec's core loop.
 >
 > **This week is the forcing function for the two things week 2 deferred.** Days 1–2 are explicitly about un-deferring them, because Atlas-writes-code is impossible without both. If Day 1 (the gate) can't be solved, the whole week is blocked — so it goes first.
 
