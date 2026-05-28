@@ -30,6 +30,7 @@ A **3-pane web app**: agent-team roster on the left, orchestrator chat in the mi
 - **[v1 MVP Spec](docs/specs/v1-mvp-spec.md)** — full scope, architecture, success criteria
 - **[Week 1: Walking Skeleton Plan](docs/plans/week-1-walking-skeleton.md)** — day-by-day buildout for the first 5 working days (with post-hoc "what actually happened" notes per day)
 - **[Week 2: Single-agent SDK Plan](docs/plans/week-2-single-agent-sdk.md)** — port from CLI subprocess to `@anthropic-ai/claude-agent-sdk`
+- **[Week 3: Team-of-agents Plan](docs/plans/week-3-team-of-agents.md)** — Sage dispatches Atlas; resolves the deferred approval gate + worktree wiring
 - **[Team-of-Agents Architecture](docs/architecture/team-of-agents.md)** — how Sage routes work, how agents are isolated, how the team grows
 - **[ADR-001: Next.js vs Astro](docs/decisions/adr-001-nextjs-vs-astro.md)** — why Next.js for this project (Astro on the landing page)
 - **[ADR-002: v1 platform locks](docs/decisions/adr-002-v1-platform-locks.md)** — repo / license / domain / VPS / gateway / CI

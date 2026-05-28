@@ -197,6 +197,27 @@ The SDK fixes all three.
 - Cost meter reflects real spend
 - Week 3 plan exists
 
+### Day 5 — what actually happened (2026-05-28)
+
+- **Deleted the CLI stub** (`src/lib/agent-runner-stub.ts`) — fully superseded by `agent-runner-sdk.ts`; nothing in source imported it (only historical doc mentions remain).
+- **Cost meter already sums the session** — `page.tsx` computes `SUM(cost_usd)` / `SUM(token_count_*)` across all messages in the session (done in week-2 Day 2). No change needed; verified.
+- **Tightened runner error handling** — surface assistant-level errors (`auth_failed`/`rate_limit`/`billing_error`/...) and `result` error subtypes with their `errors[]` detail; treat `AbortError` as a clean stop (not a failure).
+- **Stop button + real server-side abort** — wired `req.signal` (fires on client disconnect) into the runner's `AbortController`. The composer shows a **Stop** button while streaming; clicking it closes the `EventSource`, which disconnects the request and aborts the SDK stream server-side (so it stops spending tokens, not just hides output). More valuable in week 3 when Atlas runs are long/agentic.
+- **Wrote [week-3 plan](week-3-team-of-agents.md)** — deliberately front-loads the two deferrals: Day 1 = make the approval gate fire (re-test `canUseTool` / pin versions / fallbacks), Day 2 = wire worktrees live, Day 3 = Atlas + `dispatch_agent`, Day 4 = gates on Atlas's writes. Week 3 is the forcing function for everything deferred this week.
+- Regression smoke after all the above: read-only prompt still streams + persists cleanly.
+
+### Honest week-2 scorecard
+
+| Day | Planned | Status |
+|---|---|---|
+| 1 | Swap CLI stub → claude-agent-sdk | ✅ done |
+| 2 | Sage: real system prompt + tools, reads the repo | ✅ done |
+| 3 | Interactive approval gate | ⚠️ infra built, **enforcement blocked** by canUseTool bug → deferred to week 3 |
+| 4 | Git worktree per session | ⚠️ helper built + Windows-risk resolved, **live wiring deferred** to week 3 (needs writes) |
+| 5 | Polish + week-3 plan + push | ✅ done |
+
+What works end-to-end today: a logged-in operator chats with **Sage**, a real Opus-4.7 SDK agent that reads the actual target repo (Read/Glob/Grep), streams token-by-token over SSE, persists messages + cost, and can be stopped mid-generation. What's built-but-dormant: the full approval-gate stack and the worktree manager — both waiting on week-3's resolution of the `canUseTool` blocker.
+
 ## What you've built by Friday evening of week 2
 
 A working single-agent system with:

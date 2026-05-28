@@ -74,6 +74,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
             yield { type: 'token', content: text };
           }
         }
+      } else if (message.type === 'assistant' && message.error) {
+        // auth_failed | rate_limit | billing_error | model_not_found | etc.
+        yield { type: 'error', message: `agent error: ${message.error}` };
       } else if (message.type === 'result') {
         if (message.subtype === 'success') {
           if (!fullText && message.result) {
@@ -88,11 +91,14 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
             tokensOut: message.usage?.output_tokens,
           };
         } else {
-          yield { type: 'error', message: `agent ended: ${message.subtype}` };
+          const detail = 'errors' in message && message.errors?.length ? `: ${message.errors.join('; ')}` : '';
+          yield { type: 'error', message: `agent ended (${message.subtype})${detail}` };
         }
       }
     }
   } catch (err) {
+    // AbortError is expected when the operator stops generation — not a failure.
+    if (err instanceof Error && err.name === 'AbortError') return;
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
 }

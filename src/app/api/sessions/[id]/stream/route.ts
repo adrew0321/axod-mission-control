@@ -14,7 +14,7 @@ function sseEncode(event: AgentEvent | { type: string; [k: string]: unknown }): 
   return new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`);
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token || !(await verifySession(token))) {
@@ -71,6 +71,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           model: sage?.model,
           systemPrompt: sage?.system_prompt,
           allowedTools: sage?.tools_allowlist ?? undefined,
+          signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
           if (event.type === 'token') {
             fullText += event.content;

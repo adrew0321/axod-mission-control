@@ -49,6 +49,15 @@ export default function MissionControl({
   }, [initialMessages]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const esRef = useRef<EventSource | null>(null);
+
+  function handleStop() {
+    esRef.current?.close();
+    esRef.current = null;
+    setIsTyping(false);
+    setMessages((prev) => prev.filter((m) => !m.isStreaming));
+    startTransition(() => router.refresh());
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -134,6 +143,7 @@ export default function MissionControl({
       setIsTyping(true);
 
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
+      esRef.current = es;
       es.onmessage = (ev) => {
         try {
           const evt = JSON.parse(ev.data) as {
@@ -174,6 +184,7 @@ export default function MissionControl({
             setSendError(evt.message ?? "Agent error");
           } else if (evt.type === "persisted") {
             es.close();
+            esRef.current = null;
             setIsTyping(false);
             setMessages((prev) => prev.filter((m) => m.id !== streamingId));
             startTransition(() => router.refresh());
@@ -531,14 +542,25 @@ export default function MissionControl({
                 placeholder="Talk to Sage, or type '@Atlas task' to target developer..."
                 className="flex-1 bg-[#060810] border border-[#2a3441] focus:border-[#00e0ff] rounded-md px-3 py-2 text-xs text-[#e6edf3] placeholder-[#5c6470] focus:outline-none transition-colors"
               />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Send</span>
-              </button>
+              {isTyping ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="bg-transparent border border-red-500/50 hover:bg-red-500/10 text-red-400 font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 bg-red-400 rounded-[2px]" />
+                  <span>Stop</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send</span>
+                </button>
+              )}
             </div>
 
             {sendError && (
