@@ -109,6 +109,8 @@ export function createDispatchServer(ctx: DispatchContext) {
         if (event.type === 'token') {
           fullText += event.content;
           ctx.emit({ type: 'dispatch_token', agent_id: agent.id, content: event.content });
+        } else if (event.type === 'tool') {
+          ctx.emit({ type: 'dispatch_activity', agent_id: agent.id, tool: event.name, input: event.input });
         } else if (event.type === 'done') {
           usage.costUsd = event.costUsd;
           usage.tokensIn = event.tokensIn;

@@ -132,8 +132,15 @@ Per the Day-1 decision, Day 4 is **"review Atlas's diff,"** not per-call approva
 
 ## Day 5 — Team roster UI, polish, week-4 prep, push
 
+### Pulled forward (2026-05-28): live left-pane agent state + activity
+Operator flagged during Day-4 testing that the left pane showed frozen seed text, not what Atlas was actually doing. Done early:
+- `runClaudeAgent` now yields a `tool` event for each tool the agent invokes (extracted from `tool_use` blocks on the SDK `assistant` message — complete name + input).
+- Dispatch forwards these as `dispatch_activity` SSE; Sage's own tools surface as `activity` SSE from the stream route.
+- UI drives the roster from live SSE, not seed `status`/`currentTask`: `workingAgents` + `agentActivity` state, a `friendlyActivity(tool, input)` mapper (Read→"Reading X", Edit/Write→"Editing X", Bash→"Running: …", Grep→"Searching for …", dispatch_agent→"Dispatching …", etc.). Sage STATE box and Atlas's roster card now show the current action live; cleared on persist/stop/error. Seed placeholders no longer shown when idle.
+- Verified: `tsc` + build clean; dev server serving, diff endpoint returning 200s. Browser confirmation of the live activity ticking pending operator drive.
+
 ### Tasks
-- [ ] Left pane reflects real agent state (Sage orchestrating / Atlas working) from live session data, not seed placeholders.
+- [x] Left pane reflects real agent state (Sage orchestrating / Atlas working) from live session data, not seed placeholders.
 - [ ] `@Atlas` direct addressing (optional; bypasses Sage for tight iterations — see team-of-agents doc).
 - [ ] Update v1 spec + this plan with what actually happened.
 - [ ] Write `docs/plans/week-4-workspace-tabs.md` (Preview iframe, Monaco diff, xterm terminal).

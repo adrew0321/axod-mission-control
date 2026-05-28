@@ -4,6 +4,7 @@ import { query, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude
 
 export type AgentEvent =
   | { type: 'token'; content: string }
+  | { type: 'tool'; name: string; input?: Record<string, unknown> }
   | { type: 'done'; fullText: string; costUsd?: number; tokensIn?: number; tokensOut?: number }
   | { type: 'error'; message: string };
 
@@ -98,9 +99,33 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
             yield { type: 'token', content: text };
           }
         }
-      } else if (message.type === 'assistant' && message.error) {
-        // auth_failed | rate_limit | billing_error | model_not_found | etc.
-        yield { type: 'error', message: `agent error: ${message.error}` };
+      } else if (message.type === 'assistant') {
+        if (message.error) {
+          // auth_failed | rate_limit | billing_error | model_not_found | etc.
+          yield { type: 'error', message: `agent error: ${message.error}` };
+        } else {
+          // Surface each tool the agent invokes so the UI can show live activity
+          // ("Reading X", "Editing Y", "Running …"). tool_use blocks carry the
+          // complete name + input on the assistant message.
+          const content = message.message?.content;
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block && typeof block === 'object' && (block as { type?: string }).type === 'tool_use') {
+                const tu = block as { name?: string; input?: unknown };
+                if (tu.name) {
+                  yield {
+                    type: 'tool',
+                    name: tu.name,
+                    input:
+                      tu.input && typeof tu.input === 'object'
+                        ? (tu.input as Record<string, unknown>)
+                        : undefined,
+                  };
+                }
+              }
+            }
+          }
+        }
       } else if (message.type === 'result') {
         if (message.subtype === 'success') {
           if (!fullText && message.result) {

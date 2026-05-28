@@ -27,6 +27,41 @@ export interface MissionControlProps {
   artifacts: Artifact[];
 }
 
+// Turn a raw tool call into a short, human-readable "what the agent is doing now"
+// line for the live STATE panel.
+function friendlyActivity(tool: string, input?: Record<string, unknown>): string {
+  const basename = (p: unknown) =>
+    typeof p === "string" ? p.split(/[\\/]/).pop() || p : "";
+  const clip = (s: unknown, n = 44) => {
+    const str = typeof s === "string" ? s : "";
+    return str.length > n ? str.slice(0, n) + "…" : str;
+  };
+  switch (tool) {
+    case "Read":
+      return `Reading ${basename(input?.file_path)}`;
+    case "Edit":
+    case "MultiEdit":
+    case "Write":
+    case "NotebookEdit":
+      return `Editing ${basename(input?.file_path ?? input?.notebook_path)}`;
+    case "Glob":
+      return "Searching files…";
+    case "Grep":
+      return input?.pattern ? `Searching for "${clip(input.pattern, 30)}"` : "Searching…";
+    case "Bash":
+      return `Running: ${clip(input?.command)}`;
+    case "WebFetch":
+    case "WebSearch":
+      return "Researching…";
+    case "TodoWrite":
+      return "Planning next steps…";
+    default:
+      if (tool.includes("dispatch_agent")) return `Dispatching ${input?.agent_id ?? "specialist"}…`;
+      if (tool.startsWith("mcp__")) return tool.split("__").pop() ?? tool;
+      return tool;
+  }
+}
+
 export default function MissionControl({
   team: initialTeam,
   session: initialSession,
@@ -49,6 +84,11 @@ export default function MissionControl({
   const [diffFiles, setDiffFiles] = useState<Array<{ status: string; path: string }>>([]);
   const [diffBase, setDiffBase] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  // Live agent state for the left pane: which agents are actively working, and
+  // a one-line "what they're doing right now" string per agent. Driven by SSE.
+  const [workingAgents, setWorkingAgents] = useState<string[]>([]);
+  const [agentActivity, setAgentActivity] = useState<Record<string, string>>({});
 
   const fetchDiff = useCallback(async () => {
     setDiffLoading(true);
@@ -81,6 +121,8 @@ export default function MissionControl({
     esRef.current?.close();
     esRef.current = null;
     setIsTyping(false);
+    setWorkingAgents([]);
+    setAgentActivity({});
     setMessages((prev) => prev.filter((m) => !m.isStreaming));
     startTransition(() => router.refresh());
   }
@@ -143,6 +185,8 @@ export default function MissionControl({
     setMessages((prev) => [...prev, optimistic]);
     setInputText("");
     setSendError(null);
+    setWorkingAgents(["sage"]);
+    setAgentActivity({ sage: "Analyzing request…" });
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -192,8 +236,18 @@ export default function MissionControl({
             agent_name?: string;
             task?: string;
             errored?: boolean;
+            tool?: string;
+            input?: Record<string, unknown>;
           };
-          if (evt.type === "token" && typeof evt.content === "string") {
+          if (evt.type === "activity" && evt.agent_id && evt.tool) {
+            const agentId = evt.agent_id;
+            const label = friendlyActivity(evt.tool, evt.input);
+            setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+          } else if (evt.type === "dispatch_activity" && evt.agent_id && evt.tool) {
+            const agentId = evt.agent_id;
+            const label = friendlyActivity(evt.tool, evt.input);
+            setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+          } else if (evt.type === "token" && typeof evt.content === "string") {
             setMessages((prev) =>
               prev.map((m) =>
                 m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
@@ -206,6 +260,14 @@ export default function MissionControl({
             const dispatchAgentName = evt.agent_name ?? dispatchAgentId;
             const task = evt.task ?? "";
             setIsTyping(false);
+            setWorkingAgents((prev) =>
+              prev.includes(dispatchAgentId) ? prev : [...prev, dispatchAgentId],
+            );
+            setAgentActivity((prev) => ({
+              ...prev,
+              [dispatchAgentId]: "Starting…",
+              sage: `Orchestrating ${dispatchAgentName}…`,
+            }));
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
             const newBubbleId = dispatchStreamId;
             setMessages((prev) => [
@@ -258,6 +320,17 @@ export default function MissionControl({
             );
             dispatchStreamId = null;
             setIsTyping(true); // Sage resumes the turn
+            // Specialist is done: drop it from the roster, hand state back to Sage.
+            if (evt.agent_id) {
+              const finishedId = evt.agent_id;
+              setWorkingAgents((prev) => prev.filter((a) => a !== finishedId));
+              setAgentActivity((prev) => {
+                const next = { ...prev };
+                delete next[finishedId];
+                next.sage = "Reviewing results…";
+                return next;
+              });
+            }
             fetchDiff(); // the specialist just edited the worktree — refresh the diff
           } else if (evt.type === "dispatch_error") {
             setSendError(evt.message ?? "Dispatched agent error");
@@ -286,6 +359,8 @@ export default function MissionControl({
             es.close();
             esRef.current = null;
             setIsTyping(false);
+            setWorkingAgents([]);
+            setAgentActivity({});
             // Drop the client-side streaming bubbles (Sage + any dispatched
             // specialist); router.refresh() repopulates them from the DB.
             setMessages((prev) =>
@@ -301,6 +376,8 @@ export default function MissionControl({
       es.onerror = () => {
         es.close();
         setIsTyping(false);
+        setWorkingAgents([]);
+        setAgentActivity({});
         setSendError((prev) => prev ?? "Stream disconnected");
       };
     } catch (err) {
@@ -403,15 +480,13 @@ export default function MissionControl({
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
                 <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATE</span>
-                {isTyping ? (
+                {workingAgents.includes("sage") || isTyping ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Analyzing input request...
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
                   </span>
                 ) : (
-                  <span className="text-[#e6edf3] line-clamp-2">
-                    {sage.currentTask ?? "Idle — awaiting next instruction."}
-                  </span>
+                  <span className="text-[#e6edf3] line-clamp-2">Idle — awaiting next instruction.</span>
                 )}
               </div>
             </div>
@@ -419,11 +494,14 @@ export default function MissionControl({
 
           <ScrollArea className="flex-1">
             <div className="p-1.5 flex flex-col gap-1">
-              {otherAgents.map((member) => (
+              {otherAgents.map((member) => {
+                const isWorking = workingAgents.includes(member.id);
+                const activity = agentActivity[member.id];
+                return (
                 <div
                   key={member.id}
                   className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${
-                    member.status === "working"
+                    isWorking
                       ? "bg-[#161c25]/75 border-[#00e0ff]/20 hover:border-[#00e0ff]/40 shadow-inner"
                       : "border-transparent hover:bg-[#161c25]/40 hover:border-[#1e2632]"
                   }`}
@@ -435,7 +513,7 @@ export default function MissionControl({
                       {member.avatar}
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#11161d] ${
-                          member.status === "working" ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950]" : "bg-[#5c6470]"
+                          isWorking ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950] animate-pulse" : "bg-[#5c6470]"
                         }`}
                       />
                     </div>
@@ -443,19 +521,21 @@ export default function MissionControl({
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline">
                         <span className="font-semibold text-xs text-[#e6edf3] font-heading">{member.name}</span>
-                        <span className="text-[9px] font-mono text-[#5c6470]">{member.lastActive}</span>
+                        <span className="text-[9px] font-mono text-[#5c6470]">
+                          {isWorking ? "now" : member.lastActive}
+                        </span>
                       </div>
                       <div className="text-[10px] font-mono text-[#8b949e]">{member.role}</div>
                     </div>
                   </div>
 
-                  {member.currentTask && (
+                  {isWorking && (
                     <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
                       <div className="text-[#3fb950] font-semibold flex items-center gap-1 mb-0.5">
                         <span className="inline-block w-1 h-1 rounded-full bg-[#3fb950] animate-ping" />
                         ACTIVE
                       </div>
-                      <p className="line-clamp-2 leading-normal">{member.currentTask}</p>
+                      <p className="line-clamp-2 leading-normal">{activity ?? "Working…"}</p>
                     </div>
                   )}
 
@@ -465,7 +545,8 @@ export default function MissionControl({
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </ScrollArea>
         </section>

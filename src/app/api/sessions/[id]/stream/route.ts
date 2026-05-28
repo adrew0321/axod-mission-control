@@ -135,6 +135,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         })) {
           if (event.type === 'token') {
             fullText += event.content;
+          } else if (event.type === 'tool') {
+            // Sage's own tool activity (Read/Grep/dispatch_agent…) → live STATE box.
+            controller.enqueue(
+              sseEncode({ type: 'activity', agent_id: 'sage', tool: event.name, input: event.input }),
+            );
           } else if (event.type === 'done') {
             costUsd = event.costUsd;
             tokensIn = event.tokensIn;
