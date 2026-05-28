@@ -27,38 +27,77 @@ export interface MissionControlProps {
   artifacts: Artifact[];
 }
 
-// Turn a raw tool call into a short, human-readable "what the agent is doing now"
-// line for the live STATE panel.
-function friendlyActivity(tool: string, input?: Record<string, unknown>): string {
-  const basename = (p: unknown) =>
-    typeof p === "string" ? p.split(/[\\/]/).pop() || p : "";
-  const clip = (s: unknown, n = 44) => {
+// Each agent has its own voice in the STATE panel. The persona flavors the verb,
+// but the exact target (file / command / pattern) always stays visible so the
+// operator knows precisely what's happening.
+const IDLE_STATE: Record<string, string> = {
+  sage: "Awaiting your word",
+  atlas: "Tools down — ready to build",
+};
+function idleState(agentId: string): string {
+  return IDLE_STATE[agentId] ?? "Idle — standing by";
+}
+
+function friendlyActivity(agentId: string, tool: string, input?: Record<string, unknown>): string {
+  const basename = (p: unknown) => (typeof p === "string" ? p.split(/[\\/]/).pop() || p : "");
+  const clip = (s: unknown, n = 40) => {
     const str = typeof s === "string" ? s : "";
     return str.length > n ? str.slice(0, n) + "…" : str;
   };
+  const file = basename(input?.file_path ?? input?.notebook_path);
+  const genericFallback = () =>
+    tool.startsWith("mcp__") ? tool.split("__").pop() ?? tool : tool;
+
+  if (agentId === "atlas") {
+    // Atlas — the builder/smith.
+    switch (tool) {
+      case "Read":
+        return `Studying ${file}`;
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Forging changes → ${file}`;
+      case "Glob":
+        return "Scouring the codebase…";
+      case "Grep":
+        return input?.pattern ? `Hunting for "${clip(input.pattern, 28)}"` : "Hunting through the code…";
+      case "Bash":
+        return `At the anvil: ${clip(input?.command)}`;
+      case "WebFetch":
+      case "WebSearch":
+        return "Consulting the archives…";
+      case "TodoWrite":
+        return "Drawing up the plan…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  // Sage — the calm navigator/orchestrator (and default voice).
   switch (tool) {
     case "Read":
-      return `Reading ${basename(input?.file_path)}`;
+      return `Surveying ${file}`;
     case "Edit":
     case "MultiEdit":
     case "Write":
     case "NotebookEdit":
-      return `Editing ${basename(input?.file_path ?? input?.notebook_path)}`;
+      return `Editing ${file}`;
     case "Glob":
-      return "Searching files…";
+      return "Surveying the repo…";
     case "Grep":
-      return input?.pattern ? `Searching for "${clip(input.pattern, 30)}"` : "Searching…";
+      return input?.pattern ? `Searching for "${clip(input.pattern, 28)}"` : "Searching…";
     case "Bash":
       return `Running: ${clip(input?.command)}`;
     case "WebFetch":
     case "WebSearch":
-      return "Researching…";
+      return "Consulting outside sources…";
     case "TodoWrite":
-      return "Planning next steps…";
+      return "Charting the course…";
     default:
-      if (tool.includes("dispatch_agent")) return `Dispatching ${input?.agent_id ?? "specialist"}…`;
-      if (tool.startsWith("mcp__")) return tool.split("__").pop() ?? tool;
-      return tool;
+      if (tool.includes("dispatch_agent"))
+        return `Handing the build to ${input?.agent_id ?? "a specialist"} →`;
+      return genericFallback();
   }
 }
 
@@ -186,7 +225,7 @@ export default function MissionControl({
     setInputText("");
     setSendError(null);
     setWorkingAgents(["sage"]);
-    setAgentActivity({ sage: "Analyzing request…" });
+    setAgentActivity({ sage: "Charting the course…" });
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -247,11 +286,11 @@ export default function MissionControl({
           };
           if (evt.type === "activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
-            const label = friendlyActivity(evt.tool, evt.input);
+            const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
           } else if (evt.type === "dispatch_activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
-            const label = friendlyActivity(evt.tool, evt.input);
+            const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
           } else if (evt.type === "token" && typeof evt.content === "string") {
             const tokenText = evt.content;
@@ -292,8 +331,8 @@ export default function MissionControl({
             );
             setAgentActivity((prev) => ({
               ...prev,
-              [dispatchAgentId]: "Starting…",
-              sage: `Orchestrating ${dispatchAgentName}…`,
+              [dispatchAgentId]: dispatchAgentId === "atlas" ? "Warming the forge…" : "Spinning up…",
+              sage: `Handing the build to ${dispatchAgentName} →`,
             }));
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
             const newBubbleId = dispatchStreamId;
@@ -357,7 +396,7 @@ export default function MissionControl({
               setAgentActivity((prev) => {
                 const next = { ...prev };
                 delete next[finishedId];
-                next.sage = "Reviewing results…";
+                next.sage = `Reviewing ${finishedId === "atlas" ? "Atlas" : "the specialist"}'s work…`;
                 return next;
               });
             }
@@ -516,7 +555,7 @@ export default function MissionControl({
                     <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
                   </span>
                 ) : (
-                  <span className="text-[#e6edf3] line-clamp-2">Idle — awaiting next instruction.</span>
+                  <span className="text-[#8b949e] line-clamp-2">{idleState("sage")}</span>
                 )}
               </div>
             </div>
@@ -559,15 +598,23 @@ export default function MissionControl({
                     </div>
                   </div>
 
-                  {isWorking && (
-                    <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
-                      <div className="text-[#3fb950] font-semibold flex items-center gap-1 mb-0.5">
-                        <span className="inline-block w-1 h-1 rounded-full bg-[#3fb950] animate-ping" />
-                        ACTIVE
-                      </div>
-                      <p className="line-clamp-2 leading-normal">{activity ?? "Working…"}</p>
+                  <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
+                    <div
+                      className={`font-semibold flex items-center gap-1 mb-0.5 ${
+                        isWorking ? "text-[#3fb950]" : "text-[#5c6470]"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block w-1 h-1 rounded-full ${
+                          isWorking ? "bg-[#3fb950] animate-ping" : "bg-[#5c6470]"
+                        }`}
+                      />
+                      {isWorking ? "ACTIVE" : "STATE"}
                     </div>
-                  )}
+                    <p className="line-clamp-2 leading-normal">
+                      {isWorking ? activity ?? "Working…" : idleState(member.id)}
+                    </p>
+                  </div>
 
                   <div className="flex justify-between items-center text-[9px] font-mono text-[#5c6470]">
                     <span className="bg-[#1c2330] text-[#8b949e] px-1.5 py-0.5 rounded border border-[#2a3441]">
