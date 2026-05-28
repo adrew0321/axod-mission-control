@@ -63,9 +63,17 @@ export async function buildWorktree(wtPath: string): Promise<BuildResult> {
   if (!existsSync(path.join(wtPath, 'node_modules'))) {
     return { ok: false, log: 'node_modules not found in the worktree — install dependencies there first.' };
   }
+  // Invoke astro's JS entry with the Node binary directly. Not `npx`: on Windows
+  // Node's execFile can't run `npx`/`.cmd` without a shell, which made every
+  // build fail. Running astro.mjs via process.execPath is shell-free and
+  // cross-platform.
+  const astroBin = path.join(wtPath, 'node_modules', 'astro', 'bin', 'astro.mjs');
+  if (!existsSync(astroBin)) {
+    return { ok: false, log: 'astro not found in the worktree node_modules — install dependencies there first.' };
+  }
   const cap = (s: string) => (s.length > 8000 ? s.slice(-8000) : s);
   try {
-    const { stdout, stderr } = await exec('npx', ['astro', 'build'], {
+    const { stdout, stderr } = await exec(process.execPath, [astroBin, 'build'], {
       cwd: wtPath,
       maxBuffer: 20 * 1024 * 1024,
       windowsHide: true,
