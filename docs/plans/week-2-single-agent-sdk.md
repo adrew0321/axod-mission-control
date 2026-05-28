@@ -156,6 +156,22 @@ The SDK fixes all three.
 - Worktree paths on Windows: forward vs backslash issues with `git worktree`
 - The Windows path with apostrophe (`A'KeemDrew`) might break `git worktree add` — test early; fall back to a non-apostrophe parent dir if needed
 
+### Day 4 — what actually happened (2026-05-28): helper built + verified; live wiring deferred
+
+**The Day-4 trigger ("create the worktree on first *write*-tool approval") depends on write tools, which are deferred with the Day-3 gate. So worktree isolation has no functional trigger in read-only v1** — a pure-read session has nothing to isolate. Rather than wire speculative, repo-mutating machinery into the working read path (or skip the day), I built the helper and **de-risked the plan's #1 flagged risk** cheaply.
+
+**Built — `src/lib/worktree.ts`:**
+- `ensureWorktree(sessionId, repoPath, baseBranch='dev')` → idempotent; creates `<WORKTREE_ROOT>/<sessionId>` checked out to a session branch `mc/<sessionId>` forked from `baseBranch` (reattaches if the branch already exists).
+- `removeWorktree(sessionId, repoPath)` → idempotent; `worktree remove --force` (leaves the branch — may hold unpushed work — and prunes if already gone).
+- `listWorktrees(repoPath)`; `worktreeRoot()` honors `WORKTREE_ROOT` env, defaults to `data/worktrees` (gitignored).
+- Uses `execFile` with an **argv array (no shell)**, so apostrophes in paths are literal — no escaping needed.
+
+**Windows/apostrophe risk: RESOLVED.** `scripts/verify-worktree.mjs` runs the real helper against a throwaway repo whose temp path contains an apostrophe (`...\Temp\mc-wt'test-XXXX`). All checks pass: worktree created, correct session branch checked out, files present, `listWorktrees` sees it, idempotent re-call, clean removal. No agent cost, no mutation of the AXOD landing repo. The `execFile`-argv approach is why it just works — the apostrophe never reaches a shell. (Re-run this on the Linux VPS in week 5 to confirm there too.)
+
+**Deferred to week 3 (alongside writes):** wiring `ensureWorktree` into the live flow, populating `sessions.worktree_path`, passing the worktree as the agent cwd, and the completed/errored cleanup hook. None of it is meaningful until an agent actually writes — and creating a worktree (which forks a branch in the operator's real landing repo) is a repo-mutating action best introduced exactly when write isolation is needed, not before. The helper is ready to call.
+
+**Landing repo state (checked, informational):** real git repo, on `dev`, ~12 branches, no stray worktrees — so a `dev`-based worktree will work when we wire it.
+
 ---
 
 ## Day 5 — Polish, week 3 prep, commit
