@@ -500,7 +500,7 @@ You type "list files in src/components" and Sage's response streams token-by-tok
 - [ ] **Decide the open questions from the v1 spec** and record decisions:
   - Repo visibility: **private** until v0.1 ✓ (this week's push)
   - License: **MIT** on first public release
-  - Domain: `mc-dev.axodcreative.pages.dev` until issue #16 on AXOD CREATIVE ships, then `mc.axodcreative.com`
+  - Domain: `mc-dev.axodcreative.com` (DNS → Hetzner VPS, not Cloudflare Pages) until issue #16 on AXOD CREATIVE ships, then `mc.axodcreative.com`
   - VPS provider: **Hetzner** (already provisioned in pre-week)
   - AI Gateway: **direct Anthropic API** for v1
   - CI: **GitHub Actions** with lint + typecheck on every PR
