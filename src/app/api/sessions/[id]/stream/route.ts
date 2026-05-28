@@ -4,7 +4,8 @@ import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { messages, projects, sessions } from '@/db/schema';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
-import { runClaudeCodeStub, type AgentEvent } from '@/lib/agent-runner-stub';
+import { runClaudeAgent, type AgentEvent } from '@/lib/agent-runner-sdk';
+import { agents } from '@/db/schema';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +46,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     .limit(1)
     .then((r) => r[0]);
 
+  const sage = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.id, 'sage'))
+    .limit(1)
+    .then((r) => r[0]);
+
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
@@ -54,10 +62,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         let tokensIn: number | undefined;
         let tokensOut: number | undefined;
 
-        for await (const event of runClaudeCodeStub(
-          lastUserMessage.content,
-          project?.repo_path ?? process.cwd(),
-        )) {
+        for await (const event of runClaudeAgent({
+          prompt: lastUserMessage.content,
+          workingDir: project?.repo_path ?? process.cwd(),
+          model: sage?.model,
+          systemPrompt: sage?.system_prompt,
+        })) {
           if (event.type === 'token') {
             fullText += event.content;
           } else if (event.type === 'done') {

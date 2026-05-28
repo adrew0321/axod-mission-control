@@ -42,6 +42,22 @@ The SDK fixes all three.
 - Authentication: the SDK reads `ANTHROPIC_API_KEY` from env; make sure `.env` is loaded in the Next.js Node runtime (it should be by default)
 - The `result` event's token/cost shape may differ from the CLI's — re-map in the wrapper
 
+### Day 1 — what actually happened (2026-05-28)
+
+- **Architecture decision: local agent SDK, not Managed Agents.** Invoking the `claude-api` skill surfaced that Anthropic now offers *Managed Agents* (server-hosted agent loop + container) as an alternative to the local `@anthropic-ai/claude-agent-sdk`. Confirmed with the operator and chose the **local SDK** — it matches the v1 spec (local git worktrees on a $5 VPS operating on real local repos, direct Anthropic API). Managed Agents would mount repos into Anthropic's container (or need a self-hosted sandbox worker) and re-architect the whole thing. Revisit Managed Agents only if we ever want Anthropic to host the compute. (No new ADR written — ADR-001 already commits to the local model; this just reaffirms it against a newer option.)
+- Pinned `@anthropic-ai/claude-agent-sdk@^0.3.152`.
+- **Actual SDK API** (read from `node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts`, NOT guessed):
+  - `query({ prompt, options })` returns an async iterable of `SDKMessage`.
+  - With `options.includePartialMessages: true`, token deltas arrive as `{type:'stream_event', event: <BetaRawMessageStreamEvent>}` — the inner `event` is the same shape as the raw Anthropic streaming API (`content_block_delta` → `delta.text`). So the Day-4 stub's parser logic ported over almost directly.
+  - Final summary is `{type:'result', subtype:'success', result, total_cost_usd, usage:{input_tokens, output_tokens}}`.
+  - Key `options`: `cwd` (working dir → repo path), `model`, `systemPrompt`, `allowedTools`, `canUseTool` (the permission hook — this is the Day-3 approval-gate primitive), `abortController`.
+- `src/lib/agent-runner-sdk.ts` exposes the **same `AgentEvent` AsyncIterable** as the stub, so the SSE route and the client are unchanged except the import. The route now also reads Sage's `model` + `system_prompt` from the DB and passes them through (small pull-forward from Day 2 — harmless and correct).
+- **Day-1 safety gate:** `canUseTool` auto-allows read-only tools (`Read`, `Glob`, `Grep`, `WebFetch`, `WebSearch`, `TodoWrite`) and denies everything else with a message. This prevents the headless SDK from hanging on a permission prompt (no TTY) and is safe until Day 3 wires the real DB-backed approval flow.
+- **Auth:** the SDK spawns the Claude Code CLI under the hood and inherits its logged-in session (the earlier `apiKeySource: "none"` probe confirmed it's using the CLI login, not an API key). No `ANTHROPIC_API_KEY` needed locally. On the VPS we'll need to configure auth — flag for week 5.
+- **Cost note:** the SDK spawn still pays the SessionStart overhead (~$0.15 for a 7-token "ONLINE" reply, similar to the CLI). The SDK's win over the stub is tool-use interception + multi-turn, not per-spawn cost — a long-lived `query` session (passing an `AsyncIterable<SDKUserMessage>` as the prompt) is the lever for amortizing setup tokens; not wired yet.
+- Stub kept at `src/lib/agent-runner-stub.ts` as reference (plan said `.bak`; left the real filename since it still typechecks and documents the CLI-parsing approach). Delete at end of week 2.
+- Verified end-to-end via curl: prompt "Reply with exactly the word ONLINE..." streamed back `ONLINE`, persisted as `msg_191844887f42c35e` with `cost_usd=0.1485575, token_count_out=7`.
+
 ---
 
 ## Day 2 — Tool definitions + system prompt for Sage
