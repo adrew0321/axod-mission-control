@@ -387,7 +387,7 @@ You merge a PR to `main` of `adrew0321/AXODCREATIVE` that was originated, drafte
 
 - [ ] Repo public from day 1, or private until v0.1? **Default: private until v0.1.**
 - [ ] License? **Default: MIT, set on first public release.**
-- [ ] Domain: `mc.axodcreative.com` requires #16 done first. Fallback subdomain on `axodcreative.pages.dev`? **Default: use `mc-dev.axodcreative.pages.dev` until #16 ships.**
+- [ ] Domain: `mc.axodcreative.com` requires #16 done first. **Default: use `mc-dev.axodcreative.com` (a DNS record → the Hetzner VPS, behind Nginx + Let's Encrypt) until #16 ships.** Not a Cloudflare Pages deploy — this app needs a real VM (see [ADR-002](../decisions/adr-002-v1-platform-locks.md)).
 - [ ] VPS provider final choice: Hetzner or DigitalOcean? **Default: Hetzner (cheaper, EU privacy posture).**
 - [ ] Use Anthropic API directly, or via Cloudflare AI Gateway? **Default: direct for v1, switch to AI Gateway in v1.2 for analytics.**
 - [ ] CI on the Mission Control repo itself? **Default: GitHub Actions running tests + lint on every PR. Match AXOD CREATIVE's pattern.**
