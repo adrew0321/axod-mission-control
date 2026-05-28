@@ -25,6 +25,13 @@
 - Monaco + Turbopack can be fussy about web workers; may need the `loader` config or to pin a CDN. Verify early.
 - Don't ship Monaco to the initial bundle — lazy-load only when the Code tab opens.
 
+### Day 1 — what actually happened (2026-05-28): done, operator-verified
+- `@monaco-editor/react` added. It loads the editor via its **default CDN loader (jsdelivr)**, which neatly sidesteps the predicted Turbopack web-worker bundling problem — no worker config needed. **Follow-up for week 5:** self-host the editor assets so the deployed app doesn't depend on the CDN (if the CDN is blocked the Code tab shows a perpetual "Loading editor…").
+- `worktree.ts` → `diffWorktreeFiles(wtPath, base)`: per-file `original` (`git show base:path`, '' for added) + `modified` (worktree file, '' for deleted), with a binary (NUL-byte via `String.fromCharCode(0)`) and >256KB guard → `skipped`. (Aside: a raw NUL literal in source briefly turned the file "binary"; use `String.fromCharCode(0)`, never a literal NUL.)
+- `/api/sessions/[id]/diff` now returns `{ base, files: WorktreeFileDiff[] }` (dropped the raw unified `diff` string — Monaco computes its own from original/modified).
+- New `DiffViewer` client component: changed-files picker + lazy `DiffEditor` (`next/dynamic`, `ssr:false`), language inferred from extension, Refresh + auto-refresh-after-dispatch retained, skipped/empty states.
+- Verified: tsc + build clean; live test data was `M src/components/Hero.astro`; operator confirmed the side-by-side diff renders.
+
 ---
 
 ## Day 2 — Preview tab: sandboxed live site
