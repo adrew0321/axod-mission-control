@@ -109,6 +109,31 @@ The SDK fixes all three.
 - The permission callback must be `async` and may block for a long time (operator might be away from keyboard). The SDK better not have a hard timeout on it.
 - If the operator never decides, what happens? Either timeout-and-deny after 5 min, or leave the stream open forever (the operator can come back; but a single dangling stream holds resources). v1: 5 min auto-deny.
 
+### Day 3 — what actually happened (2026-05-28): BLOCKED by upstream, gate deferred
+
+**The whole day's mechanism is blocked by a CLI/SDK bug. We built the infra, proved we can't enforce it yet, and deferred the live gate to week 3. Decision made with the operator.**
+
+**What got built (and works / is sound):**
+- `src/lib/permissions.ts` — `getPolicy(agent, project, tool)` (defaults to `ask`), `setAlwaysAllow`, `createPendingApproval`, `decideApproval`, `waitForDecision` (polls the row, 5-min timeout → deny).
+- `POST /api/approvals/[id]/decision` — zod-validated `{decision: approved|denied|always}`, auth-gated, updates the row.
+- `mission-control.tsx` — real approval card with Approve / Always allow / Deny, posts the decision; SSE handlers for `approval_requested` / `approval_resolved`.
+- The intended wiring: a `checkPermission` in the stream route that consults policy → `always` allow, `deny` block, `ask` create pending approval + emit SSE + block on `waitForDecision`, with `always` persisting a `tool_permissions` row.
+
+**Why it can't be enforced (root cause, 7 isolated probes):**
+- The gate depends on the SDK's `canUseTool` callback. With `@anthropic-ai/claude-agent-sdk@0.3.152` spawning the globally-installed `claude` CLI `2.1.150`, **`canUseTool` is never invoked.** The CLI emits the `tool_use` block, then waits forever for a `can_use_tool` control message it never sends. The stream hangs.
+- Ruled out, all still 0 calls: string vs streaming (`AsyncIterable`) input; `tools` restriction on/off; `canUseTool` returning allow vs deny; keeping stdin open in streaming mode; scrubbing the nested-Claude-Code env vars (`CLAUDECODE=1`, `CLAUDE_CODE_*`). `permissionMode: 'dontAsk'` (docs: "deny if not pre-approved") **also hangs** instead of cleanly auto-denying.
+- The SDK passes `--permission-prompt-tool stdio` when `canUseTool` is set, but CLI 2.1.150 never drives that control request back. It's a version-pair protocol gap, not our code. Read-only tools (Read/Glob/Grep) are unaffected because the CLI auto-allows them in `default` mode without ever consulting the callback.
+
+**Decision (operator, 2026-05-28): defer the interactive gate; ship read-only.**
+- The live runner now uses `allowedTools` = the agent's `tools_allowlist` as BOTH capability and auto-run set (no `canUseTool`, no permission round-trip → no hang). Agents can only use their allowlisted tools, and those run without a per-call gate. Dangerous tools are simply absent from any v1 agent's allowlist (Sage is read-only).
+- The permission infra above stays **dormant** in the repo, ready to wire to `canUseTool` the moment the gate works.
+- Verified read-only still streams cleanly post-revert: "version field in package.json?" → "0.0.1", no hang, $0.21.
+
+**To revisit in week 3** (when Atlas + write tools need real gating):
+- Re-test `canUseTool` against the then-current CLI/SDK; pin a known-good pair if needed.
+- If still broken, evaluate: `PreToolUse` hooks (may share the same control-channel fate — probe first), or a static pre-authorization model (`allowedTools` for `always`, `disallowedTools` for the rest — safe but no inline card), or running the agent outside the nested Claude Code env.
+- Whichever works, the dormant `permissions.ts` + decision route + card UI plug straight in.
+
 ---
 
 ## Day 4 — Git worktree per session

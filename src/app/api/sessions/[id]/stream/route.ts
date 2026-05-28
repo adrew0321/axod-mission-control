@@ -62,6 +62,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
         let tokensIn: number | undefined;
         let tokensOut: number | undefined;
 
+        // Interactive approval gates are deferred (canUseTool is broken in the
+        // current CLI/SDK pair — see docs/plans/week-2-single-agent-sdk.md Day 3).
+        // The agent is restricted to its allowlisted (auto-run) tools.
         for await (const event of runClaudeAgent({
           prompt: lastUserMessage.content,
           workingDir: project?.repo_path ?? process.cwd(),

@@ -1,6 +1,6 @@
 import 'server-only';
 import { existsSync } from 'node:fs';
-import { query, type CanUseTool, type PermissionResult } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 export type AgentEvent =
   | { type: 'token'; content: string }
@@ -12,22 +12,26 @@ export interface RunAgentOptions {
   workingDir: string;
   model?: string;
   systemPrompt?: string;
-  /** Tools the agent may use without prompting (from agents.tools_allowlist). */
+  /**
+   * Tools this agent may use. For now this is BOTH the capability set and the
+   * auto-run set: the agent can only see these tools, and they execute without
+   * a per-call gate.
+   *
+   * Why no interactive approval gate yet: the SDK's `canUseTool` permission
+   * callback is never invoked by the installed `claude` CLI (2.1.150) under
+   * SDK 0.3.152 — any tool needing a permission decision hangs the stream
+   * (verified across 7 probes; see docs/plans/week-2-single-agent-sdk.md
+   * Day 3 notes). Until that's fixed we keep agents to safe, auto-runnable
+   * tool sets via `allowedTools`. Dangerous tools are simply not in any v1
+   * agent's allowlist. The approval infra (src/lib/permissions.ts, the
+   * /api/approvals/[id]/decision route, and the approval-card UI) is built and
+   * dormant, ready to wire to `canUseTool` once the gate works.
+   */
   allowedTools?: string[];
   signal?: AbortSignal;
 }
 
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'];
-
-// Gate for any tool NOT in allowedTools (the SDK auto-runs allowlisted tools
-// without calling this). Day 3 replaces the blanket deny with the DB-backed
-// approval flow (tool_permissions + approvals, surfaced to the operator).
-function makeGate(): CanUseTool {
-  return async (toolName): Promise<PermissionResult> => ({
-    behavior: 'deny',
-    message: `Tool "${toolName}" is not in this agent's allowlist and requires operator approval (approval gates land in week 2 day 3).`,
-  });
-}
 
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
   const { prompt, workingDir, model, systemPrompt, signal } = opts;
@@ -52,8 +56,10 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         model: model ?? 'claude-opus-4-7',
         ...(systemPrompt ? { systemPrompt } : {}),
         includePartialMessages: true,
+        // Same set for capability (model only sees these) and auto-run
+        // (no permission round-trip → no hang). See RunAgentOptions.allowedTools.
+        tools: allowedTools,
         allowedTools,
-        canUseTool: makeGate(),
         abortController,
       },
     });
