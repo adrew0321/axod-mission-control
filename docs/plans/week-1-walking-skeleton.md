@@ -528,6 +528,21 @@ You type "list files in src/components" and Sage's response streams token-by-tok
 - All Week 1 success criteria from each day still pass
 - You know what Week 2 day 1 looks like
 
+### Day 5 — what actually happened (2026-05-27)
+
+- Pinned `engines: { node: ">=22", pnpm: ">=11" }` + `packageManager: "pnpm@11.1.2"` + `.nvmrc` of `22`.
+- Added `/api/health` returning `{status, db, durationMs, timestamp, version}`. The proxy matcher needed an additional `api/health$` exclusion (the original Day 3 matcher would have redirected uptime-robot to `/login`). The endpoint runs `select 1` against SQLite and returns 200/503 accordingly.
+- Refactor pass: extracted the scrypt hash/verify (and the canonical `scrypt$N$r$p$salt$hash` stored format) into `src/lib/password.ts` because it was duplicated between `src/lib/auth.ts` and `scripts/seed-admin.ts`. If those drifted, new admins wouldn't be able to log in — real bug class. Nothing else looked worth touching; mission-control.tsx is 600 lines but works and only gets a real refactor when workspace tabs go interactive in Week 4.
+- Recorded the platform-lock decisions as [ADR-002](../decisions/adr-002-v1-platform-locks.md) (one consolidated ADR for all 6 items — none individually warranted its own document).
+- Wrote [Week 2 plan](week-2-single-agent-sdk.md) — 5-day structure mirrors this one. Day 1 ports off the CLI stub onto `@anthropic-ai/claude-agent-sdk`; Day 3 is the approval-gate work (the big rock).
+- README rewritten with the actual quickstart (including the `prebuild-install` workaround for the project's `ignore-scripts=true` hardening) and a project-layout map of everything Week 1 built.
+- Smoke-tested the full loop with 2 real prompts (vs 3 in the plan — cost-trimmed at user's pacing):
+  - "List the file names in src/components" → Sage used the Glob tool, returned the actual filenames. Cost $0.118.
+  - "What is the purpose of src/proxy.ts?" → Sage Read the file and gave a correct one-sentence summary. Cost $0.108.
+  - Both persisted cleanly. No race conditions observed.
+- Skipped the screen capture (agent can't capture video). Operator should record one before sharing the repo.
+- The screen capture is the only Day 5 checkbox not satisfied; everything else is green.
+
 ---
 
 ## What you've built by Friday evening

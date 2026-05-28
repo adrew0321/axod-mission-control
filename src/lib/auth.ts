@@ -1,12 +1,12 @@
 import 'server-only';
-import { scrypt } from '@noble/hashes/scrypt.js';
-import { randomBytes, bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { SignJWT, jwtVerify } from 'jose';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { auth_users, auth_sessions } from '@/db/schema';
 
-const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1, dkLen: 32 } as const;
+export { hashPassword, verifyPassword } from './password';
+
 const SESSION_TTL_DAYS = 30;
 const SESSION_TTL_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
@@ -18,32 +18,6 @@ function getSecret(): Uint8Array {
     throw new Error('SESSION_SECRET must be set to a string of at least 32 chars');
   }
   return new TextEncoder().encode(raw);
-}
-
-function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
-
-export function hashPassword(plain: string): string {
-  const salt = randomBytes(16);
-  const dk = scrypt(new TextEncoder().encode(plain), salt, SCRYPT_PARAMS);
-  return `scrypt$${SCRYPT_PARAMS.N}$${SCRYPT_PARAMS.r}$${SCRYPT_PARAMS.p}$${bytesToHex(salt)}$${bytesToHex(dk)}`;
-}
-
-export function verifyPassword(plain: string, stored: string): boolean {
-  const parts = stored.split('$');
-  if (parts.length !== 6 || parts[0] !== 'scrypt') return false;
-  const [, nStr, rStr, pStr, saltHex, hashHex] = parts;
-  const N = Number(nStr);
-  const r = Number(rStr);
-  const p = Number(pStr);
-  const salt = hexToBytes(saltHex);
-  const expected = hexToBytes(hashHex);
-  const actual = scrypt(new TextEncoder().encode(plain), salt, { N, r, p, dkLen: expected.length });
-  return timingSafeEqual(actual, expected);
 }
 
 function randomToken(bytes = 32): string {

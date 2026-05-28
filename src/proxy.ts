@@ -17,10 +17,11 @@ export const config = {
      * Run on every path EXCEPT:
      *   - /login            (the login page itself)
      *   - /api/auth/*       (login + logout endpoints)
+     *   - /api/health       (uptime monitoring; never gated)
      *   - /_next/*          (Next.js static assets + RSC payloads)
      *   - /favicon.ico, sitemap.xml, robots.txt
      *   - any path that contains a "." (static files: .css, .js, .png, etc)
      */
-    '/((?!login$|api/auth/|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
+    '/((?!login$|api/auth/|api/health$|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
   ],
 };

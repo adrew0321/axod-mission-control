@@ -4,17 +4,9 @@ import { stdin, stdout } from 'node:process';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
-import { scrypt } from '@noble/hashes/scrypt.js';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { hashPassword } from '../src/lib/password';
 import * as schema from '../src/db/schema';
-
-const SCRYPT_PARAMS = { N: 2 ** 15, r: 8, p: 1, dkLen: 32 } as const;
-
-function hashPassword(plain: string): string {
-  const salt = randomBytes(16);
-  const dk = scrypt(new TextEncoder().encode(plain), salt, SCRYPT_PARAMS);
-  return `scrypt$${SCRYPT_PARAMS.N}$${SCRYPT_PARAMS.r}$${SCRYPT_PARAMS.p}$${bytesToHex(salt)}$${bytesToHex(dk)}`;
-}
 
 async function promptPassword(rl: readline.Interface, label: string): Promise<string> {
   // Hide input by intercepting writes to stdout during the read.

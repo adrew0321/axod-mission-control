@@ -2,6 +2,11 @@
   "name": "axod-mission-control",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=11"
+  },
+  "packageManager": "pnpm@11.1.2",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
