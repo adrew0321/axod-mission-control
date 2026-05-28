@@ -115,6 +115,19 @@
 ### Day 4 gotchas (predicted)
 - Multiple gated calls in one Atlas run = multiple cards. "Always allow" per tool keeps it sane.
 
+### Day 4 — what actually happened (2026-05-28): reshaped to diff review (no inline gate)
+
+Per the Day-1 decision, Day 4 is **"review Atlas's diff,"** not per-call approval. There is no approval gate to seed/confirm — `tool_permissions` rows stay dormant. Instead the operator sees exactly what the dispatched agent changed, on demand.
+
+**What shipped:**
+- `diffWorktree(wtPath, baseBranch)` in `worktree.ts` — runs `git -C <wt> diff <base> --` (working tree vs the fork point, so it captures both committed-on-`mc/<id>` and uncommitted edits) plus `git diff --name-status` for the file list. Returns `{ diff, files: [{status, path}] }`; empty (not error) when the worktree is missing. No `server-only` guard → tsx-testable.
+- `GET /api/sessions/[id]/diff` — auth-gated; resolves `session.worktree_path` + `project.default_branch`, returns `{ base, files, diff }`.
+- Code Diff tab is now live: fetches the diff on tab-open, after every `dispatch_done`, and on `persisted`; manual **Refresh** button; dynamic file-count badge + changed-files header (status-colored); unified-diff rendering reusing the existing `+`/`-` line coloring (added `@@`/`diff --git`/`---`/`+++` cases); empty state when there are no changes. Dropped the hardcoded `Testimonials.astro` mock.
+
+**Verified:** `diffWorktree('./data/worktrees/sess_a4f9', 'dev')` returns `files: [{status:'M', path:'src/pages/index.astro'}]` and the correct unified diff of Atlas's Day-3 comment edit. `tsc` + production build clean; the `/api/sessions/[id]/diff` route registers. Browser check of the Code Diff tab pending operator drive.
+
+**Base-diff caveat:** the diff is working-tree-vs-`dev`-tip. `dev` is assumed static during a session; if `dev` advances mid-session the diff would also reflect that drift. Fine for v1; revisit with merge-base if it bites.
+
 ---
 
 ## Day 5 — Team roster UI, polish, week-4 prep, push

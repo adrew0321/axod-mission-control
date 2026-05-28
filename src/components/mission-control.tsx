@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect, useTransition } from "react";
+import React, { useState, useRef, useEffect, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Compass,
@@ -44,6 +44,32 @@ export default function MissionControl({
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Live worktree diff (Day 4 — operator reviews what the dispatched agent changed).
+  const [diffText, setDiffText] = useState<string>("");
+  const [diffFiles, setDiffFiles] = useState<Array<{ status: string; path: string }>>([]);
+  const [diffBase, setDiffBase] = useState<string | null>(null);
+  const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  const fetchDiff = useCallback(async () => {
+    setDiffLoading(true);
+    try {
+      const res = await fetch(`/api/sessions/${initialSession.id}/diff`, { cache: "no-store" });
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        base: string | null;
+        files: Array<{ status: string; path: string }>;
+        diff: string;
+      };
+      setDiffText(data.diff ?? "");
+      setDiffFiles(data.files ?? []);
+      setDiffBase(data.base);
+    } catch {
+      // leave the previous diff in place on a transient fetch error
+    } finally {
+      setDiffLoading(false);
+    }
+  }, [initialSession.id]);
+
   useEffect(() => {
     setMessages(initialMessages);
   }, [initialMessages]);
@@ -66,6 +92,11 @@ export default function MissionControl({
   useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
+
+  // Refresh the worktree diff whenever the operator opens the Code Diff tab.
+  useEffect(() => {
+    if (activeTab === "code") fetchDiff();
+  }, [activeTab, fetchDiff]);
 
   async function handleLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -227,6 +258,7 @@ export default function MissionControl({
             );
             dispatchStreamId = null;
             setIsTyping(true); // Sage resumes the turn
+            fetchDiff(); // the specialist just edited the worktree — refresh the diff
           } else if (evt.type === "dispatch_error") {
             setSendError(evt.message ?? "Dispatched agent error");
           } else if (evt.type === "approval_requested" && evt.approvalId) {
@@ -259,6 +291,7 @@ export default function MissionControl({
             setMessages((prev) =>
               prev.filter((m) => m.id !== streamingId && !m.id.startsWith("dispatch_")),
             );
+            fetchDiff();
             startTransition(() => router.refresh());
           }
         } catch {
@@ -692,9 +725,11 @@ export default function MissionControl({
               >
                 <Compass className="w-3.5 h-3.5" />
                 Code Diff
-                <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
-                  1
-                </span>
+                {diffFiles.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {diffFiles.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -738,52 +773,79 @@ export default function MissionControl({
             {activeTab === "code" && (
               <div className="h-full flex flex-col bg-[#11161d] border border-[#1e2632] rounded-lg overflow-hidden">
                 <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-4 flex items-center justify-between text-xs select-none">
-                  <div className="font-mono text-[10px] text-[#e6edf3]">
-                    📂 src/components/<span className="text-[#00e0ff] font-bold">Testimonials.astro</span>
+                  <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 overflow-x-auto">
+                    {diffFiles.length > 0 ? (
+                      <>
+                        {diffBase && (
+                          <span className="text-[#5c6470] shrink-0">
+                            vs <span className="text-[#00e0ff]">{diffBase}</span>
+                          </span>
+                        )}
+                        {diffFiles.slice(0, 4).map((f) => (
+                          <span key={f.path} className="shrink-0">
+                            <span
+                              className={
+                                f.status.startsWith("A")
+                                  ? "text-[#3fb950]"
+                                  : f.status.startsWith("D")
+                                    ? "text-red-400"
+                                    : "text-[#d29922]"
+                              }
+                            >
+                              {f.status}
+                            </span>{" "}
+                            {f.path}
+                          </span>
+                        ))}
+                        {diffFiles.length > 4 && (
+                          <span className="text-[#5c6470] shrink-0">+{diffFiles.length - 4} more</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-[#5c6470]">No changes in this session&apos;s worktree</span>
+                    )}
                   </div>
-                  <span className="text-[9.5px] font-mono text-[#3fb950] bg-[#3fb950]/10 px-2 py-0.2 rounded border border-[#3fb950]/30">
-                    DIFF READY
-                  </span>
+                  <button
+                    onClick={() => fetchDiff()}
+                    disabled={diffLoading}
+                    className="shrink-0 flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#11161d] border border-[#2a3441] px-2 py-0.5 rounded transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${diffLoading ? "animate-spin text-[#00e0ff]" : ""}`} />
+                    Refresh
+                  </button>
                 </div>
 
                 <ScrollArea className="flex-1 font-mono p-4 text-[11px] leading-relaxed bg-[#060810] overflow-x-auto">
-                  <div className="whitespace-pre min-w-max text-[#8b949e]">
-                    {artifacts
-                      .find((a) => a.type === "code")
-                      ?.content.split("\n")
-                      .map((line, idx) => {
-                        const isDeleted = line.startsWith("-") || line.includes("<<<< ORIGINAL");
-                        const isAdded =
-                          line.startsWith("+") ||
-                          line.includes("====") ||
-                          line.includes(">>>>") ||
-                          line.includes("<!--");
+                  {diffText.trim() ? (
+                    <div className="whitespace-pre min-w-max text-[#8b949e]">
+                      {diffText.split("\n").map((line, idx) => {
                         let lineClass = "text-[#8b949e]";
                         let bgClass = "";
-
-                        if (
-                          line.includes("<<<< ORIGINAL") ||
-                          line.includes("====") ||
-                          line.includes(">>>>")
-                        ) {
-                          lineClass =
-                            "text-yellow-500 font-bold border-y border-yellow-500/20 block py-0.5 my-1";
-                          bgClass = "bg-yellow-500/5";
-                        } else if (line.trim().startsWith("-") || isDeleted) {
+                        if (line.startsWith("@@")) {
+                          lineClass = "text-[#00e0ff]";
+                        } else if (line.startsWith("diff --git") || line.startsWith("index ")) {
+                          lineClass = "text-[#5c6470]";
+                        } else if (line.startsWith("---") || line.startsWith("+++")) {
+                          lineClass = "text-[#5c6470] font-bold";
+                        } else if (line.startsWith("-")) {
                           lineClass = "text-red-400";
                           bgClass = "bg-red-500/10 block";
-                        } else if (line.trim().startsWith("+") || isAdded) {
+                        } else if (line.startsWith("+")) {
                           lineClass = "text-[#3fb950]";
                           bgClass = "bg-[#3fb950]/10 block";
                         }
-
                         return (
                           <div key={idx} className={`${bgClass} px-2`}>
-                            <span className={`${lineClass}`}>{line}</span>
+                            <span className={lineClass}>{line || " "}</span>
                           </div>
                         );
                       })}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-[#5c6470] text-xs font-mono">
+                      {diffLoading ? "Loading diff…" : "No changes yet — dispatch a specialist to edit files."}
+                    </div>
+                  )}
                 </ScrollArea>
               </div>
             )}
