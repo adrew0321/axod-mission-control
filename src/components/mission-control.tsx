@@ -49,6 +49,15 @@ export default function MissionControl({
   }, [initialMessages]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const esRef = useRef<EventSource | null>(null);
+
+  function handleStop() {
+    esRef.current?.close();
+    esRef.current = null;
+    setIsTyping(false);
+    setMessages((prev) => prev.filter((m) => !m.isStreaming));
+    startTransition(() => router.refresh());
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,54 +73,26 @@ export default function MissionControl({
     router.refresh();
   }
 
-  const handleApproval = (id: string, action: "approved" | "denied") => {
+  // Send the operator's decision to the server. The open agent stream is
+  // blocked in the permission gate waiting on this row to change; once we POST,
+  // the gate unblocks and tokens resume flowing into the streaming bubble.
+  const handleApproval = async (id: string, decision: "approved" | "denied" | "always") => {
+    const displayStatus = decision === "denied" ? "denied" : "approved";
     setMessages((prev) =>
-      prev.map((msg) => {
-        if (msg.approval && msg.approval.id === id) {
-          return {
-            ...msg,
-            approval: { ...msg.approval, status: action },
-          };
-        }
-        return msg;
-      })
+      prev.map((msg) =>
+        msg.approval && msg.approval.id === id
+          ? { ...msg, approval: { ...msg.approval, status: displayStatus } }
+          : msg,
+      ),
     );
-
-    const approvalMsg = messages.find((m) => m.approval?.id === id);
-    if (!approvalMsg) return;
-
-    const actionText = action === "approved" ? "APPROVED" : "DENIED";
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `sys_${Date.now()}`,
-        role: "system",
-        senderName: "System",
-        content: `User ${actionText} the read_file request for src/components/Testimonials.astro.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
-
-    if (action === "approved") {
-      setIsTyping(true);
-      setTimeout(() => {
-        setIsTyping(false);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `msg_atlas_${Date.now()}`,
-            role: "agent",
-            agentId: "atlas",
-            senderName: "Atlas",
-            attribution: "via Sage",
-            content:
-              "Permission granted. I have read the file. The original testimonial markup is loaded into our Code workspace tab. I am now drafting the new HSL linear-gradient border wrapper. You can review the proposed diff in the Code tab.",
-            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          },
-        ]);
-        setActiveTab("code");
-      }, 1500);
+    try {
+      await fetch(`/api/approvals/${id}/decision`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+    } catch {
+      setSendError("Failed to send decision");
     }
   };
 
@@ -162,12 +143,17 @@ export default function MissionControl({
       setIsTyping(true);
 
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
+      esRef.current = es;
       es.onmessage = (ev) => {
         try {
           const evt = JSON.parse(ev.data) as {
             type: string;
             content?: string;
             message?: string;
+            approvalId?: string;
+            toolName?: string;
+            toolInput?: unknown;
+            decision?: string;
           };
           if (evt.type === "token" && typeof evt.content === "string") {
             setMessages((prev) =>
@@ -175,10 +161,30 @@ export default function MissionControl({
                 m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
               ),
             );
+          } else if (evt.type === "approval_requested" && evt.approvalId) {
+            const approvalId = evt.approvalId;
+            const toolName = evt.toolName ?? "unknown";
+            const toolArgs = evt.toolInput;
+            setIsTyping(false);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: `sys_${approvalId}`,
+                role: "system",
+                senderName: "System",
+                content: `Sage requested permission to use ${toolName}`,
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                approval: { id: approvalId, toolName, toolArgs, status: "pending" },
+              },
+            ]);
+          } else if (evt.type === "approval_resolved") {
+            // Re-show the thinking indicator once the operator has decided.
+            setIsTyping(true);
           } else if (evt.type === "error") {
             setSendError(evt.message ?? "Agent error");
           } else if (evt.type === "persisted") {
             es.close();
+            esRef.current = null;
             setIsTyping(false);
             setMessages((prev) => prev.filter((m) => m.id !== streamingId));
             startTransition(() => router.refresh());
@@ -447,34 +453,40 @@ export default function MissionControl({
                     <div className="flex items-center gap-2 text-[#d29922] font-mono text-[10px] uppercase tracking-wider mb-2">
                       <AlertCircle className="w-4 h-4" />
                       Pending Approval Gate
-                      <span className="ml-auto text-[#8b949e] font-sans lowercase normal-case">from Atlas</span>
+                      <span className="ml-auto text-[#8b949e] font-sans lowercase normal-case">from Sage</span>
                     </div>
 
                     <div className="text-xs text-[#e6edf3] mb-3 leading-relaxed">
-                      Atlas is requesting authorization to invoke{" "}
+                      Sage is requesting authorization to invoke{" "}
                       <code className="bg-[#11161d] border border-[#1e2632] px-1.5 py-0.5 rounded text-cyan-400 font-mono text-[10.5px]">
                         {msg.approval.toolName}
                       </code>
                       :
-                      <div className="mt-2 p-2 bg-[#060810] border border-[#2a3441] rounded font-mono text-[10.5px] text-[#8b949e]">
+                      <div className="mt-2 p-2 bg-[#060810] border border-[#2a3441] rounded font-mono text-[10.5px] text-[#8b949e] whitespace-pre-wrap break-all">
                         {JSON.stringify(msg.approval.toolArgs, null, 2)}
                       </div>
                     </div>
 
                     {msg.approval.status === "pending" ? (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 flex-wrap">
                         <button
                           onClick={() => handleApproval(msg.approval!.id, "approved")}
                           className="px-3.5 py-1.5 bg-[#3fb950] hover:bg-[#34a244] text-[#060810] font-bold rounded text-xs transition-colors flex items-center gap-1 shadow-md shadow-[#3fb950]/10"
                         >
                           <ShieldCheck className="w-3.5 h-3.5" />
-                          Approve Tool Call
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => handleApproval(msg.approval!.id, "always")}
+                          className="px-3.5 py-1.5 bg-transparent border border-[#3fb950]/40 hover:border-[#3fb950] hover:bg-[#3fb950]/10 text-[#3fb950] rounded text-xs transition-all"
+                        >
+                          Always allow
                         </button>
                         <button
                           onClick={() => handleApproval(msg.approval!.id, "denied")}
                           className="px-3.5 py-1.5 bg-transparent border border-[#2a3441] hover:border-red-500/50 hover:bg-red-500/10 text-[#8b949e] hover:text-red-400 rounded text-xs transition-all"
                         >
-                          Deny Execution
+                          Deny
                         </button>
                       </div>
                     ) : (
@@ -530,14 +542,25 @@ export default function MissionControl({
                 placeholder="Talk to Sage, or type '@Atlas task' to target developer..."
                 className="flex-1 bg-[#060810] border border-[#2a3441] focus:border-[#00e0ff] rounded-md px-3 py-2 text-xs text-[#e6edf3] placeholder-[#5c6470] focus:outline-none transition-colors"
               />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Send</span>
-              </button>
+              {isTyping ? (
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  className="bg-transparent border border-red-500/50 hover:bg-red-500/10 text-red-400 font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span className="w-2.5 h-2.5 bg-red-400 rounded-[2px]" />
+                  <span>Stop</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 disabled:cursor-not-allowed text-black font-bold px-4 rounded-md text-xs flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-cyan-500/10"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Send</span>
+                </button>
+              )}
             </div>
 
             {sendError && (

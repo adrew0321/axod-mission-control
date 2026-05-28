@@ -1,0 +1,92 @@
+# Week 3 — Sage + team-of-agents (Atlas as first specialist)
+
+> **Goal:** Turn the single read-only Sage into a real orchestrator that dispatches **Atlas** (developer) to make actual code changes — in an isolated git worktree, behind a working approval gate. By Friday: type a request → Sage plans → dispatches Atlas → Atlas edits in a worktree → each risky tool call gates for operator approval → the diff shows up. This is the v1 spec's core loop.
+>
+> **This week is the forcing function for the two things week 2 deferred.** Days 1–2 are explicitly about un-deferring them, because Atlas-writes-code is impossible without both. If Day 1 (the gate) can't be solved, the whole week is blocked — so it goes first.
+
+## Inherited blockers (must resolve early — see week-2 Day 3/4 notes)
+
+1. **Approval gate is built but dormant.** `canUseTool` is never invoked by `claude` CLI 2.1.150 under `@anthropic-ai/claude-agent-sdk` 0.3.152 — gated tools hang. The infra (`src/lib/permissions.ts`, `POST /api/approvals/[id]/decision`, approval card + SSE handlers in `mission-control.tsx`) is ready to wire to whatever mechanism works.
+2. **Worktree helper is built but not wired.** `src/lib/worktree.ts` (`ensureWorktree`/`removeWorktree`/`listWorktrees`) is verified on Windows incl. the apostrophe path. Not yet called from the live flow.
+
+---
+
+## Day 1 — Make the approval gate actually fire (unblock)
+
+**Goal:** A gated tool call pauses, surfaces the (already-built) approval card, and resumes on the operator's decision. Without this, Atlas can't safely write — so nothing else this week proceeds.
+
+### Tasks
+- [ ] Re-run the week-2 probe (`canUseTool` + a Bash prompt) against the **currently-installed** CLI/SDK. Versions move fast; it may already be fixed.
+- [ ] If still broken, work the fallbacks in order, cheapest first:
+  1. **Pin a known-good CLI/SDK pair.** Find a version combo where `canUseTool` fires; pin both in `package.json` / document the CLI version.
+  2. **`PreToolUse` hook** (`options.hooks`). Probe whether hooks fire where `canUseTool` doesn't — they may share the control channel, so test before investing.
+  3. **Spawn outside the nested Claude Code env.** We're running inside Claude Code; the spawned CLI inherits `CLAUDECODE=1` etc. Scrubbing those env vars didn't help in week 2, but a real (non-nested) deploy might behave differently — worth one check on the VPS.
+  4. **Static pre-authorization fallback** (last resort): `allowedTools` = `always` tools, `disallowedTools` = the rest. Safe, no inline card. Ship this if nothing else works and revisit.
+- [ ] Once a mechanism fires: wire the dormant `checkPermission` flow (policy lookup → `always` allow / `deny` block / `ask` → pending approval + SSE + `waitForDecision`, persisting `always`) into the runner via that mechanism.
+- [ ] End-to-end test with Sage + a temporarily-granted write tool: gate fires → card → approve → tool runs → `always` persists → second call auto-runs.
+
+### Day 1 gotchas (predicted)
+- If only the static fallback works, the product loses the inline approval card for v1. Flag to the operator — it's a real UX downgrade and may warrant a different SDK approach.
+
+---
+
+## Day 2 — Wire worktrees into the live flow
+
+**Goal:** A session that's about to do write work runs in its own worktree, not the main repo. The helper exists; this is wiring + lifecycle.
+
+### Tasks
+- [ ] `ensureWorktree(sessionId, project.repo_path, project.default_branch)` when a session first needs to write (or on session activation). Store the path in `sessions.worktree_path`.
+- [ ] Pass the worktree path as the agent's `workingDir` (cwd) instead of `repo_path`.
+- [ ] Cleanup: on `sessions.status` → `completed`/`errored`, optionally `removeWorktree` (v1: keep for inspection; add a manual "clean up session" action).
+- [ ] Confirm on the operator's real landing repo (first real mutation — confirm with operator before the first run). Verify the worktree is on branch `mc/<sessionId>` off `dev`, and edits land there, not on `dev`.
+
+### Day 2 gotchas (predicted)
+- First time this mutates the operator's real repo (forks a branch). Get explicit go-ahead.
+- `data/worktrees` default root is fine locally; on the VPS set `WORKTREE_ROOT=/srv/worktrees`.
+
+---
+
+## Day 3 — Atlas as a real SDK agent + `dispatch_agent`
+
+**Goal:** Sage can hand a concrete task to Atlas. Atlas runs as its own SDK `query` (Sonnet 4.6, write toolset) in the session's worktree and reports back through Sage.
+
+### Tasks
+- [ ] Give Sage a custom `dispatch_agent` tool (SDK custom tool / MCP) with `{agent_id, task, context}` (enum-restricted agent_id — see team-of-agents doc).
+- [ ] Server intercepts the dispatch: persist a dispatch message, spawn Atlas via `runClaudeAgent` with Atlas's model + system prompt + `tools_allowlist` (Read/Glob/Grep/Edit/Write/Bash) in the same worktree.
+- [ ] Feed Atlas's final summary back to Sage as the tool result; Sage continues.
+- [ ] UI: dispatch card inline in Sage's message ("Atlas → working on X"); Atlas's reply attributed "Atlas · via Sage" (the mockup already has these).
+
+### Day 3 gotchas (predicted)
+- Per the SDK, subagent text only surfaces with `forwardSubagentText: true` (or run Atlas as a separate top-level `query` and relay manually — simpler, more control).
+- Cost: two agents per turn. Watch the per-turn spend; consider Atlas at lower `effort`.
+
+---
+
+## Day 4 — Approval gates on Atlas's writes (the real safety loop)
+
+**Goal:** Now that Atlas actually edits/runs commands and the gate fires (Day 1), every Edit/Write/Bash from Atlas hits the approval flow unless the operator set `always`.
+
+### Tasks
+- [ ] Seed/confirm `tool_permissions`: Atlas read tools `always`; Edit/Write/Bash/git `ask`.
+- [ ] Full-loop test on the landing repo in a worktree: "add a marching-ants border to the testimonial cards" → Sage plans → dispatches Atlas → Atlas proposes an Edit → **gate fires** → operator approves → edit lands in the worktree → diff visible.
+- [ ] Surface the diff (even as raw text in the Code tab) so the operator sees what changed.
+
+### Day 4 gotchas (predicted)
+- Multiple gated calls in one Atlas run = multiple cards. "Always allow" per tool keeps it sane.
+
+---
+
+## Day 5 — Team roster UI, polish, week-4 prep, push
+
+### Tasks
+- [ ] Left pane reflects real agent state (Sage orchestrating / Atlas working) from live session data, not seed placeholders.
+- [ ] `@Atlas` direct addressing (optional; bypasses Sage for tight iterations — see team-of-agents doc).
+- [ ] Update v1 spec + this plan with what actually happened.
+- [ ] Write `docs/plans/week-4-workspace-tabs.md` (Preview iframe, Monaco diff, xterm terminal).
+- [ ] Push.
+
+### Day 5 success criteria
+- Operator issues one request; Sage plans, dispatches Atlas; Atlas edits real files in an isolated worktree; risky writes gate for approval; the diff is visible. The v1 core loop works end-to-end with two agents.
+
+## What you've built by Friday of week 3
+- A working orchestrator (Sage) + specialist (Atlas) with real code edits, worktree isolation, and an enforced approval gate. The headline v1 loop. Remaining for v1: workspace tabs (week 4), VPS deploy + polish (week 5).

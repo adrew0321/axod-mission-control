@@ -10,11 +10,22 @@ const db = drizzle(sqlite, { schema });
 
 const now = new Date();
 
-const SAGE_SYSTEM_PROMPT = `You are Sage, the orchestrator of AXOD Mission Control.
-Your job is to translate the operator's goals into work that gets done by your team.
-Talk to the operator in plain English. Delegate concrete coding work to Atlas via dispatch tools.
-Surface progress, risks, and decisions back to the operator. Ask before doing anything destructive.
-Tone: calm, precise, decisive — like a senior engineer who has seen it all and is unbothered.`;
+const SAGE_SYSTEM_PROMPT = `You are Sage, the orchestrator of AXOD Mission Control — a command center where a single operator directs a team of AI agents to work on real code repositories.
+
+Your role is orchestration, not implementation. You investigate, plan, explain, and coordinate; you do not write or edit code directly.
+
+Capabilities you have right now (read-only):
+- Read, Glob, and Grep to inspect the repository you're pointed at.
+- WebFetch / WebSearch for outside information.
+- TodoWrite to track multi-step work.
+Use these tools to ground every answer in what the repo ACTUALLY contains. Never guess file contents or structure — look.
+
+When the operator asks for code changes:
+- Investigate first (read the relevant files), then lay out a concrete plan: which files change, what the change is, and any risks.
+- In this version you cannot edit files yourself. Describe the change you would dispatch to Atlas (the developer agent) and what the resulting diff would look like. Do not pretend an edit happened.
+- Anything destructive or outside the repo requires explicit operator approval — say so plainly rather than attempting it.
+
+Style: calm, precise, decisive — a senior engineer who has seen it all and is unbothered. Lead with the answer. Keep preamble short. Surface risks and unknowns honestly.`;
 
 const ATLAS_SYSTEM_PROMPT = `You are Atlas, the lead developer of AXOD Mission Control.
 You receive concrete coding tasks from Sage and execute them inside an isolated git worktree of the target repo.
@@ -38,30 +49,46 @@ async function main() {
     })
     .onConflictDoNothing();
 
-  // Agents
-  await db
-    .insert(schema.agents)
-    .values([
-      {
-        id: 'sage',
-        name: 'Sage',
-        role: 'orchestrator',
-        model: 'claude-opus-4-7',
-        system_prompt: SAGE_SYSTEM_PROMPT,
-        tools_allowlist: ['dispatch_to_atlas', 'read_messages', 'request_approval'],
-        color: 'from-cyan-400 to-blue-500',
-      },
-      {
-        id: 'atlas',
-        name: 'Atlas',
-        role: 'developer',
-        model: 'claude-sonnet-4-6',
-        system_prompt: ATLAS_SYSTEM_PROMPT,
-        tools_allowlist: ['read_file', 'edit', 'run_command', 'git', 'glob', 'grep'],
-        color: 'from-blue-400 to-indigo-600',
-      },
-    ])
-    .onConflictDoNothing();
+  // Agents. Upsert so re-running the seed refreshes prompts + allowlists
+  // (system prompts get refined over the build — see week 2/3 plans).
+  // tools_allowlist uses real Claude Code tool names. Sage (orchestrator)
+  // is read-only; Atlas (developer) gets the write/exec tools for week 3.
+  const agentRows = [
+    {
+      id: 'sage',
+      name: 'Sage',
+      role: 'orchestrator',
+      model: 'claude-opus-4-7',
+      system_prompt: SAGE_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
+      color: 'from-cyan-400 to-blue-500',
+    },
+    {
+      id: 'atlas',
+      name: 'Atlas',
+      role: 'developer',
+      model: 'claude-sonnet-4-6',
+      system_prompt: ATLAS_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
+      color: 'from-blue-400 to-indigo-600',
+    },
+  ];
+  for (const row of agentRows) {
+    await db
+      .insert(schema.agents)
+      .values(row)
+      .onConflictDoUpdate({
+        target: schema.agents.id,
+        set: {
+          name: row.name,
+          role: row.role,
+          model: row.model,
+          system_prompt: row.system_prompt,
+          tools_allowlist: row.tools_allowlist,
+          color: row.color,
+        },
+      });
+  }
 
   // Demo session
   const sessionId = 'sess_a4f9';
