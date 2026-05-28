@@ -16,6 +16,7 @@ import {
   Layers,
   ArrowRight,
   ShieldCheck,
+  Eye,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Agent, Message, Artifact, Session } from "@/lib/mock-data";
@@ -123,6 +124,37 @@ export default function MissionControl({
   const [diffFiles, setDiffFiles] = useState<FileDiff[]>([]);
   const [diffBase, setDiffBase] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  // Preview tab: build the worktree's static site, serve it, iframe the result.
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "building" | "ready" | "error">("idle");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLog, setPreviewLog] = useState<string>("");
+  const [previewNonce, setPreviewNonce] = useState<number>(0); // bump to force iframe reload
+
+  const buildPreview = useCallback(async () => {
+    setPreviewStatus("building");
+    setPreviewLog("");
+    try {
+      const res = await fetch(`/api/sessions/${initialSession.id}/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "build" }),
+      });
+      const data = (await res.json()) as { ok?: boolean; url?: string; log?: string; error?: string };
+      if (data.ok && data.url) {
+        setPreviewUrl(data.url);
+        setPreviewLog(data.log ?? "");
+        setPreviewNonce((n) => n + 1);
+        setPreviewStatus("ready");
+      } else {
+        setPreviewLog(data.log ?? data.error ?? "Build failed.");
+        setPreviewStatus("error");
+      }
+    } catch (err) {
+      setPreviewLog(err instanceof Error ? err.message : "Network error");
+      setPreviewStatus("error");
+    }
+  }, [initialSession.id]);
 
   // Live agent state for the left pane: which agents are actively working, and
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
@@ -857,6 +889,18 @@ export default function MissionControl({
           <div className="h-11 bg-[#11161d] border-b border-[#1e2632] flex items-center justify-between px-4 shrink-0 select-none">
             <div className="flex h-full gap-1">
               <button
+                onClick={() => setActiveTab("preview")}
+                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                  activeTab === "preview"
+                    ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
+                    : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Preview
+              </button>
+
+              <button
                 onClick={() => setActiveTab("plan")}
                 className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "plan"
@@ -905,6 +949,74 @@ export default function MissionControl({
           </div>
 
           <div className="flex-1 overflow-hidden p-4 relative">
+            {activeTab === "preview" && (
+              <div className="h-full flex flex-col bg-[#11161d] border border-[#1e2632] rounded-lg overflow-hidden">
+                <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-3 flex items-center justify-between text-xs select-none gap-2">
+                  <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 min-w-0">
+                    {previewStatus === "ready" && previewUrl ? (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-[#3fb950] shrink-0" />
+                        <span className="truncate text-[#8b949e]">Built from worktree · {previewUrl}</span>
+                      </>
+                    ) : previewStatus === "building" ? (
+                      <span className="text-[#00e0ff] flex items-center gap-1.5">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> Building site…
+                      </span>
+                    ) : previewStatus === "error" ? (
+                      <span className="text-red-400">Build failed</span>
+                    ) : (
+                      <span className="text-[#5c6470]">Build the worktree to preview the live site</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {previewStatus === "ready" && (
+                      <button
+                        onClick={() => setPreviewNonce((n) => n + 1)}
+                        className="flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#11161d] border border-[#2a3441] px-2 py-0.5 rounded transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Reload
+                      </button>
+                    )}
+                    <button
+                      onClick={() => buildPreview()}
+                      disabled={previewStatus === "building"}
+                      className="flex items-center gap-1 text-[9.5px] font-mono text-[#060810] bg-[#00e0ff] hover:bg-[#00c0dd] font-bold px-2.5 py-0.5 rounded transition-colors disabled:opacity-50"
+                    >
+                      <Eye className="w-3 h-3" />
+                      {previewStatus === "ready" ? "Rebuild" : "Build & preview"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 min-h-0 bg-white relative">
+                  {previewStatus === "ready" && previewUrl ? (
+                    <iframe
+                      key={previewNonce}
+                      src={previewUrl}
+                      title="Site preview"
+                      className="w-full h-full border-0"
+                      sandbox="allow-scripts allow-same-origin allow-forms"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center bg-[#060810] p-6">
+                      {previewStatus === "error" ? (
+                        <pre className="max-h-full overflow-auto text-[10.5px] font-mono text-red-300 whitespace-pre-wrap">
+                          {previewLog || "Build failed."}
+                        </pre>
+                      ) : (
+                        <div className="text-center text-[#5c6470] text-xs font-mono">
+                          {previewStatus === "building"
+                            ? "Building the site — this takes ~15-20s…"
+                            : "No preview yet. Hit “Build & preview” to render the worktree's site."}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === "plan" && (
               <ScrollArea className="h-full bg-[#11161d] border border-[#1e2632] rounded-lg p-5">
                 <div className="prose prose-invert max-w-none text-xs text-[#8b949e] font-mono">
