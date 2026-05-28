@@ -76,6 +76,42 @@ export async function removeWorktree(sessionId: string, repoPath: string): Promi
   await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', wtPath]);
 }
 
+export interface WorktreeDiff {
+  /** Unified diff of the worktree's working tree against the base branch tip. */
+  diff: string;
+  /** Per-file change summary (git name-status), e.g. { status: 'M', path: 'src/x.astro' }. */
+  files: Array<{ status: string; path: string }>;
+}
+
+/**
+ * Diff everything done in this worktree against the base branch — captures both
+ * commits on the session branch AND uncommitted working-tree edits, which is
+ * exactly "what the dispatched agent changed this session." `baseBranch` is the
+ * project's default branch (the fork point); it's assumed static for the session.
+ *
+ * Returns an empty diff (not an error) when the worktree path is missing, so the
+ * caller can render a clean "no changes yet" state.
+ */
+export async function diffWorktree(wtPath: string, baseBranch = 'dev'): Promise<WorktreeDiff> {
+  if (!wtPath || !existsSync(wtPath)) return { diff: '', files: [] };
+
+  const [{ stdout: diff }, { stdout: nameStatus }] = await Promise.all([
+    exec('git', ['-C', wtPath, 'diff', baseBranch, '--'], { maxBuffer: 10 * 1024 * 1024 }),
+    exec('git', ['-C', wtPath, 'diff', '--name-status', baseBranch, '--']),
+  ]);
+
+  const files = nameStatus
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => {
+      const [status, ...rest] = l.split(/\s+/);
+      return { status, path: rest.join(' ') };
+    });
+
+  return { diff, files };
+}
+
 /** List worktree paths currently registered on the repo. */
 export async function listWorktrees(repoPath: string): Promise<string[]> {
   const { stdout } = await exec('git', ['-C', repoPath, 'worktree', 'list', '--porcelain']);
