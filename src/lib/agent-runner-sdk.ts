@@ -12,26 +12,27 @@ export interface RunAgentOptions {
   workingDir: string;
   model?: string;
   systemPrompt?: string;
+  /** Tools the agent may use without prompting (from agents.tools_allowlist). */
+  allowedTools?: string[];
   signal?: AbortSignal;
 }
 
-// Day-1 safety gate: auto-allow read-only tools, deny anything that mutates or
-// shells out. Day 3 replaces this with the DB-backed approval flow
-// (tool_permissions + approvals tables, surfaced to the operator).
-const READ_ONLY_TOOLS = new Set(['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite']);
+const DEFAULT_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'];
 
-const dayOneGate: CanUseTool = async (toolName): Promise<PermissionResult> => {
-  if (READ_ONLY_TOOLS.has(toolName)) {
-    return { behavior: 'allow', updatedInput: {} };
-  }
-  return {
+// Gate for any tool NOT in allowedTools (the SDK auto-runs allowlisted tools
+// without calling this). Day 3 replaces the blanket deny with the DB-backed
+// approval flow (tool_permissions + approvals, surfaced to the operator).
+function makeGate(): CanUseTool {
+  return async (toolName): Promise<PermissionResult> => ({
     behavior: 'deny',
-    message: `Tool "${toolName}" requires operator approval (approval gates land in week 2 day 3).`,
-  };
-};
+    message: `Tool "${toolName}" is not in this agent's allowlist and requires operator approval (approval gates land in week 2 day 3).`,
+  });
+}
 
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
   const { prompt, workingDir, model, systemPrompt, signal } = opts;
+  const allowedTools =
+    opts.allowedTools && opts.allowedTools.length > 0 ? opts.allowedTools : DEFAULT_ALLOWED_TOOLS;
 
   const abortController = new AbortController();
   if (signal) {
@@ -51,8 +52,8 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         model: model ?? 'claude-opus-4-7',
         ...(systemPrompt ? { systemPrompt } : {}),
         includePartialMessages: true,
-        allowedTools: [...READ_ONLY_TOOLS],
-        canUseTool: dayOneGate,
+        allowedTools,
+        canUseTool: makeGate(),
         abortController,
       },
     });

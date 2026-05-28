@@ -76,6 +76,16 @@ The SDK fixes all three.
 
 - Tool allowlist semantics: does the SDK reject disallowed tools silently or surface an error? Test before relying.
 
+### Day 2 — what actually happened (2026-05-28)
+
+- Rewrote Sage's system prompt to match its **actual** v1 capabilities: orchestrator, read-only (Read/Glob/Grep/WebFetch/WebSearch/TodoWrite), grounds every answer in real repo contents, and for code changes *describes* the dispatch to Atlas rather than pretending to edit (Atlas-as-SDK-agent is week 3). Honesty about current limits is baked into the prompt.
+- **`tools_allowlist` now uses real Claude Code tool names** (was fictional `dispatch_to_atlas` etc.). Sage = read-only set; Atlas = `Read/Glob/Grep/Edit/Write/Bash/WebFetch` (staged for week 3).
+- **Seed now upserts agents** (`onConflictDoUpdate` on `id`) instead of `onConflictDoNothing`, so re-running `pnpm seed` refreshes prompts/allowlists without a manual DB wipe. The plan flagged that prompts get refined over the build — this makes that cheap.
+- Runner takes `allowedTools` and drives both the SDK `allowedTools` option (auto-run) and the `canUseTool` gate from it; the route passes `sage.tools_allowlist`. Allowlist is fully DB-driven now.
+- **Allowlist semantics answered:** tools in `allowedTools` auto-execute and never hit `canUseTool`. `canUseTool` is only called for tools *outside* the allowlist — so the gate is the right place for Day-3 approvals. Disallowed tools are denied via the callback (not a silent drop), and the SDK surfaces the deny message to the model, which adapts.
+- **Verified Sage genuinely uses tools.** Prompt: "List the top-level config files in this repo… use your tools, don't guess." Sage's streamed narration shows it calling `Glob` (twice — it noticed the first listing was polluted by `node_modules` and re-scoped to the repo root), then `Read` on the key configs, then answered: package.json / astro.config.mjs / tsconfig.json (extends `astro/tsconfigs/strict`) / pnpm files, and correctly identified **Astro v6 + pnpm + TypeScript strict + Cloudflare/wrangler**. Every detail came off disk, not training data. Cost $0.227, 1171 output tokens.
+- **Observation for Day 5 polish:** the agent's between-tool "thinking out loud" text is interleaved into the final message content (the SDK streams all assistant text blocks). It reads as nice transparency but we may want to separate interim narration from the final answer later. Not blocking.
+
 ---
 
 ## Day 3 — Approval gates (the big one)

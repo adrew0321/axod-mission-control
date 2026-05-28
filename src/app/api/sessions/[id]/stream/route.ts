@@ -67,6 +67,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
           workingDir: project?.repo_path ?? process.cwd(),
           model: sage?.model,
           systemPrompt: sage?.system_prompt,
+          allowedTools: sage?.tools_allowlist ?? undefined,
         })) {
           if (event.type === 'token') {
             fullText += event.content;
