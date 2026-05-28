@@ -78,6 +78,29 @@
 - Per the SDK, subagent text only surfaces with `forwardSubagentText: true` (or run Atlas as a separate top-level `query` and relay manually — simpler, more control).
 - Cost: two agents per turn. Watch the per-turn spend; consider Atlas at lower `effort`.
 
+### Day 3 — what actually happened (2026-05-28): loop works end-to-end, live-verified
+
+**Mechanism chosen:** in-process MCP tool, not `forwardSubagentText`. Sage gets a custom `dispatch_agent({agent_id, task, context})` tool via `createSdkMcpServer` (`src/lib/dispatch.ts`), passed through `runClaudeAgent`'s new `mcpServers` option and auto-run via the new `extraAllowedTools` (the tool is named `mcp__mission_control__dispatch_agent`). The handler loads the specialist from the DB and runs **Atlas as a nested `runClaudeAgent`** in the *same worktree*, streaming its output to the operator through an `emit` closure and returning Atlas's final summary to Sage as the tool result. `agent_id` is enum-restricted to `atlas`; the dispatched agent gets no dispatch tool (no recursion). Chosen over `forwardSubagentText` for control over streaming + attribution + per-agent persistence.
+
+**Runner changes (`agent-runner-sdk.ts`):** added `mcpServers`, `extraAllowedTools`, and `extraEnv`. `tools` stays the built-in capability set; `allowedTools` = built-ins + MCP tool names (auto-run, no permission round-trip). `tool({alwaysLoad})` / server `alwaysLoad: true` so Sage always sees the tool (not deferred behind tool search).
+
+**Critical gotcha (not predicted): the SDK MCP stream-close timeout.** `createSdkMcpServer`'s docstring warns that MCP calls running >60s need `CLAUDE_CODE_STREAM_CLOSE_TIMEOUT` raised — and Atlas doing real work *always* exceeds 60s. Set `extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000' }` (10 min) on Sage's query in the stream route. Without this the dispatch would have been killed mid-run.
+
+**UI:** the mockup's `dispatch` + `attribution` fields on `Message` were already there. Wired SSE events `dispatch_start` (Sage gets a dispatch card + a fresh "Atlas · via Sage" bubble opens), `dispatch_token` (streams into it), `dispatch_done`/`dispatch_error` (finalize). Dispatch card now reflects working/done/failed + the real agent's color/avatar/role.
+
+**Prompt/seed:** rewrote Sage's system prompt — it no longer says "you cannot edit," it *has* `dispatch_agent` and is told to dispatch Atlas for real changes. Re-seeded.
+
+**Live verification (operator drove the browser, go-ahead given):** request "have Atlas add a short comment block at the top of the homepage explaining the layout." Sage read `src/pages/index.astro`, dispatched Atlas; the "Atlas · via Sage" bubble streamed Atlas reading the file, inserting a 9-line comment block, and running `astro check` (exit 0); Sage resumed with a summary and correctly flagged the change was worktree-only. **Confirmed by git:** worktree on branch `mc/sess_a4f9` (off `dev`), `src/pages/index.astro` modified there, `dev` untouched.
+
+**Known v1 warts (not blocking):**
+- *Reload ordering:* Atlas's message persists mid-turn while Sage's full message (pre+post-dispatch text concatenated) persists at turn end; on reload, `created_at` ordering can put the Atlas bubble slightly out of place. Live streaming order is correct. Fix later (e.g. timestamp Sage's bubble at turn start, or split Sage's pre/post-dispatch messages).
+- *Seed demo dispatch card* (`msg_2`) is hardcoded `status: 'working'` so it renders "Running" forever in the demo history — cosmetic, seed-only.
+- *Stray `400 thinking/redacted_thinking blocks cannot be modified`* seen once on an unrelated read turn during earlier testing — not dispatch-related; watch for recurrence.
+
+**Tooling hygiene:** excluded `data/` from `tsconfig.json` so the Day-2 worktree checkout (a full Astro repo) stops polluting `tsc`. Build's Turbopack NFT "whole project traced" warning (from `worktree.ts` dynamic fs paths) is pre-existing and non-fatal.
+
+**Day 4 reminder:** per the Day-1 decision, Day 4 is "review Atlas's diff," not per-call approval gates. Atlas already edits within its allowlist + worktree; surfacing the diff in the Code tab is the remaining piece.
+
 ---
 
 ## Day 4 — Approval gates on Atlas's writes (the real safety loop)

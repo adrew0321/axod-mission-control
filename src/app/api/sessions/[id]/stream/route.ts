@@ -7,6 +7,7 @@ import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { runClaudeAgent, type AgentEvent } from '@/lib/agent-runner-sdk';
 import { agents } from '@/db/schema';
 import { ensureWorktree } from '@/lib/worktree';
+import { createDispatchServer, DISPATCH_SERVER_NAME, DISPATCH_TOOL_NAME } from '@/lib/dispatch';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -92,6 +93,30 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           }
         }
 
+        // Sage can hand concrete coding tasks to a specialist (Atlas) via the
+        // in-process `dispatch_agent` MCP tool. The dispatched agent runs in the
+        // SAME worktree, streams to the operator through these closures, and its
+        // final summary is returned to Sage as the tool result.
+        const dispatchServer = createDispatchServer({
+          workingDir,
+          signal: req.signal,
+          emit: (event) => controller.enqueue(sseEncode(event)),
+          persistMessage: async (agentId, content, usage) => {
+            const now = new Date();
+            await db.insert(messages).values({
+              id: `msg_${bytesToHex(randomBytes(8))}`,
+              session_id: sessionId,
+              agent_id: agentId,
+              role: 'agent',
+              content,
+              token_count_in: usage.tokensIn,
+              token_count_out: usage.tokensOut,
+              cost_usd: usage.costUsd,
+              created_at: now,
+            });
+          },
+        });
+
         // Interactive approval gates aren't achievable on this SDK (see the
         // week-3 plan Day 1). v1 safety = capability allowlist (below) +
         // worktree isolation (above) + operator diff review.
@@ -101,6 +126,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           model: sage?.model,
           systemPrompt: sage?.system_prompt,
           allowedTools: sage?.tools_allowlist ?? undefined,
+          mcpServers: { [DISPATCH_SERVER_NAME]: dispatchServer },
+          extraAllowedTools: [DISPATCH_TOOL_NAME],
+          // The dispatch_agent MCP call blocks while Atlas works — well past the
+          // 60s default SDK stream-close timeout. Give it 10 minutes.
+          extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000' },
           signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
           if (event.type === 'token') {

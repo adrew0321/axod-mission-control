@@ -142,6 +142,9 @@ export default function MissionControl({
       ]);
       setIsTyping(true);
 
+      // Tracks the live "Atlas · via Sage" bubble while a dispatch is streaming.
+      let dispatchStreamId: string | null = null;
+
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
       esRef.current = es;
       es.onmessage = (ev) => {
@@ -154,6 +157,10 @@ export default function MissionControl({
             toolName?: string;
             toolInput?: unknown;
             decision?: string;
+            agent_id?: string;
+            agent_name?: string;
+            task?: string;
+            errored?: boolean;
           };
           if (evt.type === "token" && typeof evt.content === "string") {
             setMessages((prev) =>
@@ -161,6 +168,67 @@ export default function MissionControl({
                 m.id === streamingId ? { ...m, content: m.content + evt.content } : m,
               ),
             );
+          } else if (evt.type === "dispatch_start" && evt.agent_id) {
+            // Sage handed off to a specialist: tag Sage's bubble with a dispatch
+            // card and open a fresh streaming bubble for the specialist.
+            const dispatchAgentId = evt.agent_id;
+            const dispatchAgentName = evt.agent_name ?? dispatchAgentId;
+            const task = evt.task ?? "";
+            setIsTyping(false);
+            dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
+            const newBubbleId = dispatchStreamId;
+            setMessages((prev) => [
+              ...prev.map((m) =>
+                m.id === streamingId
+                  ? {
+                      ...m,
+                      dispatch: {
+                        agentId: dispatchAgentId,
+                        agentName: dispatchAgentName,
+                        task,
+                        status: "working" as const,
+                      },
+                    }
+                  : m,
+              ),
+              {
+                id: newBubbleId,
+                role: "agent" as const,
+                agentId: dispatchAgentId,
+                senderName: dispatchAgentName,
+                attribution: "via Sage",
+                content: "",
+                timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                isStreaming: true,
+              },
+            ]);
+          } else if (evt.type === "dispatch_token" && typeof evt.content === "string") {
+            const bubbleId = dispatchStreamId;
+            if (bubbleId) {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === bubbleId ? { ...m, content: m.content + evt.content } : m,
+                ),
+              );
+            }
+          } else if (evt.type === "dispatch_done") {
+            const bubbleId = dispatchStreamId;
+            const failed = Boolean(evt.errored);
+            setMessages((prev) =>
+              prev.map((m) => {
+                if (m.id === bubbleId) return { ...m, isStreaming: false };
+                if (m.id === streamingId && m.dispatch)
+                  return {
+                    ...m,
+                    dispatch: { ...m.dispatch, status: failed ? "failed" : "completed" },
+                  };
+                return m;
+              }),
+            );
+            dispatchStreamId = null;
+            setIsTyping(true); // Sage resumes the turn
+          } else if (evt.type === "dispatch_error") {
+            setSendError(evt.message ?? "Dispatched agent error");
           } else if (evt.type === "approval_requested" && evt.approvalId) {
             const approvalId = evt.approvalId;
             const toolName = evt.toolName ?? "unknown";
@@ -186,7 +254,11 @@ export default function MissionControl({
             es.close();
             esRef.current = null;
             setIsTyping(false);
-            setMessages((prev) => prev.filter((m) => m.id !== streamingId));
+            // Drop the client-side streaming bubbles (Sage + any dispatched
+            // specialist); router.refresh() repopulates them from the DB.
+            setMessages((prev) =>
+              prev.filter((m) => m.id !== streamingId && !m.id.startsWith("dispatch_")),
+            );
             startTransition(() => router.refresh());
           }
         } catch {
@@ -424,25 +496,40 @@ export default function MissionControl({
                   >
                     {msg.content}
 
-                    {msg.dispatch && (
-                      <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
-                        <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
-                        <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <Layers className="w-3.5 h-3.5" />
-                            Orchestrated Dispatch
+                    {msg.dispatch && (() => {
+                      const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
+                      const status = msg.dispatch.status;
+                      return (
+                        <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
+                          <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
+                          <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5" />
+                              Orchestrated Dispatch
+                            </div>
+                            {status === "working" ? (
+                              <span className="text-[#3fb950] animate-pulse">Running</span>
+                            ) : status === "failed" ? (
+                              <span className="text-red-500">Failed</span>
+                            ) : (
+                              <span className="text-[#3fb950]">Done</span>
+                            )}
                           </div>
-                          <span className="text-[#3fb950] animate-pulse">Running</span>
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
+                            <span
+                              className={`w-5 h-5 rounded bg-gradient-to-br ${
+                                dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
+                              } flex items-center justify-center text-[10px] text-black`}
+                            >
+                              {dispatchAgent?.avatar ?? "⚒"}
+                            </span>
+                            {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
+                            {dispatchAgent?.role ?? "Specialist"}
+                          </div>
+                          <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
                         </div>
-                        <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
-                          <span className="w-5 h-5 rounded bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-[10px] text-black">
-                            ⚒
-                          </span>
-                          {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" /> Lead Developer
-                        </div>
-                        <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
 
