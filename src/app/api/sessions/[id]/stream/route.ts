@@ -6,6 +6,7 @@ import { messages, projects, sessions } from '@/db/schema';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { runClaudeAgent, type AgentEvent } from '@/lib/agent-runner-sdk';
 import { agents } from '@/db/schema';
+import { ensureWorktree } from '@/lib/worktree';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,12 +63,41 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         let tokensIn: number | undefined;
         let tokensOut: number | undefined;
 
-        // Interactive approval gates are deferred (canUseTool is broken in the
-        // current CLI/SDK pair — see docs/plans/week-2-single-agent-sdk.md Day 3).
-        // The agent is restricted to its allowlisted (auto-run) tools.
+        // Run the agent inside this session's own git worktree (isolation: edits
+        // land on a throwaway mc/<session> branch, never the project's base
+        // branch). Falls back to the main repo if the worktree can't be created.
+        let workingDir = project?.repo_path ?? process.cwd();
+        if (project?.repo_path) {
+          try {
+            const wt = await ensureWorktree(
+              sessionId,
+              project.repo_path,
+              project.default_branch ?? 'dev',
+            );
+            workingDir = wt.path;
+            if (session.worktree_path !== wt.path) {
+              await db
+                .update(sessions)
+                .set({ worktree_path: wt.path })
+                .where(eq(sessions.id, sessionId));
+            }
+            controller.enqueue(sseEncode({ type: 'worktree', path: wt.path, branch: wt.branch }));
+          } catch (err) {
+            controller.enqueue(
+              sseEncode({
+                type: 'worktree_error',
+                message: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        }
+
+        // Interactive approval gates aren't achievable on this SDK (see the
+        // week-3 plan Day 1). v1 safety = capability allowlist (below) +
+        // worktree isolation (above) + operator diff review.
         for await (const event of runClaudeAgent({
           prompt: lastUserMessage.content,
-          workingDir: project?.repo_path ?? process.cwd(),
+          workingDir,
           model: sage?.model,
           systemPrompt: sage?.system_prompt,
           allowedTools: sage?.tools_allowlist ?? undefined,

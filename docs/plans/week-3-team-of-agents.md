@@ -54,6 +54,14 @@
 - First time this mutates the operator's real repo (forks a branch). Get explicit go-ahead.
 - `data/worktrees` default root is fine locally; on the VPS set `WORKTREE_ROOT=/srv/worktrees`.
 
+### Day 2 — what actually happened (2026-05-28): wired + verified live
+
+- The stream route now calls `ensureWorktree(sessionId, project.repo_path, project.default_branch)` before running the agent, persists `sessions.worktree_path`, and passes the worktree as the agent's `workingDir` (falls back to the main repo + emits a `worktree_error` SSE event if creation fails). New SSE event `worktree` carries `{path, branch}`.
+- **Verified live on the real landing repo** (operator go-ahead given): `git -C landing worktree list` shows `…/data/worktrees/sess_a4f9 [mc/sess_a4f9]` forked off `dev`; the dir is a real Astro checkout (`astro.config.mjs` present). Definitive cwd proof — asked Sage to read `package.json name` from its cwd → returned `"landing"` (the worktree), not `"axod-mission-control"`. So the agent genuinely operates inside the isolated worktree.
+- Idempotent: re-streaming reuses the same worktree (no duplicate adds).
+- **Deferred:** auto-cleanup on session completion — there's no session-complete trigger in v1 yet; worktrees are kept for inspection (plan's stated v1 choice). Add a manual "clean up session" action later.
+- **Observation (prompt-tuning, not Day 2):** when asked "what kind of project is this repo?" Sage answered "AXOD Mission Control" from its system-prompt *identity* instead of reading the cwd. Sage's prompt says "never guess — look"; tighten it (or have it always read before describing a repo) when refining prompts. The worktree wiring is correct regardless.
+
 ---
 
 ## Day 3 — Atlas as a real SDK agent + `dispatch_agent`
