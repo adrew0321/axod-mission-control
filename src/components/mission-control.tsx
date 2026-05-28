@@ -17,16 +17,48 @@ import {
   ArrowRight,
   ShieldCheck,
   Eye,
+  Hammer,
+  Telescope,
+  Bug,
+  Palette,
+  Cog,
+  type LucideIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Agent, Message, Artifact, Session } from "@/lib/mock-data";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
+import Markdown from "@/components/markdown";
 
 export interface MissionControlProps {
   team: Agent[];
   session: Session;
   initialMessages: Message[];
   artifacts: Artifact[];
+}
+
+// Per-agent identity: a distinct line icon + accent color matching each
+// personality, used for the avatar, roster card border, and name.
+const AGENT_ICON: Record<string, LucideIcon> = {
+  sage: Compass, // navigator / orchestrator
+  atlas: Hammer, // builder / smith
+  nova: Telescope, // researcher
+  echo: Bug, // QA critic
+  pixel: Palette, // designer
+  forge: Cog, // devops
+};
+
+const AGENT_ACCENT: Record<string, { border: string; name: string }> = {
+  sage: { border: "border-cyan-500/40", name: "text-cyan-300" },
+  atlas: { border: "border-indigo-500/40", name: "text-indigo-300" },
+  nova: { border: "border-emerald-500/40", name: "text-emerald-300" },
+  echo: { border: "border-violet-500/40", name: "text-violet-300" },
+  pixel: { border: "border-pink-500/40", name: "text-pink-300" },
+  forge: { border: "border-amber-500/40", name: "text-amber-300" },
+};
+
+function AgentIcon({ id, className }: { id: string; className?: string }) {
+  const Icon = AGENT_ICON[id] ?? Sparkles;
+  return <Icon className={className} />;
 }
 
 // Each agent has its own voice in the STATE panel. The persona flavors the verb,
@@ -564,8 +596,8 @@ export default function MissionControl({
               <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-r" />
               <div className="text-[9px] font-mono text-[#00e0ff] tracking-wider uppercase mb-2">ORCHESTRATOR</div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-lg font-bold text-black relative shadow-md shadow-cyan-500/10">
-                  {sage.avatar}
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md shadow-cyan-500/10">
+                  <AgentIcon id="sage" className="w-5 h-5" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#11161d] bg-[#3fb950] shadow-[0_0_5px_#3fb950] animate-pulse" />
                 </div>
                 <div className="flex-1 min-width-0">
@@ -593,20 +625,21 @@ export default function MissionControl({
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
                 const activity = agentActivity[member.id];
+                const accent = AGENT_ACCENT[member.id] ?? { border: "border-[#00e0ff]/40", name: "text-[#e6edf3]" };
                 return (
                 <div
                   key={member.id}
                   className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${
                     isWorking
-                      ? "bg-[#161c25]/75 border-[#00e0ff]/20 hover:border-[#00e0ff]/40 shadow-inner"
+                      ? `bg-[#161c25]/75 ${accent.border} shadow-inner`
                       : "border-transparent hover:bg-[#161c25]/40 hover:border-[#1e2632]"
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
                     <div
-                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center font-semibold text-black relative`}
+                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative`}
                     >
-                      {member.avatar}
+                      <AgentIcon id={member.id} className="w-4 h-4" />
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#11161d] ${
                           isWorking ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950] animate-pulse" : "bg-[#5c6470]"
@@ -616,7 +649,7 @@ export default function MissionControl({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline">
-                        <span className="font-semibold text-xs text-[#e6edf3] font-heading">{member.name}</span>
+                        <span className={`font-semibold text-xs font-heading ${accent.name}`}>{member.name}</span>
                         <span className="text-[9px] font-mono text-[#5c6470]">
                           {isWorking ? "now" : member.lastActive}
                         </span>
@@ -708,11 +741,11 @@ export default function MissionControl({
                   <div
                     className={`text-xs leading-relaxed p-3 rounded-md border ${
                       msg.role === "user"
-                        ? "bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3]"
-                        : "bg-[#11161d] border-[#1e2632] text-[#8b949e] whitespace-pre-wrap"
+                        ? "bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap"
+                        : "bg-[#11161d] border-[#1e2632] text-[#8b949e]"
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === "agent" ? <Markdown>{msg.content}</Markdown> : msg.content}
 
                     {msg.dispatch && (() => {
                       const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
@@ -737,9 +770,9 @@ export default function MissionControl({
                             <span
                               className={`w-5 h-5 rounded bg-gradient-to-br ${
                                 dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
-                              } flex items-center justify-center text-[10px] text-black`}
+                              } flex items-center justify-center text-black`}
                             >
-                              {dispatchAgent?.avatar ?? "⚒"}
+                              <AgentIcon id={msg.dispatch.agentId} className="w-3 h-3" />
                             </span>
                             {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
                             {dispatchAgent?.role ?? "Specialist"}
