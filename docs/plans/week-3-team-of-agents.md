@@ -28,6 +28,16 @@
 ### Day 1 gotchas (predicted)
 - If only the static fallback works, the product loses the inline approval card for v1. Flag to the operator — it's a real UX downgrade and may warrant a different SDK approach.
 
+### Day 1 — what actually happened (2026-05-28): hang FIXED, inline gate not achievable → static model adopted
+
+**Root cause of the week-2 hang found and fixed.** SDK 0.3.152's executable resolution fell back to the **mismatched global `claude` CLI 2.1.150** under pnpm's symlink layout; that SDK/CLI pair never completes the permission control handshake, so any tool needing a decision hung the stream. **Upgrading to SDK 0.3.153** (`93d05c4`) fixes it — its default resolution uses the **bundled** CLI (2.1.153), and a Bash prompt that hung on 0.3.152 now runs cleanly.
+
+**But the inline `canUseTool` gate is still not achievable on this SDK.** Across 4 targeted probes (down from week-2's 7), `canUseTool` fired **0 times** regardless of: CLI version (global 2.1.150 / bundled 2.1.152 / bundled 2.1.153), input mode (string → tools auto-run; streaming → hangs), `settingSources: []` (no inherited `~/.claude` rules), and `permissionMode: default`. Conclusion: on SDK 0.3.x (Windows), string-input mode auto-runs tools (bypassing `canUseTool`) and streaming-input mode hangs the control round-trip. The per-call approval card can't be built on it right now.
+
+**Decision (operator, 2026-05-28): accept the static safety model for v1.** No inline approval card. v1 safety = (a) **per-agent capability allowlist** — each agent can only use its `tools_allowlist` (already enforced in `agent-runner-sdk.ts` via `tools` + `allowedTools`; un-listed tools are unavailable), (b) **worktree isolation** (Day 2 — Atlas edits a throwaway `mc/<session>` branch, never `dev`), and (c) **operator review of the resulting diff/PR before merge**. The dormant inline-card infra (`permissions.ts`, decision route, card UI) stays in the repo; revisit if a future SDK fixes the streaming control protocol.
+
+**Net for the rest of week 3:** Days 3–4 change — Atlas's write tools run within its allowlist + worktree rather than gating per call. Day 4 becomes "review Atlas's diff," not "approve each write." The headline loop (Sage → dispatch Atlas → real edits in isolation → operator reviews diff) is intact; only the per-call popup is gone.
+
 ---
 
 ## Day 2 — Wire worktrees into the live flow
