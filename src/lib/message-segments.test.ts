@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { splitMessageSegments } from "./message-segments.ts";
+import { splitMessageSegments } from "./message-segments";
 
 test("single paragraph returns one segment", () => {
   assert.deepEqual(splitMessageSegments("Just one line."), ["Just one line."]);
