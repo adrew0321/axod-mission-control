@@ -46,3 +46,29 @@ test("combined code list applies color and bold together", () => {
     { text: "hi", color: "#00e0ff", bold: true },
   ]);
 });
+
+test("bare reset \\x1b[m is equivalent to \\x1b[0m", () => {
+  assert.deepEqual(parseAnsi("\x1b[31m\x1b[mplain"), [{ text: "plain" }]);
+});
+
+test("256-color selector (38;5;N) does not let the previous color bleed", () => {
+  assert.deepEqual(parseAnsi("\x1b[31mred\x1b[38;5;196mxterm256\x1b[0mplain"), [
+    { text: "red", color: "#f87171" },
+    { text: "xterm256" },
+    { text: "plain" },
+  ]);
+});
+
+test("truecolor selector (38;2;r;g;b) also clears the current color", () => {
+  assert.deepEqual(parseAnsi("\x1b[32mg\x1b[38;2;10;20;30mtrue"), [
+    { text: "g", color: "#3fb950" },
+    { text: "true" },
+  ]);
+});
+
+test("OSC sequences (title) are stripped, surrounding text intact", () => {
+  assert.deepEqual(parseAnsi("a\x1b]0;my title\x07b"), [
+    { text: "a" },
+    { text: "b" },
+  ]);
+});
