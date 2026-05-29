@@ -146,7 +146,7 @@ export const mockMessages: Message[] = [
   {
     id: 'm1',
     role: 'user',
-    senderName: 'adrew0321',
+    senderName: 'AXOD',
     content: "Hey Sage, let's create a beautiful border style for the AXOD landing page testimonial cards.",
     timestamp: '2:10 PM'
   },

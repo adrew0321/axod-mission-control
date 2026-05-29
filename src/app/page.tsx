@@ -118,7 +118,7 @@ export default async function HomePage() {
   const messagesForUi: Message[] = messageRows.map((m) => {
     const agentRow = m.agent_id ? teamRows.find((a) => a.id === m.agent_id) : undefined;
     const senderName =
-      m.role === "user" ? "adrew0321" : agentRow?.name ?? "System";
+      m.role === "user" ? "AXOD" : agentRow?.name ?? "System";
     const attribution =
       m.agent_id && m.agent_id !== "sage" && m.role === "agent" ? "via Sage" : undefined;
 

@@ -49,13 +49,13 @@ const AGENT_ICON: Record<string, LucideIcon> = {
   forge: Cog, // devops
 };
 
-const AGENT_ACCENT: Record<string, { border: string; name: string }> = {
-  sage: { border: "border-cyan-500/40", name: "text-cyan-300" },
-  atlas: { border: "border-indigo-500/40", name: "text-indigo-300" },
-  nova: { border: "border-emerald-500/40", name: "text-emerald-300" },
-  echo: { border: "border-violet-500/40", name: "text-violet-300" },
-  pixel: { border: "border-pink-500/40", name: "text-pink-300" },
-  forge: { border: "border-amber-500/40", name: "text-amber-300" },
+const AGENT_ACCENT: Record<string, { border: string; name: string; bg: string }> = {
+  sage: { border: "border-cyan-500/40", name: "text-cyan-300", bg: "bg-cyan-500/30" },
+  atlas: { border: "border-indigo-500/40", name: "text-indigo-300", bg: "bg-indigo-500/30" },
+  nova: { border: "border-emerald-500/40", name: "text-emerald-300", bg: "bg-emerald-500/30" },
+  echo: { border: "border-violet-500/40", name: "text-violet-300", bg: "bg-violet-500/30" },
+  pixel: { border: "border-pink-500/40", name: "text-pink-300", bg: "bg-pink-500/30" },
+  forge: { border: "border-amber-500/40", name: "text-amber-300", bg: "bg-amber-500/30" },
 };
 
 function AgentIcon({ id, className }: { id: string; className?: string }) {
@@ -283,7 +283,7 @@ export default function MissionControl({
     const optimistic: Message = {
       id: optimisticId,
       role: "user",
-      senderName: "adrew0321",
+      senderName: "AXOD",
       content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
@@ -631,7 +631,7 @@ export default function MissionControl({
               </div>
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
-                <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATE</span>
+                <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATUS</span>
                 {workingAgents.includes("sage") || isTyping ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
@@ -649,14 +649,14 @@ export default function MissionControl({
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
                 const activity = agentActivity[member.id];
-                const accent = AGENT_ACCENT[member.id] ?? { border: "border-[#00e0ff]/40", name: "text-[#e6edf3]" };
+                const accent = AGENT_ACCENT[member.id] ?? { border: "border-[#00e0ff]/40", name: "text-[#e6edf3]", bg: "bg-[#161c25]/40" };
                 return (
                 <div
                   key={member.id}
-                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${
+                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${accent.bg} ${
                     isWorking
-                      ? `bg-[#161c25]/75 ${accent.border} shadow-inner`
-                      : "border-transparent hover:bg-[#161c25]/40 hover:border-[#1e2632]"
+                      ? `${accent.border} shadow-inner`
+                      : "border-transparent hover:border-[#1e2632]"
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
@@ -693,7 +693,7 @@ export default function MissionControl({
                           isWorking ? "bg-[#3fb950] animate-ping" : "bg-[#5c6470]"
                         }`}
                       />
-                      {isWorking ? "ACTIVE" : "STATE"}
+                      {isWorking ? "ACTIVE" : "STATUS"}
                     </div>
                     <p className="line-clamp-2 leading-normal">
                       {isWorking ? activity ?? "Working…" : idleState(member.id)}
