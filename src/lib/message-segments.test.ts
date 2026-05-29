@@ -61,3 +61,22 @@ test("an unterminated (still-streaming) fence is not split inside", () => {
     "```js\nconst a = 1;\n\nconst b = 2;",
   ]);
 });
+
+test("a backtick fence is not closed by a tilde line inside it", () => {
+  const input = "```js\ncode\n~~~\nstill code\n```";
+  assert.deepEqual(splitMessageSegments(input), [
+    "```js\ncode\n~~~\nstill code\n```",
+  ]);
+});
+
+test("CRLF line endings are normalized to LF in output", () => {
+  const input = "First.\r\n\r\nSecond.";
+  assert.deepEqual(splitMessageSegments(input), ["First.", "Second."]);
+});
+
+test("a CRLF fenced block stays atomic with LF-normalized contents", () => {
+  const input = "```js\r\nconst a = 1;\r\n\r\nconst b = 2;\r\n```";
+  assert.deepEqual(splitMessageSegments(input), [
+    "```js\nconst a = 1;\n\nconst b = 2;\n```",
+  ]);
+});

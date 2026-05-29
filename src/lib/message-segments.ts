@@ -3,12 +3,13 @@
 // EXCEPT inside a fenced code block (``` … ``` or ~~~ … ~~~), which is kept
 // atomic so a fence with internal blank lines is never shattered across
 // bubbles. An unterminated fence (still streaming) keeps everything from the
-// opening fence onward in one trailing segment.
+// opening fence onward in one trailing segment. Segment text is trimmed and
+// CRLF line endings are normalized to LF before processing.
 
 const FENCE = /^\s*(```|~~~)/;
 
 export function splitMessageSegments(content: string): string[] {
-  const lines = content.split("\n");
+  const lines = content.replace(/\r\n/g, "\n").split("\n");
   const segments: string[] = [];
   let current: string[] = [];
   let inFence = false;
@@ -24,11 +25,13 @@ export function splitMessageSegments(content: string): string[] {
     const fenceMatch = line.match(FENCE);
     if (fenceMatch) {
       if (!inFence) {
-        // Opening a fence: a blank line right before it already separated the
-        // preceding prose, but flush defensively in case it didn't.
+        // Opening a fence. We do NOT flush here: prose on the immediately
+        // preceding line (no blank line between) intentionally stays in the
+        // same segment as the fence, since the fence needs that context to
+        // render. A blank line before the fence would already have flushed.
         inFence = true;
         fenceMarker = fenceMatch[1];
-      } else if (line.includes(fenceMarker)) {
+      } else if (fenceMatch[1] === fenceMarker) {
         // Closing fence (same marker family). Keep the line, stay un-split.
         inFence = false;
         fenceMarker = "";
