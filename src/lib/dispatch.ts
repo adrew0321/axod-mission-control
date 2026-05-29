@@ -118,7 +118,7 @@ export function createDispatchServer(ctx: DispatchContext) {
         signal: ctx.signal,
       })) {
         const term = toTerminalEvent(event, agent.id);
-        if (term) ctx.emit(term);
+        if (term) ctx.emit(term as unknown as { type: string; [k: string]: unknown });
 
         if (event.type === 'token') {
           fullText += event.content;

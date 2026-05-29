@@ -159,7 +159,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
           const term = toTerminalEvent(event, 'sage');
-          if (term) controller.enqueue(sseEncode(term));
+          if (term) controller.enqueue(sseEncode(term as unknown as { type: string; [k: string]: unknown }));
 
           if (event.type === 'token') {
             sageBuffer += event.content;
@@ -174,9 +174,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             tokensOut = event.tokensOut;
             if (!sageBuffer && event.fullText) sageBuffer = event.fullText;
           }
-          // Forward the raw event for the client (token rendering relies on this),
-          // but NOT raw tool_result — its (potentially large) output already went
-          // out as the `terminal` event above, and the client ignores raw results.
+          // Forward the raw event for the client (token rendering relies on this).
+          // Skip raw tool_result entirely: the client never consumes raw results,
+          // and Bash output already went out above as a (smaller, filtered)
+          // `terminal` event — no point sending the full result payload twice.
           if (event.type !== 'tool_result') controller.enqueue(sseEncode(event));
         }
 
