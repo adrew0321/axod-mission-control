@@ -8,6 +8,7 @@ export interface TerminalEvent {
   agent_id: string;
   content: string;
   isError?: boolean;
+  [k: string]: unknown;
 }
 
 // Map a runner AgentEvent to a Terminal SSE event, or null if it is not a Bash

@@ -5,6 +5,7 @@ import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { db } from '@/db/client';
 import { agents } from '@/db/schema';
 import { runClaudeAgent } from './agent-runner-sdk';
+import { toTerminalEvent } from './terminal-events';
 
 /**
  * In-process MCP server name. The dispatch tool is therefore exposed to Sage as
@@ -116,6 +117,9 @@ export function createDispatchServer(ctx: DispatchContext) {
         allowedTools: agent.tools_allowlist ?? undefined,
         signal: ctx.signal,
       })) {
+        const term = toTerminalEvent(event, agent.id);
+        if (term) ctx.emit(term);
+
         if (event.type === 'token') {
           fullText += event.content;
           ctx.emit({ type: 'dispatch_token', agent_id: agent.id, content: event.content });
