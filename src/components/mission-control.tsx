@@ -29,6 +29,7 @@ import type { Agent, Message, Artifact, Session } from "@/lib/mock-data";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
+import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -189,6 +190,11 @@ export default function MissionControl({
     }
   }, [initialSession.id]);
 
+  // Live Terminal tab: agents' Bash commands + output, accumulated in-session.
+  // Ephemeral — cleared on full page reload (fresh mount), capped to bound memory.
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const lineIdRef = useRef<number>(0);
+
   // Live agent state for the left pane: which agents are actively working, and
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
   const [workingAgents, setWorkingAgents] = useState<string[]>([]);
@@ -343,11 +349,28 @@ export default function MissionControl({
             errored?: boolean;
             tool?: string;
             input?: Record<string, unknown>;
+            stream?: "command" | "output";
+            isError?: boolean;
           };
           if (evt.type === "activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+          } else if (evt.type === "terminal" && typeof evt.content === "string" && evt.stream) {
+            // Skip empty command lines (a bare "$" is noise).
+            if (!(evt.stream === "command" && evt.content.trim() === "")) {
+              const line: TerminalLine = {
+                id: lineIdRef.current++,
+                kind: evt.stream,
+                agentId: evt.agent_id ?? "sage",
+                content: evt.content,
+                isError: evt.isError,
+              };
+              setTerminalLines((prev) => {
+                const next = [...prev, line];
+                return next.length > 1000 ? next.slice(next.length - 1000) : next;
+              });
+            }
           } else if (evt.type === "dispatch_activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
@@ -1103,15 +1126,7 @@ export default function MissionControl({
                   </span>
                 </div>
 
-                <ScrollArea className="flex-1 p-4 text-xs font-mono leading-relaxed bg-black text-[#8b949e]">
-                  <pre className="whitespace-pre-wrap">{artifacts.find((a) => a.type === "terminal")?.content}</pre>
-
-                  <div className="mt-3 border-t border-[#1e2632]/80 pt-2 flex items-center gap-1.5 text-cyan-400">
-                    <span>$</span>
-                    <span className="text-[#e6edf3] font-bold">pnpm run build</span>
-                    <div className="w-2 h-4 bg-cyan-400 animate-pulse ml-0.5 inline-block align-middle" />
-                  </div>
-                </ScrollArea>
+                <TerminalView lines={terminalLines} />
               </div>
             )}
           </div>
