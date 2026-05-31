@@ -30,6 +30,8 @@ import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
+import PlanView from "@/components/plan-view";
+import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -141,12 +143,10 @@ export default function MissionControl({
   team: initialTeam,
   session: initialSession,
   initialMessages,
-  artifacts: initialArtifacts,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [artifacts] = useState<Artifact[]>(initialArtifacts);
   const [activeTab, setActiveTab] = useState<string>("plan");
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
@@ -194,6 +194,10 @@ export default function MissionControl({
   // Ephemeral — cleared on full page reload (fresh mount), capped to bound memory.
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const lineIdRef = useRef<number>(0);
+
+  // Live Plan tab: the most recent TodoWrite snapshot (latest writer wins).
+  // Ephemeral — gone on full reload, persists across turns, not cleared on Stop.
+  const [plan, setPlan] = useState<PlanSnapshot | null>(null);
 
   // Live agent state for the left pane: which agents are actively working, and
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
@@ -356,6 +360,8 @@ export default function MissionControl({
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+            const snap = toPlanSnapshot(evt.tool, evt.input, agentId);
+            if (snap) setPlan(snap);
           } else if (evt.type === "terminal" && typeof evt.content === "string" && evt.stream) {
             // Skip empty command lines (a bare "$" is noise).
             if (!(evt.stream === "command" && evt.content.trim() === "")) {
@@ -375,6 +381,8 @@ export default function MissionControl({
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+            const snap = toPlanSnapshot(evt.tool, evt.input, agentId);
+            if (snap) setPlan(snap);
           } else if (evt.type === "token" && typeof evt.content === "string") {
             const tokenText = evt.content;
             if (pendingNewSageBubble) {
@@ -1087,23 +1095,7 @@ export default function MissionControl({
               </div>
             )}
 
-            {activeTab === "plan" && (
-              <ScrollArea className="h-full bg-[#11161d] border border-[#1e2632] rounded-lg p-5">
-                <div className="prose prose-invert max-w-none text-xs text-[#8b949e] font-mono">
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2a3441]">
-                    <h2 className="text-sm font-bold text-[#e6edf3] font-heading uppercase tracking-wide">
-                      Dynamic Plan
-                    </h2>
-                    <span className="bg-[#161c25] border border-[#2a3441] px-2 py-0.5 rounded text-[10px] text-cyan-400">
-                      UPDATED
-                    </span>
-                  </div>
-                  <pre className="whitespace-pre-wrap leading-relaxed text-xs font-sans text-[#8b949e]">
-                    {artifacts.find((a) => a.type === "plan")?.content}
-                  </pre>
-                </div>
-              </ScrollArea>
-            )}
+            {activeTab === "plan" && <PlanView snapshot={plan} />}
 
             {activeTab === "code" && (
               <DiffViewer
