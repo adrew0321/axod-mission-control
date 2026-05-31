@@ -76,6 +76,13 @@
 ### Day 4 gotchas (predicted)
 - `TodoWrite` content is transient per turn; if the Plan tab should persist across turns, store it in `artifacts`.
 
+### Day 4 — what actually happened (2026-05-31): done
+- Chose the **`TodoWrite` live-checklist** route (the simpler honest one) over a persisted `artifacts` row — the plan is the agents' real working checklist, streamed over SSE, no new storage.
+- Pure parser `src/lib/plan-events.ts` → `toPlanSnapshot(tool, input, agentId)` returning `PlanSnapshot { agentId, todos }` (defensive: coerces unknown/missing status to `pending`, drops empty todos, returns `null` for non-`TodoWrite`/malformed input). Unit-tested in `src/lib/plan-events.test.ts` (mirrors the Day-3 `terminal-events` pair).
+- Presentational `src/components/plan-view.tsx` (`PlanView`): status glyphs (○ pending / ◐ in-progress, uses `activeForm` / ✓ completed, struck through), owner label, live `done / total` count, quiet empty placeholder.
+- `mission-control.tsx`: ephemeral `plan` state (latest writer wins, persists across turns, not cleared on Stop), fed `toPlanSnapshot` from both the `activity` (Sage) and `dispatch_activity` (specialist) SSE branches; replaced the mock "Dynamic Plan" `<pre>` with `<PlanView snapshot={plan} />`. Removed the now-dead `artifacts` prop consumption (the `'plan'` artifact type + `art_plan` mock row are swept up in Day 5 cleanup).
+- Verified: `pnpm build` clean, `pnpm test` green (39/39). Spec: `docs/superpowers/specs/2026-05-31-plan-tab-live-todowrite-design.md`; plan: `docs/superpowers/plans/2026-05-31-plan-tab-live-todowrite.md`.
+
 ---
 
 ## Day 5 — Wire-up, polish, week-5 prep, push
