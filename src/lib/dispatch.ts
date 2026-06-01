@@ -17,10 +17,10 @@ export const DISPATCH_TOOL_NAME = `mcp__${DISPATCH_SERVER_NAME}__dispatch_agent`
 /**
  * Specialists Sage may dispatch. Enum-restricted so Sage can't invent an agent.
  * Sage itself is intentionally absent (no self-dispatch / recursion), as is any
- * agent that isn't yet a real SDK runner. Atlas (developer) is the only one for
- * week 3.
+ * agent that isn't yet a real SDK runner. Atlas (developer) implements; Echo (QA
+ * critic) reviews — both run in this session's worktree.
  */
-const DISPATCHABLE = ['atlas'] as const;
+const DISPATCHABLE = ['atlas', 'echo'] as const;
 
 export interface DispatchTokenUsage {
   costUsd?: number;
@@ -64,16 +64,16 @@ function buildTaskPrompt(task: string, context?: string): string {
 export function createDispatchServer(ctx: DispatchContext) {
   const dispatchTool = tool(
     'dispatch_agent',
-    'Hand a concrete, self-contained coding task to a specialist agent that can edit files and run commands in this session\'s isolated worktree. Use this whenever the operator wants real code changes — you (Sage) plan and coordinate, the specialist implements. Returns the specialist\'s final summary of what it did.',
+    'Hand a concrete, self-contained task to a specialist working in this session\'s isolated git worktree. Atlas (lead developer) edits files and runs commands to implement changes; Echo (QA critic) reviews work already made and returns a verdict but cannot edit. You (Sage) plan and coordinate; the specialist does the work. Returns the specialist\'s final summary.',
     {
       agent_id: z
         .enum(DISPATCHABLE)
-        .describe('Which specialist to dispatch. Only "atlas" (lead developer) is available right now.'),
+        .describe('Which specialist to dispatch: "atlas" (lead developer — implements code changes) or "echo" (QA critic — reviews a change already made in the worktree and returns a verdict; cannot edit).'),
       task: z
         .string()
         .min(1)
         .describe(
-          'A concrete, self-contained task: which files to change, what the change is, and how to verify it. The specialist does not see the operator chat, so include everything it needs.',
+          'A concrete, self-contained task. For Atlas: which files to change, the change, and how to verify it. For Echo: what to review and the original brief to judge it against. The specialist does not see the operator chat, so include everything it needs.',
         ),
       context: z
         .string()
