@@ -987,6 +987,11 @@ export default function MissionControl({
               >
                 <FileText className="w-3.5 h-3.5" />
                 Plan
+                {plan && plan.todos.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {plan.todos.filter((t) => t.status === "completed").length}/{plan.todos.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -1016,6 +1021,11 @@ export default function MissionControl({
               >
                 <TerminalIcon className="w-3.5 h-3.5" />
                 Terminal
+                {terminalLines.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {terminalLines.length}
+                  </span>
+                )}
               </button>
             </div>
 
