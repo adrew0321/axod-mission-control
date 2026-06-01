@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { projects, sessions } from '@/db/schema';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
-import { diffWorktree } from '@/lib/worktree';
+import { diffWorktreeFiles } from '@/lib/worktree';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!session) return Response.json({ error: 'Session not found' }, { status: 404 });
 
   if (!session.worktree_path) {
-    return Response.json({ base: null, files: [], diff: '' });
+    return Response.json({ base: null, files: [] });
   }
 
   const project = session.project_id
@@ -42,8 +42,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const base = project?.default_branch ?? 'dev';
 
   try {
-    const { diff, files } = await diffWorktree(session.worktree_path, base);
-    return Response.json({ base, files, diff });
+    const files = await diffWorktreeFiles(session.worktree_path, base);
+    return Response.json({ base, files });
   } catch (err) {
     return Response.json(
       { error: err instanceof Error ? err.message : String(err) },

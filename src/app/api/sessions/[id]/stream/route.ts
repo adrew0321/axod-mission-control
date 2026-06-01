@@ -8,6 +8,7 @@ import { runClaudeAgent, type AgentEvent } from '@/lib/agent-runner-sdk';
 import { agents } from '@/db/schema';
 import { ensureWorktree } from '@/lib/worktree';
 import { createDispatchServer, DISPATCH_SERVER_NAME, DISPATCH_TOOL_NAME } from '@/lib/dispatch';
+import { toTerminalEvent } from '@/lib/terminal-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -157,6 +158,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000' },
           signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
+          const term = toTerminalEvent(event, 'sage');
+          if (term) controller.enqueue(sseEncode(term as unknown as { type: string; [k: string]: unknown }));
+
           if (event.type === 'token') {
             sageBuffer += event.content;
           } else if (event.type === 'tool') {
@@ -170,7 +174,11 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             tokensOut = event.tokensOut;
             if (!sageBuffer && event.fullText) sageBuffer = event.fullText;
           }
-          controller.enqueue(sseEncode(event));
+          // Forward the raw event for the client (token rendering relies on this).
+          // Skip raw tool_result entirely: the client never consumes raw results,
+          // and Bash output already went out above as a (smaller, filtered)
+          // `terminal` event — no point sending the full result payload twice.
+          if (event.type !== 'tool_result') controller.enqueue(sseEncode(event));
         }
 
         // Flush Sage's closing text (post-dispatch summary, or its whole reply

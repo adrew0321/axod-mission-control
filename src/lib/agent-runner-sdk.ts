@@ -5,6 +5,7 @@ import { query, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude
 export type AgentEvent =
   | { type: 'token'; content: string }
   | { type: 'tool'; name: string; input?: Record<string, unknown> }
+  | { type: 'tool_result'; tool: string; content: string; isError: boolean }
   | { type: 'done'; fullText: string; costUsd?: number; tokensIn?: number; tokensOut?: number }
   | { type: 'error'; message: string };
 
@@ -52,6 +53,23 @@ export interface RunAgentOptions {
 
 const DEFAULT_ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'];
 
+// A tool_result block's content is either a plain string or an array of
+// content blocks; for Bash it's the command's combined stdout/stderr. Flatten
+// to a single string, keeping only text parts.
+function flattenToolResultContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((b) =>
+        b && typeof b === 'object' && (b as { type?: string }).type === 'text'
+          ? String((b as { text?: string }).text ?? '')
+          : '',
+      )
+      .join('');
+  }
+  return '';
+}
+
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
   const { prompt, workingDir, model, systemPrompt, signal, mcpServers, extraAllowedTools, extraEnv } =
     opts;
@@ -69,6 +87,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
   const cwd = workingDir && existsSync(workingDir) ? workingDir : process.cwd();
 
   let fullText = '';
+  // Correlate tool_result blocks (which carry only tool_use_id) back to the
+  // tool name, so consumers can tell which results were Bash commands.
+  const toolNames = new Map<string, string>();
 
   try {
     const response = query({
@@ -111,8 +132,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
           if (Array.isArray(content)) {
             for (const block of content) {
               if (block && typeof block === 'object' && (block as { type?: string }).type === 'tool_use') {
-                const tu = block as { name?: string; input?: unknown };
+                const tu = block as { id?: string; name?: string; input?: unknown };
                 if (tu.name) {
+                  if (tu.id) toolNames.set(tu.id, tu.name);
                   yield {
                     type: 'tool',
                     name: tu.name,
@@ -123,6 +145,23 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
                   };
                 }
               }
+            }
+          }
+        }
+      } else if (message.type === 'user') {
+        // Tool results come back on a `user` message as tool_result blocks.
+        const content = message.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block && typeof block === 'object' && (block as { type?: string }).type === 'tool_result') {
+              const tr = block as { tool_use_id?: string; content?: unknown; is_error?: boolean };
+              const tool = (tr.tool_use_id && toolNames.get(tr.tool_use_id)) || 'unknown';
+              yield {
+                type: 'tool_result',
+                tool,
+                content: flattenToolResultContent(tr.content),
+                isError: Boolean(tr.is_error),
+              };
             }
           }
         }

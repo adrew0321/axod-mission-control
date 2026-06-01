@@ -16,15 +16,52 @@ import {
   Layers,
   ArrowRight,
   ShieldCheck,
+  Eye,
+  Hammer,
+  Telescope,
+  Bug,
+  Palette,
+  Cog,
+  type LucideIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Agent, Message, Artifact, Session } from "@/lib/mock-data";
+import type { Agent, Message, Session } from "@/lib/mock-data";
+import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
+import Markdown from "@/components/markdown";
+import { splitMessageSegments } from "@/lib/message-segments";
+import TerminalView, { type TerminalLine } from "@/components/terminal-view";
+import PlanView from "@/components/plan-view";
+import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
 
 export interface MissionControlProps {
   team: Agent[];
   session: Session;
   initialMessages: Message[];
-  artifacts: Artifact[];
+}
+
+// Per-agent identity: a distinct line icon + accent color matching each
+// personality, used for the avatar, roster card border, and name.
+const AGENT_ICON: Record<string, LucideIcon> = {
+  sage: Compass, // navigator / orchestrator
+  atlas: Hammer, // builder / smith
+  nova: Telescope, // researcher
+  echo: Bug, // QA critic
+  pixel: Palette, // designer
+  forge: Cog, // devops
+};
+
+const AGENT_ACCENT: Record<string, { border: string; name: string; bg: string }> = {
+  sage: { border: "border-cyan-500/40", name: "text-cyan-300", bg: "bg-cyan-500/30" },
+  atlas: { border: "border-indigo-500/40", name: "text-indigo-300", bg: "bg-indigo-500/30" },
+  nova: { border: "border-emerald-500/40", name: "text-emerald-300", bg: "bg-emerald-500/30" },
+  echo: { border: "border-violet-500/40", name: "text-violet-300", bg: "bg-violet-500/30" },
+  pixel: { border: "border-pink-500/40", name: "text-pink-300", bg: "bg-pink-500/30" },
+  forge: { border: "border-amber-500/40", name: "text-amber-300", bg: "bg-amber-500/30" },
+};
+
+function AgentIcon({ id, className }: { id: string; className?: string }) {
+  const Icon = AGENT_ICON[id] ?? Sparkles;
+  return <Icon className={className} />;
 }
 
 // Each agent has its own voice in the STATE panel. The persona flavors the verb,
@@ -105,12 +142,10 @@ export default function MissionControl({
   team: initialTeam,
   session: initialSession,
   initialMessages,
-  artifacts: initialArtifacts,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [artifacts] = useState<Artifact[]>(initialArtifacts);
   const [activeTab, setActiveTab] = useState<string>("plan");
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
@@ -119,10 +154,49 @@ export default function MissionControl({
   const [isPending, startTransition] = useTransition();
 
   // Live worktree diff (Day 4 — operator reviews what the dispatched agent changed).
-  const [diffText, setDiffText] = useState<string>("");
-  const [diffFiles, setDiffFiles] = useState<Array<{ status: string; path: string }>>([]);
+  const [diffFiles, setDiffFiles] = useState<FileDiff[]>([]);
   const [diffBase, setDiffBase] = useState<string | null>(null);
   const [diffLoading, setDiffLoading] = useState<boolean>(false);
+
+  // Preview tab: build the worktree's static site, serve it, iframe the result.
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "building" | "ready" | "error">("idle");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLog, setPreviewLog] = useState<string>("");
+  const [previewNonce, setPreviewNonce] = useState<number>(0); // bump to force iframe reload
+
+  const buildPreview = useCallback(async () => {
+    setPreviewStatus("building");
+    setPreviewLog("");
+    try {
+      const res = await fetch(`/api/sessions/${initialSession.id}/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "build" }),
+      });
+      const data = (await res.json()) as { ok?: boolean; url?: string; log?: string; error?: string };
+      if (data.ok && data.url) {
+        setPreviewUrl(data.url);
+        setPreviewLog(data.log ?? "");
+        setPreviewNonce((n) => n + 1);
+        setPreviewStatus("ready");
+      } else {
+        setPreviewLog(data.log ?? data.error ?? "Build failed.");
+        setPreviewStatus("error");
+      }
+    } catch (err) {
+      setPreviewLog(err instanceof Error ? err.message : "Network error");
+      setPreviewStatus("error");
+    }
+  }, [initialSession.id]);
+
+  // Live Terminal tab: agents' Bash commands + output, accumulated in-session.
+  // Ephemeral — cleared on full page reload (fresh mount), capped to bound memory.
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const lineIdRef = useRef<number>(0);
+
+  // Live Plan tab: the most recent TodoWrite snapshot (latest writer wins).
+  // Ephemeral — gone on full reload, persists across turns, not cleared on Stop.
+  const [plan, setPlan] = useState<PlanSnapshot | null>(null);
 
   // Live agent state for the left pane: which agents are actively working, and
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
@@ -134,12 +208,7 @@ export default function MissionControl({
     try {
       const res = await fetch(`/api/sessions/${initialSession.id}/diff`, { cache: "no-store" });
       if (!res.ok) return;
-      const data = (await res.json()) as {
-        base: string | null;
-        files: Array<{ status: string; path: string }>;
-        diff: string;
-      };
-      setDiffText(data.diff ?? "");
+      const data = (await res.json()) as { base: string | null; files: FileDiff[] };
       setDiffFiles(data.files ?? []);
       setDiffBase(data.base);
     } catch {
@@ -217,7 +286,7 @@ export default function MissionControl({
     const optimistic: Message = {
       id: optimisticId,
       role: "user",
-      senderName: "adrew0321",
+      senderName: "AXOD",
       content: text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
@@ -283,15 +352,36 @@ export default function MissionControl({
             errored?: boolean;
             tool?: string;
             input?: Record<string, unknown>;
+            stream?: "command" | "output";
+            isError?: boolean;
           };
           if (evt.type === "activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+            const snap = toPlanSnapshot(evt.tool, evt.input, agentId);
+            if (snap) setPlan(snap);
+          } else if (evt.type === "terminal" && typeof evt.content === "string" && evt.stream) {
+            // Skip empty command lines (a bare "$" is noise).
+            if (!(evt.stream === "command" && evt.content.trim() === "")) {
+              const line: TerminalLine = {
+                id: lineIdRef.current++,
+                kind: evt.stream,
+                agentId: evt.agent_id ?? "sage",
+                content: evt.content,
+                isError: evt.isError,
+              };
+              setTerminalLines((prev) => {
+                const next = [...prev, line];
+                return next.length > 1000 ? next.slice(next.length - 1000) : next;
+              });
+            }
           } else if (evt.type === "dispatch_activity" && evt.agent_id && evt.tool) {
             const agentId = evt.agent_id;
             const label = friendlyActivity(agentId, evt.tool, evt.input);
             setAgentActivity((prev) => ({ ...prev, [agentId]: label }));
+            const snap = toPlanSnapshot(evt.tool, evt.input, agentId);
+            if (snap) setPlan(snap);
           } else if (evt.type === "token" && typeof evt.content === "string") {
             const tokenText = evt.content;
             if (pendingNewSageBubble) {
@@ -537,8 +627,8 @@ export default function MissionControl({
               <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-r" />
               <div className="text-[9px] font-mono text-[#00e0ff] tracking-wider uppercase mb-2">ORCHESTRATOR</div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-lg font-bold text-black relative shadow-md shadow-cyan-500/10">
-                  {sage.avatar}
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md shadow-cyan-500/10">
+                  <AgentIcon id="sage" className="w-5 h-5" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#11161d] bg-[#3fb950] shadow-[0_0_5px_#3fb950] animate-pulse" />
                 </div>
                 <div className="flex-1 min-width-0">
@@ -548,7 +638,7 @@ export default function MissionControl({
               </div>
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
-                <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATE</span>
+                <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATUS</span>
                 {workingAgents.includes("sage") || isTyping ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
@@ -566,20 +656,21 @@ export default function MissionControl({
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
                 const activity = agentActivity[member.id];
+                const accent = AGENT_ACCENT[member.id] ?? { border: "border-[#00e0ff]/40", name: "text-[#e6edf3]", bg: "bg-[#161c25]/40" };
                 return (
                 <div
                   key={member.id}
-                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${
+                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${accent.bg} ${
                     isWorking
-                      ? "bg-[#161c25]/75 border-[#00e0ff]/20 hover:border-[#00e0ff]/40 shadow-inner"
-                      : "border-transparent hover:bg-[#161c25]/40 hover:border-[#1e2632]"
+                      ? `${accent.border} shadow-inner`
+                      : "border-transparent hover:border-[#1e2632]"
                   }`}
                 >
                   <div className="flex items-start gap-2.5">
                     <div
-                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center font-semibold text-black relative`}
+                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative`}
                     >
-                      {member.avatar}
+                      <AgentIcon id={member.id} className="w-4 h-4" />
                       <span
                         className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#11161d] ${
                           isWorking ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950] animate-pulse" : "bg-[#5c6470]"
@@ -589,7 +680,7 @@ export default function MissionControl({
 
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-baseline">
-                        <span className="font-semibold text-xs text-[#e6edf3] font-heading">{member.name}</span>
+                        <span className={`font-semibold text-xs font-heading ${accent.name}`}>{member.name}</span>
                         <span className="text-[9px] font-mono text-[#5c6470]">
                           {isWorking ? "now" : member.lastActive}
                         </span>
@@ -609,7 +700,7 @@ export default function MissionControl({
                           isWorking ? "bg-[#3fb950] animate-ping" : "bg-[#5c6470]"
                         }`}
                       />
-                      {isWorking ? "ACTIVE" : "STATE"}
+                      {isWorking ? "ACTIVE" : "STATUS"}
                     </div>
                     <p className="line-clamp-2 leading-normal">
                       {isWorking ? activity ?? "Working…" : idleState(member.id)}
@@ -677,52 +768,65 @@ export default function MissionControl({
                   </div>
                 )}
 
-                {msg.role !== "system" && (
-                  <div
-                    className={`text-xs leading-relaxed p-3 rounded-md border ${
-                      msg.role === "user"
-                        ? "bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3]"
-                        : "bg-[#11161d] border-[#1e2632] text-[#8b949e] whitespace-pre-wrap"
-                    }`}
-                  >
+                {msg.role === "user" && (
+                  <div className="text-xs leading-relaxed p-3 rounded-md border bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap">
                     {msg.content}
-
-                    {msg.dispatch && (() => {
-                      const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
-                      const status = msg.dispatch.status;
-                      return (
-                        <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
-                          <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
-                          <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
-                            <div className="flex items-center gap-1.5">
-                              <Layers className="w-3.5 h-3.5" />
-                              Orchestrated Dispatch
-                            </div>
-                            {status === "working" ? (
-                              <span className="text-[#3fb950] animate-pulse">Running</span>
-                            ) : status === "failed" ? (
-                              <span className="text-red-500">Failed</span>
-                            ) : (
-                              <span className="text-[#3fb950]">Done</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
-                            <span
-                              className={`w-5 h-5 rounded bg-gradient-to-br ${
-                                dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
-                              } flex items-center justify-center text-[10px] text-black`}
-                            >
-                              {dispatchAgent?.avatar ?? "⚒"}
-                            </span>
-                            {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
-                            {dispatchAgent?.role ?? "Specialist"}
-                          </div>
-                          <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
-                        </div>
-                      );
-                    })()}
                   </div>
                 )}
+
+                {msg.role === "agent" && (() => {
+                  const segments = splitMessageSegments(msg.content);
+                  // An empty streaming bubble (before the first token) still needs
+                  // a render target, so fall back to a single empty segment.
+                  const rendered = segments.length > 0 ? segments : [""];
+                  return (
+                    <div className="space-y-1.5">
+                      {rendered.map((segment, i) => (
+                        <div
+                          key={i}
+                          className="text-xs leading-relaxed p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#8b949e]"
+                        >
+                          <Markdown>{segment}</Markdown>
+                        </div>
+                      ))}
+
+                      {msg.dispatch && (() => {
+                        const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
+                        const status = msg.dispatch.status;
+                        return (
+                          <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
+                            <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
+                            <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <Layers className="w-3.5 h-3.5" />
+                                Orchestrated Dispatch
+                              </div>
+                              {status === "working" ? (
+                                <span className="text-[#3fb950] animate-pulse">Running</span>
+                              ) : status === "failed" ? (
+                                <span className="text-red-500">Failed</span>
+                              ) : (
+                                <span className="text-[#3fb950]">Done</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
+                              <span
+                                className={`w-5 h-5 rounded bg-gradient-to-br ${
+                                  dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
+                                } flex items-center justify-center text-black`}
+                              >
+                                <AgentIcon id={msg.dispatch.agentId} className="w-3 h-3" />
+                              </span>
+                              {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
+                              {dispatchAgent?.role ?? "Specialist"}
+                            </div>
+                            <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })()}
 
                 {msg.approval && (
                   <div className="mt-2 p-3.5 bg-[#d29922]/[0.05] border border-[#d29922]/40 rounded-lg shadow-lg relative overflow-hidden">
@@ -862,6 +966,18 @@ export default function MissionControl({
           <div className="h-11 bg-[#11161d] border-b border-[#1e2632] flex items-center justify-between px-4 shrink-0 select-none">
             <div className="flex h-full gap-1">
               <button
+                onClick={() => setActiveTab("preview")}
+                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                  activeTab === "preview"
+                    ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
+                    : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                Preview
+              </button>
+
+              <button
                 onClick={() => setActiveTab("plan")}
                 className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "plan"
@@ -871,6 +987,11 @@ export default function MissionControl({
               >
                 <FileText className="w-3.5 h-3.5" />
                 Plan
+                {plan && plan.todos.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {plan.todos.filter((t) => t.status === "completed").length}/{plan.todos.length}
+                  </span>
+                )}
               </button>
 
               <button
@@ -900,6 +1021,11 @@ export default function MissionControl({
               >
                 <TerminalIcon className="w-3.5 h-3.5" />
                 Terminal
+                {terminalLines.length > 0 && (
+                  <span className="bg-cyan-500/10 border border-cyan-500/25 text-[#00e0ff] text-[8.5px] px-1 py-0.2 rounded font-bold">
+                    {terminalLines.length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -910,102 +1036,83 @@ export default function MissionControl({
           </div>
 
           <div className="flex-1 overflow-hidden p-4 relative">
-            {activeTab === "plan" && (
-              <ScrollArea className="h-full bg-[#11161d] border border-[#1e2632] rounded-lg p-5">
-                <div className="prose prose-invert max-w-none text-xs text-[#8b949e] font-mono">
-                  <div className="flex items-center justify-between mb-4 pb-2 border-b border-[#2a3441]">
-                    <h2 className="text-sm font-bold text-[#e6edf3] font-heading uppercase tracking-wide">
-                      Dynamic Plan
-                    </h2>
-                    <span className="bg-[#161c25] border border-[#2a3441] px-2 py-0.5 rounded text-[10px] text-cyan-400">
-                      UPDATED
-                    </span>
-                  </div>
-                  <pre className="whitespace-pre-wrap leading-relaxed text-xs font-sans text-[#8b949e]">
-                    {artifacts.find((a) => a.type === "plan")?.content}
-                  </pre>
-                </div>
-              </ScrollArea>
-            )}
-
-            {activeTab === "code" && (
+            {activeTab === "preview" && (
               <div className="h-full flex flex-col bg-[#11161d] border border-[#1e2632] rounded-lg overflow-hidden">
-                <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-4 flex items-center justify-between text-xs select-none">
-                  <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 overflow-x-auto">
-                    {diffFiles.length > 0 ? (
+                <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-3 flex items-center justify-between text-xs select-none gap-2">
+                  <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 min-w-0">
+                    {previewStatus === "ready" && previewUrl ? (
                       <>
-                        {diffBase && (
-                          <span className="text-[#5c6470] shrink-0">
-                            vs <span className="text-[#00e0ff]">{diffBase}</span>
-                          </span>
-                        )}
-                        {diffFiles.slice(0, 4).map((f) => (
-                          <span key={f.path} className="shrink-0">
-                            <span
-                              className={
-                                f.status.startsWith("A")
-                                  ? "text-[#3fb950]"
-                                  : f.status.startsWith("D")
-                                    ? "text-red-400"
-                                    : "text-[#d29922]"
-                              }
-                            >
-                              {f.status}
-                            </span>{" "}
-                            {f.path}
-                          </span>
-                        ))}
-                        {diffFiles.length > 4 && (
-                          <span className="text-[#5c6470] shrink-0">+{diffFiles.length - 4} more</span>
-                        )}
+                        <span className="w-2 h-2 rounded-full bg-[#3fb950] shrink-0" />
+                        <span className="truncate text-[#8b949e]">Built from worktree · {previewUrl}</span>
                       </>
+                    ) : previewStatus === "building" ? (
+                      <span className="text-[#00e0ff] flex items-center gap-1.5">
+                        <RefreshCw className="w-3 h-3 animate-spin" /> Building site…
+                      </span>
+                    ) : previewStatus === "error" ? (
+                      <span className="text-red-400">Build failed</span>
                     ) : (
-                      <span className="text-[#5c6470]">No changes in this session&apos;s worktree</span>
+                      <span className="text-[#5c6470]">Build the worktree to preview the live site</span>
                     )}
                   </div>
-                  <button
-                    onClick={() => fetchDiff()}
-                    disabled={diffLoading}
-                    className="shrink-0 flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#11161d] border border-[#2a3441] px-2 py-0.5 rounded transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3 h-3 ${diffLoading ? "animate-spin text-[#00e0ff]" : ""}`} />
-                    Refresh
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {previewStatus === "ready" && (
+                      <button
+                        onClick={() => setPreviewNonce((n) => n + 1)}
+                        className="flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#11161d] border border-[#2a3441] px-2 py-0.5 rounded transition-colors"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Reload
+                      </button>
+                    )}
+                    <button
+                      onClick={() => buildPreview()}
+                      disabled={previewStatus === "building"}
+                      className="flex items-center gap-1 text-[9.5px] font-mono text-[#060810] bg-[#00e0ff] hover:bg-[#00c0dd] font-bold px-2.5 py-0.5 rounded transition-colors disabled:opacity-50"
+                    >
+                      <Eye className="w-3 h-3" />
+                      {previewStatus === "ready" ? "Rebuild" : "Build & preview"}
+                    </button>
+                  </div>
                 </div>
 
-                <ScrollArea className="flex-1 font-mono p-4 text-[11px] leading-relaxed bg-[#060810] overflow-x-auto">
-                  {diffText.trim() ? (
-                    <div className="whitespace-pre min-w-max text-[#8b949e]">
-                      {diffText.split("\n").map((line, idx) => {
-                        let lineClass = "text-[#8b949e]";
-                        let bgClass = "";
-                        if (line.startsWith("@@")) {
-                          lineClass = "text-[#00e0ff]";
-                        } else if (line.startsWith("diff --git") || line.startsWith("index ")) {
-                          lineClass = "text-[#5c6470]";
-                        } else if (line.startsWith("---") || line.startsWith("+++")) {
-                          lineClass = "text-[#5c6470] font-bold";
-                        } else if (line.startsWith("-")) {
-                          lineClass = "text-red-400";
-                          bgClass = "bg-red-500/10 block";
-                        } else if (line.startsWith("+")) {
-                          lineClass = "text-[#3fb950]";
-                          bgClass = "bg-[#3fb950]/10 block";
-                        }
-                        return (
-                          <div key={idx} className={`${bgClass} px-2`}>
-                            <span className={lineClass}>{line || " "}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+                <div className="flex-1 min-h-0 bg-white relative">
+                  {previewStatus === "ready" && previewUrl ? (
+                    <iframe
+                      key={previewNonce}
+                      src={previewUrl}
+                      title="Site preview"
+                      className="w-full h-full border-0"
+                      sandbox="allow-scripts allow-same-origin allow-forms"
+                    />
                   ) : (
-                    <div className="h-full flex items-center justify-center text-[#5c6470] text-xs font-mono">
-                      {diffLoading ? "Loading diff…" : "No changes yet — dispatch a specialist to edit files."}
+                    <div className="absolute inset-0 flex items-center justify-center bg-[#060810] p-6">
+                      {previewStatus === "error" ? (
+                        <pre className="max-h-full overflow-auto text-[10.5px] font-mono text-red-300 whitespace-pre-wrap">
+                          {previewLog || "Build failed."}
+                        </pre>
+                      ) : (
+                        <div className="text-center text-[#5c6470] text-xs font-mono">
+                          {previewStatus === "building"
+                            ? "Building the site — this takes ~15-20s…"
+                            : "No preview yet. Hit “Build & preview” to render the worktree's site."}
+                        </div>
+                      )}
                     </div>
                   )}
-                </ScrollArea>
+                </div>
               </div>
+            )}
+
+            {activeTab === "plan" && <PlanView snapshot={plan} />}
+
+            {activeTab === "code" && (
+              <DiffViewer
+                files={diffFiles}
+                base={diffBase}
+                loading={diffLoading}
+                onRefresh={() => fetchDiff()}
+              />
             )}
 
             {activeTab === "terminal" && (
@@ -1020,15 +1127,7 @@ export default function MissionControl({
                   </span>
                 </div>
 
-                <ScrollArea className="flex-1 p-4 text-xs font-mono leading-relaxed bg-black text-[#8b949e]">
-                  <pre className="whitespace-pre-wrap">{artifacts.find((a) => a.type === "terminal")?.content}</pre>
-
-                  <div className="mt-3 border-t border-[#1e2632]/80 pt-2 flex items-center gap-1.5 text-cyan-400">
-                    <span>$</span>
-                    <span className="text-[#e6edf3] font-bold">pnpm run build</span>
-                    <div className="w-2 h-4 bg-cyan-400 animate-pulse ml-0.5 inline-block align-middle" />
-                  </div>
-                </ScrollArea>
+                <TerminalView lines={terminalLines} />
               </div>
             )}
           </div>

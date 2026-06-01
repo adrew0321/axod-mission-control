@@ -2,7 +2,7 @@ import { desc, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
 import MissionControl from "@/components/mission-control";
-import { mockArtifacts, type Agent, type Message, type Session } from "@/lib/mock-data";
+import { type Agent, type Message, type Session } from "@/lib/mock-data";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +118,7 @@ export default async function HomePage() {
   const messagesForUi: Message[] = messageRows.map((m) => {
     const agentRow = m.agent_id ? teamRows.find((a) => a.id === m.agent_id) : undefined;
     const senderName =
-      m.role === "user" ? "adrew0321" : agentRow?.name ?? "System";
+      m.role === "user" ? "AXOD" : agentRow?.name ?? "System";
     const attribution =
       m.agent_id && m.agent_id !== "sage" && m.role === "agent" ? "via Sage" : undefined;
 
@@ -156,7 +156,6 @@ export default async function HomePage() {
       team={team}
       session={sessionForUi}
       initialMessages={messagesForUi}
-      artifacts={mockArtifacts}
     />
   );
 }
