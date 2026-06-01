@@ -25,7 +25,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Agent, Message, Artifact, Session } from "@/lib/mock-data";
+import type { Agent, Message, Session } from "@/lib/mock-data";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
@@ -37,7 +37,6 @@ export interface MissionControlProps {
   team: Agent[];
   session: Session;
   initialMessages: Message[];
-  artifacts: Artifact[];
 }
 
 // Per-agent identity: a distinct line icon + accent color matching each

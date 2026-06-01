@@ -2,7 +2,7 @@ import { desc, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
 import MissionControl from "@/components/mission-control";
-import { mockArtifacts, type Agent, type Message, type Session } from "@/lib/mock-data";
+import { type Agent, type Message, type Session } from "@/lib/mock-data";
 
 export const dynamic = "force-dynamic";
 
@@ -156,7 +156,6 @@ export default async function HomePage() {
       team={team}
       session={sessionForUi}
       initialMessages={messagesForUi}
-      artifacts={mockArtifacts}
     />
   );
 }
