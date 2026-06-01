@@ -99,3 +99,7 @@ History caps (message-count or token-budget) · SDK session-resume · cross-sess
 - Unit: `pnpm test` includes new `conversation.test.ts` cases (Operator/agent labeling, system+empty skipped, chronological order, framing header, first-message case). Suite goes 39 → 39+N green.
 - Build: `pnpm build` clean.
 - Live: in a session, (1) ask Sage something, (2) send a follow-up that depends on the first ("now do X to that file") — Sage responds with continuity instead of "this is the start of our conversation." Reload the page mid-session and confirm memory persists (because it's rebuilt from the DB).
+
+## What actually happened (2026-06-01)
+
+Implemented as designed on `feature/session-memory`: pure `buildOrchestratorPrompt` (`src/lib/conversation.ts`, 5 unit tests) + the stream route fetching the whole conversation and passing the attributed transcript to Sage. `pnpm build` clean, `pnpm test` 44/44. Operator-confirmed live: Sage now carries context across turns (no more "this appears to be the start of our conversation"). No prompt-framing tweaks needed. Commits `f655a59` (builder+tests), `751f09c` (route).
