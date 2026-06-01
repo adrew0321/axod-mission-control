@@ -89,10 +89,10 @@
 ### Tasks
 - [x] Make all four tabs read from live session data; remove remaining `mockArtifacts` reliance in `page.tsx`.
 - [x] Tab badges reflect real counts (diff file count already does; do the same for terminal activity / plan items).
-- [ ] Mobile-responsive check of the workspace tabs (spec criterion #9). **Deferred — own session.**
+- [x] Mobile-responsive check of the workspace tabs (spec criterion #9). **Done 2026-06-01 — see item C below.**
 - [x] Update the v1 spec + this plan with what actually happened.
 - [ ] Write `docs/plans/week-5-deploy.md` (Docker Compose, Nginx, Let's Encrypt on Hetzner; preview-server port story; secrets). **Deferred — own session (week-5 planning).**
-- [ ] Merge to `dev`, then `dev` → `main` as the week-4 release (operator confirms).
+- [x] Merge to `dev`, then `dev` → `main` as the week-4 release. **First release cut 2026-05-31** (`dev`→`main` merge `572bfd7`, pushed). **Follow-up release 2026-06-01** folds in item C (mobile) + the collapsible-diff polish.
 
 ### Day 5 — what actually happened (2026-05-31): cleanup + polish slice done
 Day 5 was a basket of six loosely-related closeout items, not one feature. This session landed the safe slice (A cleanup, B badges, E docs); the two pieces with their own design/planning weight were deferred to dedicated sessions.
@@ -101,7 +101,16 @@ Day 5 was a basket of six loosely-related closeout items, not one feature. This 
 - **E — docs:** this section + the `v1-mvp-spec.md` status note.
 - **Deferred (C):** mobile-responsive workspace tabs — the fixed 3-pane desktop layout needs its own mini-design pass.
 - **Deferred (D):** `docs/plans/week-5-deploy.md` — its own week-5 planning effort.
+
+### Day 5 — item C done (2026-06-01): mobile-responsive layout
+The fixed three-pane layout now collapses to a single tab-switched pane below `md` (768px); desktop is untouched (every change gated behind a `md:`/`sm:` modifier). One new state field `mobileActiveTab` (`team`|`chat`|`workspace`, default `chat`) drives per-pane visibility (`flex` when active, `hidden md:flex` otherwise). A `md:hidden` bottom tab bar (Team/Chat/Workspace) is the sole navigation, each button carrying a live badge from existing state (green pulse = agents working, amber bounce = pending approval, cyan count = changed files); the footer strip becomes `hidden md:flex`. Header chrome (project/branch/cost/token chips, target-dir readout) progressively hides below `sm`/`md`; workspace tab buttons tighten so all four fit a phone. **Swipe gestures were dropped** (operator decision) — an earlier WIP put a touch-swipe handler on `<main>` that conflicted with horizontal scrolling inside Monaco/terminal; the tab bar is unambiguous and conflict-free. Verified: `pnpm build` clean, `pnpm test` green (39/39). Spec: `docs/superpowers/specs/2026-06-01-mobile-responsive-layout-design.md`.
 - Verified: `pnpm build` clean, `pnpm test` green (39/39); dev server recompiled clean and served `GET / 200` after each change. Spec: `docs/superpowers/specs/2026-05-31-day5-cleanup-polish-design.md`.
+
+### Code Diff polish (2026-06-01): collapsible file list
+Operator-requested follow-on, not in the original Day 5 task list. The Code Diff tab's `w-52` changed-files picker is now collapsible via a header toggle (`PanelLeftClose`/`PanelLeftOpen`) so the Monaco diff can use the full pane width; auto-collapses below `md` on mount for the mobile single-pane layout. Self-contained in `DiffViewer` (`filesOpen` local state); selection survives toggling. Spec: `docs/superpowers/specs/2026-06-01-collapsible-diff-file-list-design.md`. `pnpm build` clean, `pnpm test` green (39/39).
+
+### Release note (bookkeeping correction)
+The original Day 5 notes said "nothing pushed, first push pending." That was stale: the remote (`origin/dev`, `origin/main`) was already established and the **week-4 release shipped to `main` on 2026-05-31** (`572bfd7`). This session's work (item C + diff polish) is a **follow-up release on 2026-06-01**.
 
 ### Day 5 success criteria
 - All four workspace tabs show real, live data for the current session: a Monaco diff of Atlas's changes, a working preview of the site, real command output, and Sage's actual plan. Mock artifacts are gone.

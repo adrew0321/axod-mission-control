@@ -22,6 +22,9 @@ import {
   Bug,
   Palette,
   Cog,
+  Users,
+  MessageSquare,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -202,6 +205,10 @@ export default function MissionControl({
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
   const [workingAgents, setWorkingAgents] = useState<string[]>([]);
   const [agentActivity, setAgentActivity] = useState<Record<string, string>>({});
+
+  // Mobile responsive layout active tab state ("team" | "chat" | "workspace").
+  // Defaults to "chat" view on mobile. Navigation is via the bottom tab bar.
+  const [mobileActiveTab, setMobileActiveTab] = useState<"team" | "chat" | "workspace">("chat");
 
   const fetchDiff = useCallback(async () => {
     setDiffLoading(true);
@@ -567,22 +574,22 @@ export default function MissionControl({
             </span>
           </div>
 
-          <div className="h-4 w-[1px] bg-[#1e2632]" />
+          <div className="hidden sm:block h-4 w-[1px] bg-[#1e2632]" />
 
-          <div className="flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#1e2632] rounded-md cursor-pointer hover:bg-[#1c2330] transition-colors">
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#1e2632] rounded-md cursor-pointer hover:bg-[#1c2330] transition-colors">
             <span className="text-[9px] font-mono text-[#5c6470] uppercase tracking-wider">PROJECT</span>
             <span className="text-xs font-semibold text-[#e6edf3]">{session.project}</span>
             <ChevronDown className="w-3.5 h-3.5 text-[#5c6470]" />
           </div>
 
-          <div className="flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#2a3441] rounded-md">
+          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#2a3441] rounded-md">
             <div className="w-2 h-2 rounded-full bg-[#3fb950] animate-pulse shadow-[0_0_8px_#3fb950]" />
             <span className="text-[10px] font-mono text-[#8b949e]">{session.branch}</span>
           </div>
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4 text-[11px] font-mono text-[#8b949e]">
+          <div className="hidden md:flex items-center gap-4 text-[11px] font-mono text-[#8b949e]">
             <div className="flex gap-1.5 items-center bg-[#161c25]/50 px-2 py-0.5 rounded border border-[#1e2632]">
               <span className="text-[#5c6470]">COST:</span>
               <span className="text-[#00e0ff] font-bold">${session.costUsd.toFixed(2)}</span>
@@ -609,7 +616,9 @@ export default function MissionControl({
 
       <main className="flex-1 w-full flex overflow-hidden">
         {/* ─── LEFT PANE: TEAM ROSTER ─── */}
-        <section className="w-[280px] bg-[#11161d] border-r border-[#1e2632] flex flex-col shrink-0">
+        <section className={`w-full md:w-[280px] bg-[#11161d] border-r border-[#1e2632] flex flex-col shrink-0 ${
+          mobileActiveTab === "team" ? "flex" : "hidden md:flex"
+        }`}>
           <div className="p-3 border-b border-[#1e2632] flex items-center justify-between shrink-0 select-none">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono text-[#5c6470] tracking-widest uppercase">AGENT TEAM</span>
@@ -720,14 +729,16 @@ export default function MissionControl({
         </section>
 
         {/* ─── MIDDLE PANE: ORCHESTRATOR CHAT ─── */}
-        <section className="flex-1 bg-[#0a0e14] border-r border-[#1e2632] flex flex-col min-w-[400px]">
+        <section className={`flex-1 bg-[#0a0e14] border-r border-[#1e2632] flex flex-col min-w-0 md:min-w-[400px] ${
+          mobileActiveTab === "chat" ? "flex" : "hidden md:flex"
+        }`}>
           <div className="h-11 w-full bg-[#11161d] border-b border-[#1e2632] px-4 flex items-center gap-2 justify-between shrink-0 select-none">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-xs text-[#e6edf3] font-heading">Session Logs</span>
               <span className="text-[10px] font-mono text-[#5c6470] tracking-wider block">ID: {session.id}</span>
             </div>
 
-            <div className="text-[10px] font-mono text-[#8b949e] flex items-center gap-1">
+            <div className="hidden sm:flex text-[10px] font-mono text-[#8b949e] flex items-center gap-1">
               <span className="text-[#5c6470]">Target Directory:</span>
               <code className="bg-[#161c25] border border-[#1e2632] px-1.5 py-0.2 rounded text-[#00e0ff]">
                 {session.repoPath}
@@ -962,12 +973,14 @@ export default function MissionControl({
         </section>
 
         {/* ─── RIGHT PANE: WORKSPACE TABS ─── */}
-        <section className="flex-1 bg-[#0a0e14] flex flex-col overflow-hidden min-w-[400px]">
+        <section className={`flex-1 bg-[#0a0e14] flex flex-col overflow-hidden min-w-0 md:min-w-[400px] ${
+          mobileActiveTab === "workspace" ? "flex" : "hidden md:flex"
+        }`}>
           <div className="h-11 bg-[#11161d] border-b border-[#1e2632] flex items-center justify-between px-4 shrink-0 select-none">
-            <div className="flex h-full gap-1">
+            <div className="flex h-full gap-0.5 sm:gap-1">
               <button
                 onClick={() => setActiveTab("preview")}
-                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                className={`px-2 sm:px-3 flex items-center gap-1 sm:gap-1.5 border-b-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "preview"
                     ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
                     : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
@@ -979,7 +992,7 @@ export default function MissionControl({
 
               <button
                 onClick={() => setActiveTab("plan")}
-                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                className={`px-2 sm:px-3 flex items-center gap-1 sm:gap-1.5 border-b-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "plan"
                     ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
                     : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
@@ -996,7 +1009,7 @@ export default function MissionControl({
 
               <button
                 onClick={() => setActiveTab("code")}
-                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                className={`px-2 sm:px-3 flex items-center gap-1 sm:gap-1.5 border-b-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "code"
                     ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
                     : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
@@ -1013,7 +1026,7 @@ export default function MissionControl({
 
               <button
                 onClick={() => setActiveTab("terminal")}
-                className={`px-3 flex items-center gap-1.5 border-b-2 text-xs font-mono uppercase tracking-wider transition-colors ${
+                className={`px-2 sm:px-3 flex items-center gap-1 sm:gap-1.5 border-b-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider transition-colors ${
                   activeTab === "terminal"
                     ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
                     : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
@@ -1029,7 +1042,7 @@ export default function MissionControl({
               </button>
             </div>
 
-            <div className="text-[10px] font-mono text-[#8b949e] flex items-center gap-1.5">
+            <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-[#8b949e]">
               <span className="w-2 h-2 rounded-full bg-[#3fb950] animate-pulse" />
               <span>WORKSPACE ACTIVE</span>
             </div>
@@ -1134,8 +1147,55 @@ export default function MissionControl({
         </section>
       </main>
 
+      {/* Sleek Mobile Tab Bar */}
+      <div className="md:hidden h-14 bg-[#11161d]/90 backdrop-blur-md border-t border-[#1e2632] flex items-center justify-around shrink-0 select-none px-4">
+        {/* Roster / Team Tab */}
+        <button
+          onClick={() => setMobileActiveTab("team")}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all relative ${
+            mobileActiveTab === "team" ? "text-[#00e0ff]" : "text-[#5c6470]"
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wider">TEAM</span>
+          {workingAgents.length > 0 && (
+            <span className="absolute top-1.5 right-1/4 w-2.5 h-2.5 rounded-full bg-[#3fb950] animate-pulse shadow-[0_0_4px_#3fb950]" />
+          )}
+        </button>
+
+        {/* Chat Tab */}
+        <button
+          onClick={() => setMobileActiveTab("chat")}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all relative ${
+            mobileActiveTab === "chat" ? "text-[#00e0ff]" : "text-[#5c6470]"
+          }`}
+        >
+          <MessageSquare className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wider">CHAT</span>
+          {messages.some((m) => m.approval && m.approval.status === "pending") && (
+            <span className="absolute top-1.5 right-1/4 w-2.5 h-2.5 rounded-full bg-[#d29922] animate-bounce shadow-[0_0_4px_#d29922]" />
+          )}
+        </button>
+
+        {/* Workspace Tab */}
+        <button
+          onClick={() => setMobileActiveTab("workspace")}
+          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all relative ${
+            mobileActiveTab === "workspace" ? "text-[#00e0ff]" : "text-[#5c6470]"
+          }`}
+        >
+          <Briefcase className="w-5 h-5" />
+          <span className="text-[9px] font-semibold tracking-wider">WORKSPACE</span>
+          {diffFiles.length > 0 && (
+            <span className="absolute top-1 right-1/4 bg-[#00e0ff] text-black text-[9px] font-extrabold px-1.5 py-0.2 rounded-full scale-90">
+              {diffFiles.length}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* ─── Footer strip ─── */}
-      <footer className="h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 flex items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
+      <footer className="hidden md:flex h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 flex items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950] shadow-[0_0_4px_#3fb950]" />
