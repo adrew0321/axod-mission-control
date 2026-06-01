@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { RefreshCw } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
 
 // Monaco is heavy and browser-only — load it lazily, client-side, only when the
 // Code tab is open. @monaco-editor/react fetches the editor via its default CDN
@@ -79,26 +79,52 @@ export default function DiffViewer({
   onRefresh: () => void;
 }) {
   const [selected, setSelected] = useState(0);
+  const [filesOpen, setFilesOpen] = useState(true);
   const active = files[selected] ?? files[0];
+
+  // Auto-collapse the file list on narrow screens (the mobile single-pane
+  // layout) so the side-by-side diff gets the full width. Resolved once on
+  // mount; after that the toggle is operator-driven (no resize listener).
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setFilesOpen(false);
+    }
+  }, []);
 
   return (
     <div className="h-full flex flex-col bg-[#11161d] border border-[#1e2632] rounded-lg overflow-hidden">
       <div className="h-9 w-full bg-[#161c25] border-b border-[#1e2632] px-3 flex items-center justify-between text-xs select-none">
-        <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2">
-          {files.length > 0 ? (
-            <>
-              <span className="text-[#5c6470] shrink-0">
-                {files.length} file{files.length > 1 ? "s" : ""}
-              </span>
-              {base && (
-                <span className="text-[#5c6470] shrink-0">
-                  vs <span className="text-[#00e0ff]">{base}</span>
-                </span>
+        <div className="flex items-center gap-2 min-w-0">
+          {files.length > 0 && (
+            <button
+              onClick={() => setFilesOpen((v) => !v)}
+              aria-label={filesOpen ? "Hide file list" : "Show file list"}
+              title={filesOpen ? "Hide file list" : "Show file list"}
+              className="shrink-0 flex items-center text-[#8b949e] hover:text-[#00e0ff] transition-colors"
+            >
+              {filesOpen ? (
+                <PanelLeftClose className="w-3.5 h-3.5" />
+              ) : (
+                <PanelLeftOpen className="w-3.5 h-3.5" />
               )}
-            </>
-          ) : (
-            <span className="text-[#5c6470]">No changes in this session&apos;s worktree</span>
+            </button>
           )}
+          <div className="font-mono text-[10px] text-[#8b949e] flex items-center gap-2 min-w-0">
+            {files.length > 0 ? (
+              <>
+                <span className="text-[#5c6470] shrink-0">
+                  {files.length} file{files.length > 1 ? "s" : ""}
+                </span>
+                {base && (
+                  <span className="text-[#5c6470] shrink-0">
+                    vs <span className="text-[#00e0ff]">{base}</span>
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-[#5c6470]">No changes in this session&apos;s worktree</span>
+            )}
+          </div>
         </div>
         <button
           onClick={onRefresh}
@@ -116,7 +142,8 @@ export default function DiffViewer({
         </div>
       ) : (
         <div className="flex-1 flex min-h-0">
-          {/* changed-files picker */}
+          {/* changed-files picker — collapsible via the header toggle */}
+          {filesOpen && (
           <div className="w-52 shrink-0 border-r border-[#1e2632] overflow-y-auto bg-[#0d1117]">
             {files.map((f, i) => (
               <button
@@ -134,6 +161,7 @@ export default function DiffViewer({
               </button>
             ))}
           </div>
+          )}
 
           {/* side-by-side diff */}
           <div className="flex-1 min-w-0">
