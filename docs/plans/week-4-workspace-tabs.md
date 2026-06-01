@@ -87,12 +87,21 @@
 
 ## Day 5 — Wire-up, polish, week-5 prep, push
 ### Tasks
-- [ ] Make all four tabs read from live session data; remove remaining `mockArtifacts` reliance in `page.tsx`.
-- [ ] Tab badges reflect real counts (diff file count already does; do the same for terminal activity / plan items).
-- [ ] Mobile-responsive check of the workspace tabs (spec criterion #9).
-- [ ] Update the v1 spec + this plan with what actually happened.
-- [ ] Write `docs/plans/week-5-deploy.md` (Docker Compose, Nginx, Let's Encrypt on Hetzner; preview-server port story; secrets).
+- [x] Make all four tabs read from live session data; remove remaining `mockArtifacts` reliance in `page.tsx`.
+- [x] Tab badges reflect real counts (diff file count already does; do the same for terminal activity / plan items).
+- [ ] Mobile-responsive check of the workspace tabs (spec criterion #9). **Deferred — own session.**
+- [x] Update the v1 spec + this plan with what actually happened.
+- [ ] Write `docs/plans/week-5-deploy.md` (Docker Compose, Nginx, Let's Encrypt on Hetzner; preview-server port story; secrets). **Deferred — own session (week-5 planning).**
 - [ ] Merge to `dev`, then `dev` → `main` as the week-4 release (operator confirms).
+
+### Day 5 — what actually happened (2026-05-31): cleanup + polish slice done
+Day 5 was a basket of six loosely-related closeout items, not one feature. This session landed the safe slice (A cleanup, B badges, E docs); the two pieces with their own design/planning weight were deferred to dedicated sessions.
+- **A — mock-data cleanup:** `page.tsx` already read team/session/messages/approvals/totals live from the DB; the only mock left was `artifacts={mockArtifacts}`, and after Day 4 `MissionControl` no longer consumed it. Dropped the prop + import, removed `artifacts` from `MissionControlProps`, and reduced `src/lib/mock-data.ts` to a **types-only** module (deleted dead `mockTeam`/`mockSession`/`mockMessages`/`mockArtifacts`; kept the `Agent`/`Message`/`Session`/`Artifact` interfaces, which the UI still imports). The `'plan'`/`'terminal'`/`'code'` artifact *type* union survives; every mock *row* is gone.
+- **B — tab badges:** Plan tab shows `done/total` (e.g. `2/5`), Terminal tab shows accumulated line count — both mirroring the existing Code Diff count badge and appearing only when there's something to count. No new state; both derive from existing `plan` / `terminalLines`.
+- **E — docs:** this section + the `v1-mvp-spec.md` status note.
+- **Deferred (C):** mobile-responsive workspace tabs — the fixed 3-pane desktop layout needs its own mini-design pass.
+- **Deferred (D):** `docs/plans/week-5-deploy.md` — its own week-5 planning effort.
+- Verified: `pnpm build` clean, `pnpm test` green (39/39); dev server recompiled clean and served `GET / 200` after each change. Spec: `docs/superpowers/specs/2026-05-31-day5-cleanup-polish-design.md`.
 
 ### Day 5 success criteria
 - All four workspace tabs show real, live data for the current session: a Monaco diff of Atlas's changes, a working preview of the site, real command output, and Sage's actual plan. Mock artifacts are gone.

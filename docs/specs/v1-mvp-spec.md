@@ -45,11 +45,11 @@ If any one of these isn't true, v1 isn't done.
 ✅ **Server-Sent Events** for streaming agent output to the workspace
 ⚠️ **Approval gates** — *planned* inline; **revised to a static safety model** (capability allowlist + worktree isolation + operator diff review) because `canUseTool` doesn't fire on SDK 0.3.x. Inline-card infra is built but dormant.
 ✅ **Git worktree isolation** per agent (one worktree per active session)
-✅ **Workspace tabs** — Preview (sandboxed iframe), Code (Monaco diff), Plan (markdown), Terminal (xterm.js)
+✅ **Workspace tabs** — Preview (sandboxed iframe), Code (Monaco diff), Plan (live `TodoWrite` checklist, *not* static markdown — week 4 day 4), Terminal (live streamed command output, lightweight `TerminalView` rather than full xterm.js — week 4 day 3). All four read live session data; the last mock wiring (`mockArtifacts`) was removed week 4 day 5.
 ✅ **Auth** — session cookie + scrypt password, single-user
 ✅ **Cost + token meter** — read from Claude Agent SDK response metadata
-✅ **VPS deploy** — Docker Compose + Nginx + Let's Encrypt on Hetzner CX21
-✅ **Mobile-responsive** — 3-col collapses to swipeable tabs on small screens
+⏳ **VPS deploy** — Docker Compose + Nginx + Let's Encrypt on Hetzner CX21 *(in v1 scope; not yet built — week 5; plan `docs/plans/week-5-deploy.md` deferred to its own session)*
+⏳ **Mobile-responsive** — 3-col collapses to swipeable tabs on small screens *(in v1 scope; not yet built — week 4 day 5 deferred it to its own session; criterion #9)*
 ✅ **Session resume** — refresh the page or close the browser, the conversation persists
 
 ## What's deliberately CUT (deferred)
