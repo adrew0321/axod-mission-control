@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { and, desc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { messages, projects, sessions } from '@/db/schema';
@@ -9,6 +9,7 @@ import { agents } from '@/db/schema';
 import { ensureWorktree } from '@/lib/worktree';
 import { createDispatchServer, DISPATCH_SERVER_NAME, DISPATCH_TOOL_NAME } from '@/lib/dispatch';
 import { toTerminalEvent } from '@/lib/terminal-events';
+import { buildOrchestratorPrompt, type TranscriptMessage } from '@/lib/conversation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,13 +34,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .then((r) => r[0]);
   if (!session) return new Response('Session not found', { status: 404 });
 
-  const lastUserMessage = await db
+  // Whole session, chronological (rowid tie-breaks a dispatch turn so it stays
+  // Sage-pre → specialist → Sage-post — same ordering page.tsx uses).
+  const conversation = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.session_id, sessionId), eq(messages.role, 'user')))
-    .orderBy(desc(messages.created_at))
-    .limit(1)
-    .then((r) => r[0]);
+    .where(eq(messages.session_id, sessionId))
+    .orderBy(asc(messages.created_at), asc(sql`rowid`));
+  const lastUserMessage = [...conversation].reverse().find((m) => m.role === 'user');
   if (!lastUserMessage) return new Response('No user prompt to respond to', { status: 400 });
 
   const project = await db
@@ -49,12 +51,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .limit(1)
     .then((r) => r[0]);
 
-  const sage = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.id, 'sage'))
-    .limit(1)
-    .then((r) => r[0]);
+  const allAgents = await db.select().from(agents);
+  const sage = allAgents.find((a) => a.id === 'sage');
+  const agentLabels: Record<string, string> = Object.fromEntries(
+    allAgents.map((a) => [a.id, a.id === 'sage' ? 'Sage' : `${a.name} (${a.role})`]),
+  );
+  const transcript = buildOrchestratorPrompt(
+    conversation.map((m): TranscriptMessage => ({
+      role: m.role as TranscriptMessage['role'],
+      agentId: m.agent_id,
+      content: m.content,
+    })),
+    agentLabels,
+  );
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -146,7 +155,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         // week-3 plan Day 1). v1 safety = capability allowlist (below) +
         // worktree isolation (above) + operator diff review.
         for await (const event of runClaudeAgent({
-          prompt: lastUserMessage.content,
+          prompt: transcript,
           workingDir,
           model: sage?.model,
           systemPrompt: sage?.system_prompt,
