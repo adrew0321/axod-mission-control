@@ -89,7 +89,7 @@
 ### Tasks
 - [x] Make all four tabs read from live session data; remove remaining `mockArtifacts` reliance in `page.tsx`.
 - [x] Tab badges reflect real counts (diff file count already does; do the same for terminal activity / plan items).
-- [ ] Mobile-responsive check of the workspace tabs (spec criterion #9). **Deferred — own session.**
+- [x] Mobile-responsive check of the workspace tabs (spec criterion #9). **Done 2026-06-01 — see item C below.**
 - [x] Update the v1 spec + this plan with what actually happened.
 - [ ] Write `docs/plans/week-5-deploy.md` (Docker Compose, Nginx, Let's Encrypt on Hetzner; preview-server port story; secrets). **Deferred — own session (week-5 planning).**
 - [ ] Merge to `dev`, then `dev` → `main` as the week-4 release (operator confirms).
@@ -101,6 +101,9 @@ Day 5 was a basket of six loosely-related closeout items, not one feature. This 
 - **E — docs:** this section + the `v1-mvp-spec.md` status note.
 - **Deferred (C):** mobile-responsive workspace tabs — the fixed 3-pane desktop layout needs its own mini-design pass.
 - **Deferred (D):** `docs/plans/week-5-deploy.md` — its own week-5 planning effort.
+
+### Day 5 — item C done (2026-06-01): mobile-responsive layout
+The fixed three-pane layout now collapses to a single tab-switched pane below `md` (768px); desktop is untouched (every change gated behind a `md:`/`sm:` modifier). One new state field `mobileActiveTab` (`team`|`chat`|`workspace`, default `chat`) drives per-pane visibility (`flex` when active, `hidden md:flex` otherwise). A `md:hidden` bottom tab bar (Team/Chat/Workspace) is the sole navigation, each button carrying a live badge from existing state (green pulse = agents working, amber bounce = pending approval, cyan count = changed files); the footer strip becomes `hidden md:flex`. Header chrome (project/branch/cost/token chips, target-dir readout) progressively hides below `sm`/`md`; workspace tab buttons tighten so all four fit a phone. **Swipe gestures were dropped** (operator decision) — an earlier WIP put a touch-swipe handler on `<main>` that conflicted with horizontal scrolling inside Monaco/terminal; the tab bar is unambiguous and conflict-free. Verified: `pnpm build` clean, `pnpm test` green (39/39). Spec: `docs/superpowers/specs/2026-06-01-mobile-responsive-layout-design.md`.
 - Verified: `pnpm build` clean, `pnpm test` green (39/39); dev server recompiled clean and served `GET / 200` after each change. Spec: `docs/superpowers/specs/2026-05-31-day5-cleanup-polish-design.md`.
 
 ### Day 5 success criteria
