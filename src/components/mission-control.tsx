@@ -177,6 +177,9 @@ export default function MissionControl({
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
   const [isTyping, setIsTyping] = useState<boolean>(false);
+  // Who the "… is typing" indicator names — the agent driving the current turn
+  // (Sage, or an @-addressed specialist).
+  const [typingName, setTypingName] = useState<string>("Sage");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -333,6 +336,7 @@ export default function MissionControl({
     setSendError(null);
     setWorkingAgents([primaryId]);
     setAgentActivity({ [primaryId]: primaryId === "sage" ? "Charting the course…" : "On it…" });
+    setTypingName(primaryName);
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -684,7 +688,7 @@ export default function MissionControl({
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
                 <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATUS</span>
-                {workingAgents.includes("sage") || isTyping ? (
+                {workingAgents.includes("sage") ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
                     <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
@@ -943,7 +947,7 @@ export default function MissionControl({
             {isTyping && (
               <div className="flex items-center gap-1.5 text-xs text-[#5c6470] font-mono">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00e0ff]" />
-                Sage is typing...
+                {typingName} is typing...
               </div>
             )}
 
