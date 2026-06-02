@@ -839,11 +839,12 @@ export default function MissionControl({
                         </div>
                       ))}
 
-                      {/* No text yet: while streaming with nothing else to show,
-                          render a working spinner instead of an empty box. When a
-                          dispatch card is attached (Sage handed off with no preamble),
-                          show just the card — never an empty bubble. */}
-                      {!hasText && msg.isStreaming && !msg.dispatch && (
+                      {/* No text yet: show a working spinner ONLY when the global
+                          "… is typing" indicator isn't already covering this turn
+                          (i.e. a dispatched specialist's bubble, where isTyping is
+                          false). Avoids a double spinner on a direct @-addressed turn.
+                          When a dispatch card is attached, show just the card. */}
+                      {!hasText && msg.isStreaming && !msg.dispatch && !isTyping && (
                         <div className="text-xs p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
                           <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
                           working…
