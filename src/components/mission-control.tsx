@@ -32,6 +32,7 @@ import type { Agent, Message, Session } from "@/lib/mock-data";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
+import { parseMention } from "@/lib/mention";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 import PlanView from "@/components/plan-view";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
@@ -312,6 +313,13 @@ export default function MissionControl({
     const text = inputText.trim();
     if (!text) return;
 
+    const { agentId: mentionId } = parseMention(text, team);
+    const primary =
+      (mentionId && mentionId !== "sage" && team.find((a) => a.id === mentionId)) ||
+      team.find((a) => a.id === "sage");
+    const primaryId = primary?.id ?? "sage";
+    const primaryName = primary?.name ?? "Sage";
+
     const optimisticId = `u_${Date.now()}`;
     const optimistic: Message = {
       id: optimisticId,
@@ -323,8 +331,8 @@ export default function MissionControl({
     setMessages((prev) => [...prev, optimistic]);
     setInputText("");
     setSendError(null);
-    setWorkingAgents(["sage"]);
-    setAgentActivity({ sage: "Charting the course…" });
+    setWorkingAgents([primaryId]);
+    setAgentActivity({ [primaryId]: primaryId === "sage" ? "Charting the course…" : "On it…" });
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -346,8 +354,8 @@ export default function MissionControl({
         {
           id: streamingId,
           role: "agent",
-          agentId: "sage",
-          senderName: "Sage",
+          agentId: primaryId,
+          senderName: primaryName,
           content: "",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           isStreaming: true,
@@ -357,10 +365,10 @@ export default function MissionControl({
 
       // Tracks the live "Atlas · via Sage" bubble while a dispatch is streaming.
       let dispatchStreamId: string | null = null;
-      // The Sage bubble currently receiving tokens. After a dispatch, Sage's
-      // continuation goes into a NEW bubble placed *below* the specialist's, so
-      // the live order (Sage-pre → specialist → Sage-post) matches what's saved.
-      let currentSageId = streamingId;
+      // The primary bubble currently receiving tokens (Sage, or an @-addressed
+      // specialist). After a Sage dispatch, Sage's continuation goes into a NEW
+      // bubble below the specialist's, so the live order matches what's saved.
+      let currentPrimaryId = streamingId;
       let pendingNewSageBubble = false;
       const clientBubbleIds = [streamingId];
 
@@ -418,9 +426,9 @@ export default function MissionControl({
               // First token after a dispatch — open a fresh Sage bubble below the
               // specialist's, rather than appending to the pre-dispatch bubble.
               pendingNewSageBubble = false;
-              currentSageId = `stream_post_${Date.now()}`;
-              clientBubbleIds.push(currentSageId);
-              const newId = currentSageId;
+              currentPrimaryId = `stream_post_${Date.now()}`;
+              clientBubbleIds.push(currentPrimaryId);
+              const newId = currentPrimaryId;
               setMessages((prev) => [
                 ...prev,
                 {
@@ -434,7 +442,7 @@ export default function MissionControl({
                 },
               ]);
             } else {
-              const sageId = currentSageId;
+              const sageId = currentPrimaryId;
               setMessages((prev) =>
                 prev.map((m) => (m.id === sageId ? { ...m, content: m.content + tokenText } : m)),
               );
@@ -462,7 +470,7 @@ export default function MissionControl({
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
             const newBubbleId = dispatchStreamId;
             clientBubbleIds.push(newBubbleId);
-            const cardSageId = currentSageId;
+            const cardSageId = currentPrimaryId;
             setMessages((prev) => [
               ...prev.map((m) =>
                 m.id === cardSageId
