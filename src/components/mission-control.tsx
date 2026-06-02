@@ -75,6 +75,17 @@ const AGENT_GLOW: Record<string, string> = {
   forge: "#f59e0b",
 };
 
+// Per-speaker accent + low-opacity bubble tint for the conversation thread.
+// The operator is cyan; Sage is a distinct blue (so "you vs Sage" reads at a
+// glance); other agents use their own hue.
+function speakerStyle(role: string, agentId?: string | null): { accent: string; tint: string } {
+  if (role === "user") return { accent: "#00e0ff", tint: "rgba(0,224,255,0.07)" };
+  if (agentId === "sage") return { accent: "#3b82f6", tint: "rgba(59,130,246,0.08)" };
+  if (agentId === "atlas") return { accent: "#6366f1", tint: "rgba(99,102,241,0.08)" };
+  if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
+  return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
+}
+
 function AgentIcon({ id, className }: { id: string; className?: string }) {
   const Icon = AGENT_ICON[id] ?? Sparkles;
   return <Icon className={className} />;
@@ -192,6 +203,7 @@ export default function MissionControl({
   // Who the "… is typing" indicator names — the agent driving the current turn
   // (Sage, or an @-addressed specialist).
   const [typingName, setTypingName] = useState<string>("Sage");
+  const [typingColor, setTypingColor] = useState<string>("#00e0ff");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -349,6 +361,7 @@ export default function MissionControl({
     setWorkingAgents([primaryId]);
     setAgentActivity({ [primaryId]: primaryId === "sage" ? "Charting the course…" : "On it…" });
     setTypingName(primaryName);
+    setTypingColor(speakerStyle("agent", primaryId).accent);
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -856,14 +869,9 @@ export default function MissionControl({
             )}
             {messages.map((msg) => {
               const speaker = msg.role === "agent" ? team.find((a) => a.id === msg.agentId) : undefined;
-              const accent =
-                msg.role === "user"
-                  ? "#00e0ff"
-                  : msg.role === "agent"
-                    ? AGENT_GLOW[msg.agentId ?? ""] ?? "#93c5fd"
-                    : "#5c6470";
+              const { accent, tint } = speakerStyle(msg.role, msg.agentId);
               return (
-              <div key={msg.id} className="max-w-full flex gap-2.5">
+              <div key={msg.id} className="max-w-full flex gap-2.5 animate-message-in">
                 <div className="shrink-0 pt-0.5 select-none">
                   {msg.role === "user" ? (
                     <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black text-[8px] font-extrabold">
@@ -913,8 +921,8 @@ export default function MissionControl({
 
                 {msg.role === "user" && (
                   <div
-                    className="text-xs leading-relaxed p-3 rounded-md border border-l-2 bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap"
-                    style={{ borderLeftColor: accent }}
+                    className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap"
+                    style={{ borderLeftColor: accent, backgroundColor: tint }}
                   >
                     {msg.content}
                   </div>
@@ -928,10 +936,17 @@ export default function MissionControl({
                       {segments.map((segment, i) => (
                         <div
                           key={i}
-                          className="text-xs leading-relaxed p-3 rounded-md border border-l-2 bg-[#11161d] border-[#1e2632] text-[#8b949e]"
-                          style={{ borderLeftColor: accent }}
+                          className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
+                          style={{ borderLeftColor: accent, backgroundColor: tint }}
                         >
                           <Markdown>{segment}</Markdown>
+                          {msg.isStreaming && i === segments.length - 1 && (
+                            <span
+                              aria-hidden
+                              className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
+                              style={{ backgroundColor: accent }}
+                            />
+                          )}
                         </div>
                       ))}
 
@@ -1044,9 +1059,24 @@ export default function MissionControl({
             })}
 
             {isTyping && (
-              <div className="flex items-center gap-1.5 text-xs text-[#5c6470] font-mono">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00e0ff]" />
-                {typingName} is typing...
+              <div className="flex items-center gap-2 text-xs font-mono pl-[34px]">
+                <span className="font-semibold" style={{ color: typingColor }}>
+                  {typingName}
+                </span>
+                <span className="flex items-center gap-1">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-typing-dot"
+                    style={{ backgroundColor: typingColor, animationDelay: "0ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-typing-dot"
+                    style={{ backgroundColor: typingColor, animationDelay: "150ms" }}
+                  />
+                  <span
+                    className="w-1.5 h-1.5 rounded-full animate-typing-dot"
+                    style={{ backgroundColor: typingColor, animationDelay: "300ms" }}
+                  />
+                </span>
               </div>
             )}
 
