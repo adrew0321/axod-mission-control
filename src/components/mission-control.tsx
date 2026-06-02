@@ -63,6 +63,17 @@ const AGENT_ACCENT: Record<string, { border: string; name: string; bg: string }>
   forge: { border: "border-amber-500/40", name: "text-amber-300", bg: "bg-amber-500/30" },
 };
 
+// Raw accent hex per agent, fed to the `--glow` CSS var so the active card's
+// breathing glow + sheen tint match the agent's identity. Falls back to cyan.
+const AGENT_GLOW: Record<string, string> = {
+  sage: "#00e0ff",
+  atlas: "#6366f1",
+  nova: "#10b981",
+  echo: "#8b5cf6",
+  pixel: "#ec4899",
+  forge: "#f59e0b",
+};
+
 function AgentIcon({ id, className }: { id: string; className?: string }) {
   const Icon = AGENT_ICON[id] ?? Sparkles;
   return <Icon className={className} />;
@@ -676,7 +687,13 @@ export default function MissionControl({
               <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-r" />
               <div className="text-[9px] font-mono text-[#00e0ff] tracking-wider uppercase mb-2">ORCHESTRATOR</div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md shadow-cyan-500/10">
+                <div
+                  className={`w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
+                    workingAgents.includes("sage")
+                      ? "shadow-[0_0_16px_-3px_#00e0ff] ring-1 ring-white/20"
+                      : "shadow-cyan-500/10"
+                  }`}
+                >
                   <AgentIcon id="sage" className="w-5 h-5" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#11161d] bg-[#3fb950] shadow-[0_0_5px_#3fb950] animate-pulse" />
                 </div>
@@ -709,15 +726,30 @@ export default function MissionControl({
                 return (
                 <div
                   key={member.id}
-                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${accent.bg} ${
+                  style={{ "--glow": AGENT_GLOW[member.id] ?? "#00e0ff" } as React.CSSProperties}
+                  className={`group relative overflow-hidden p-2.5 rounded-lg border transition-all duration-200 cursor-pointer flex flex-col gap-2 ring-1 ring-inset ring-white/[0.04] shadow-md shadow-black/40 hover:-translate-y-0.5 hover:shadow-lg ${accent.bg} ${
                     isWorking
-                      ? `${accent.border} shadow-inner`
-                      : "border-transparent hover:border-[#1e2632]"
+                      ? `${accent.border} animate-breathe`
+                      : "border-transparent hover:border-[#2a3441]"
                   }`}
                 >
-                  <div className="flex items-start gap-2.5">
+                  {/* top-lit glass highlight for depth */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/[0.05] to-transparent"
+                  />
+                  {/* slow diagonal sheen sweep while the agent is active */}
+                  {isWorking && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 animate-sheen bg-[linear-gradient(110deg,transparent_35%,rgba(255,255,255,0.06)_50%,transparent_65%)] bg-[length:250%_100%]"
+                    />
+                  )}
+                  <div className="relative flex items-start gap-2.5">
                     <div
-                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative`}
+                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
+                        isWorking ? "ring-1 ring-white/20 shadow-[0_0_14px_-3px_var(--glow)]" : ""
+                      }`}
                     >
                       <AgentIcon id={member.id} className="w-4 h-4" />
                       <span

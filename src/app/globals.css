@@ -68,3 +68,35 @@ body {
     @apply font-sans;
   }
 }
+
+/* Roster card depth + motion. The active agent's card breathes a glow in its own
+   accent (the --glow CSS var, set per-card) and carries a slow diagonal sheen. */
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 4px 12px -6px rgba(0, 0, 0, 0.55), 0 0 12px -4px var(--glow, #00e0ff);
+  }
+  50% {
+    box-shadow: 0 5px 14px -6px rgba(0, 0, 0, 0.55), 0 0 22px -2px var(--glow, #00e0ff);
+  }
+}
+@keyframes sheen {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+.animate-breathe {
+  animation: breathe 3s ease-in-out infinite;
+}
+.animate-sheen {
+  animation: sheen 4.5s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-breathe,
+  .animate-sheen {
+    animation: none;
+  }
+}
