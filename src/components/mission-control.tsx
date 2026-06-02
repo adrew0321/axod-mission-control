@@ -32,6 +32,7 @@ import type { Agent, Message, Session } from "@/lib/mock-data";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
+import { parseMention } from "@/lib/mention";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 import PlanView from "@/components/plan-view";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
@@ -62,6 +63,17 @@ const AGENT_ACCENT: Record<string, { border: string; name: string; bg: string }>
   forge: { border: "border-amber-500/40", name: "text-amber-300", bg: "bg-amber-500/30" },
 };
 
+// Raw accent hex per agent, fed to the `--glow` CSS var so the active card's
+// breathing glow + sheen tint match the agent's identity. Falls back to cyan.
+const AGENT_GLOW: Record<string, string> = {
+  sage: "#00e0ff",
+  atlas: "#6366f1",
+  nova: "#10b981",
+  echo: "#8b5cf6",
+  pixel: "#ec4899",
+  forge: "#f59e0b",
+};
+
 function AgentIcon({ id, className }: { id: string; className?: string }) {
   const Icon = AGENT_ICON[id] ?? Sparkles;
   return <Icon className={className} />;
@@ -71,8 +83,9 @@ function AgentIcon({ id, className }: { id: string; className?: string }) {
 // but the exact target (file / command / pattern) always stays visible so the
 // operator knows precisely what's happening.
 const IDLE_STATE: Record<string, string> = {
-  sage: "Awaiting your word",
-  atlas: "Tools down — ready to build",
+  sage: "Standing by at the helm",
+  atlas: "Hammer cooled — ready to forge",
+  echo: "Red pen capped — for now",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -109,6 +122,28 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
         return "Consulting the archives…";
       case "TodoWrite":
         return "Drawing up the plan…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "echo") {
+    // Echo — the QA critic with a red pen.
+    switch (tool) {
+      case "Read":
+        return `Inspecting ${file}`;
+      case "Glob":
+        return "Casing the codebase…";
+      case "Grep":
+        return input?.pattern ? `Combing for trouble: "${clip(input.pattern, 28)}"` : "Combing for trouble…";
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        return /\bgit\s+diff\b/.test(cmd)
+          ? "Cross-examining the diff"
+          : `Running the gauntlet: ${clip(input?.command)}`;
+      }
+      case "TodoWrite":
+        return "Tallying the verdict…";
       default:
         return genericFallback();
     }
@@ -153,6 +188,9 @@ export default function MissionControl({
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
   const [isTyping, setIsTyping] = useState<boolean>(false);
+  // Who the "… is typing" indicator names — the agent driving the current turn
+  // (Sage, or an @-addressed specialist).
+  const [typingName, setTypingName] = useState<string>("Sage");
   const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -289,6 +327,13 @@ export default function MissionControl({
     const text = inputText.trim();
     if (!text) return;
 
+    const { agentId: mentionId } = parseMention(text, team);
+    const primary =
+      (mentionId && mentionId !== "sage" && team.find((a) => a.id === mentionId)) ||
+      team.find((a) => a.id === "sage");
+    const primaryId = primary?.id ?? "sage";
+    const primaryName = primary?.name ?? "Sage";
+
     const optimisticId = `u_${Date.now()}`;
     const optimistic: Message = {
       id: optimisticId,
@@ -300,8 +345,9 @@ export default function MissionControl({
     setMessages((prev) => [...prev, optimistic]);
     setInputText("");
     setSendError(null);
-    setWorkingAgents(["sage"]);
-    setAgentActivity({ sage: "Charting the course…" });
+    setWorkingAgents([primaryId]);
+    setAgentActivity({ [primaryId]: primaryId === "sage" ? "Charting the course…" : "On it…" });
+    setTypingName(primaryName);
 
     try {
       const res = await fetch(`/api/sessions/${session.id}/messages`, {
@@ -323,8 +369,8 @@ export default function MissionControl({
         {
           id: streamingId,
           role: "agent",
-          agentId: "sage",
-          senderName: "Sage",
+          agentId: primaryId,
+          senderName: primaryName,
           content: "",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           isStreaming: true,
@@ -334,10 +380,10 @@ export default function MissionControl({
 
       // Tracks the live "Atlas · via Sage" bubble while a dispatch is streaming.
       let dispatchStreamId: string | null = null;
-      // The Sage bubble currently receiving tokens. After a dispatch, Sage's
-      // continuation goes into a NEW bubble placed *below* the specialist's, so
-      // the live order (Sage-pre → specialist → Sage-post) matches what's saved.
-      let currentSageId = streamingId;
+      // The primary bubble currently receiving tokens (Sage, or an @-addressed
+      // specialist). After a Sage dispatch, Sage's continuation goes into a NEW
+      // bubble below the specialist's, so the live order matches what's saved.
+      let currentPrimaryId = streamingId;
       let pendingNewSageBubble = false;
       const clientBubbleIds = [streamingId];
 
@@ -395,9 +441,9 @@ export default function MissionControl({
               // First token after a dispatch — open a fresh Sage bubble below the
               // specialist's, rather than appending to the pre-dispatch bubble.
               pendingNewSageBubble = false;
-              currentSageId = `stream_post_${Date.now()}`;
-              clientBubbleIds.push(currentSageId);
-              const newId = currentSageId;
+              currentPrimaryId = `stream_post_${Date.now()}`;
+              clientBubbleIds.push(currentPrimaryId);
+              const newId = currentPrimaryId;
               setMessages((prev) => [
                 ...prev,
                 {
@@ -411,7 +457,7 @@ export default function MissionControl({
                 },
               ]);
             } else {
-              const sageId = currentSageId;
+              const sageId = currentPrimaryId;
               setMessages((prev) =>
                 prev.map((m) => (m.id === sageId ? { ...m, content: m.content + tokenText } : m)),
               );
@@ -428,13 +474,18 @@ export default function MissionControl({
             );
             setAgentActivity((prev) => ({
               ...prev,
-              [dispatchAgentId]: dispatchAgentId === "atlas" ? "Warming the forge…" : "Spinning up…",
+              [dispatchAgentId]:
+                dispatchAgentId === "atlas"
+                  ? "Warming the forge…"
+                  : dispatchAgentId === "echo"
+                    ? "Sharpening the red pen…"
+                    : "Spinning up…",
               sage: `Handing the build to ${dispatchAgentName} →`,
             }));
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
             const newBubbleId = dispatchStreamId;
             clientBubbleIds.push(newBubbleId);
-            const cardSageId = currentSageId;
+            const cardSageId = currentPrimaryId;
             setMessages((prev) => [
               ...prev.map((m) =>
                 m.id === cardSageId
@@ -636,7 +687,13 @@ export default function MissionControl({
               <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-r" />
               <div className="text-[9px] font-mono text-[#00e0ff] tracking-wider uppercase mb-2">ORCHESTRATOR</div>
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md shadow-cyan-500/10">
+                <div
+                  className={`w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
+                    workingAgents.includes("sage")
+                      ? "shadow-[0_0_16px_-3px_#00e0ff] ring-1 ring-white/20"
+                      : "shadow-cyan-500/10"
+                  }`}
+                >
                   <AgentIcon id="sage" className="w-5 h-5" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#11161d] bg-[#3fb950] shadow-[0_0_5px_#3fb950] animate-pulse" />
                 </div>
@@ -648,7 +705,7 @@ export default function MissionControl({
 
               <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
                 <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATUS</span>
-                {workingAgents.includes("sage") || isTyping ? (
+                {workingAgents.includes("sage") ? (
                   <span className="text-[#00e0ff] flex items-center gap-1.5">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
                     <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
@@ -669,15 +726,30 @@ export default function MissionControl({
                 return (
                 <div
                   key={member.id}
-                  className={`group p-2.5 rounded-md border transition-all cursor-pointer flex flex-col gap-2 ${accent.bg} ${
+                  style={{ "--glow": AGENT_GLOW[member.id] ?? "#00e0ff" } as React.CSSProperties}
+                  className={`group relative overflow-hidden p-2.5 rounded-lg border transition-all duration-200 cursor-pointer flex flex-col gap-2 ring-1 ring-inset ring-white/[0.04] shadow-md shadow-black/40 hover:-translate-y-0.5 hover:shadow-lg ${accent.bg} ${
                     isWorking
-                      ? `${accent.border} shadow-inner`
-                      : "border-transparent hover:border-[#1e2632]"
+                      ? `${accent.border} animate-breathe`
+                      : "border-transparent hover:border-[#2a3441]"
                   }`}
                 >
-                  <div className="flex items-start gap-2.5">
+                  {/* top-lit glass highlight for depth */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/[0.05] to-transparent"
+                  />
+                  {/* slow diagonal sheen sweep while the agent is active */}
+                  {isWorking && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 animate-sheen bg-[linear-gradient(110deg,transparent_35%,rgba(255,255,255,0.06)_50%,transparent_65%)] bg-[length:250%_100%]"
+                    />
+                  )}
+                  <div className="relative flex items-start gap-2.5">
                     <div
-                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative`}
+                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
+                        isWorking ? "ring-1 ring-white/20 shadow-[0_0_14px_-3px_var(--glow)]" : ""
+                      }`}
                     >
                       <AgentIcon id={member.id} className="w-4 h-4" />
                       <span
@@ -786,13 +858,11 @@ export default function MissionControl({
                 )}
 
                 {msg.role === "agent" && (() => {
-                  const segments = splitMessageSegments(msg.content);
-                  // An empty streaming bubble (before the first token) still needs
-                  // a render target, so fall back to a single empty segment.
-                  const rendered = segments.length > 0 ? segments : [""];
+                  const hasText = msg.content.trim().length > 0;
+                  const segments = hasText ? splitMessageSegments(msg.content) : [];
                   return (
                     <div className="space-y-1.5">
-                      {rendered.map((segment, i) => (
+                      {segments.map((segment, i) => (
                         <div
                           key={i}
                           className="text-xs leading-relaxed p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#8b949e]"
@@ -800,6 +870,18 @@ export default function MissionControl({
                           <Markdown>{segment}</Markdown>
                         </div>
                       ))}
+
+                      {/* No text yet: show a working spinner ONLY when the global
+                          "… is typing" indicator isn't already covering this turn
+                          (i.e. a dispatched specialist's bubble, where isTyping is
+                          false). Avoids a double spinner on a direct @-addressed turn.
+                          When a dispatch card is attached, show just the card. */}
+                      {!hasText && msg.isStreaming && !msg.dispatch && !isTyping && (
+                        <div className="text-xs p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
+                          <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
+                          working…
+                        </div>
+                      )}
 
                       {msg.dispatch && (() => {
                         const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
@@ -898,7 +980,7 @@ export default function MissionControl({
             {isTyping && (
               <div className="flex items-center gap-1.5 text-xs text-[#5c6470] font-mono">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#00e0ff]" />
-                Sage is typing...
+                {typingName} is typing...
               </div>
             )}
 

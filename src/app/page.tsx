@@ -9,6 +9,17 @@ export const dynamic = "force-dynamic";
 const AGENT_DISPLAY: Record<string, { avatar: string; modelLabel: string }> = {
   sage: { avatar: "🜂", modelLabel: "Claude Opus 4.7" },
   atlas: { avatar: "⚒", modelLabel: "Claude Sonnet 4.6" },
+  echo: { avatar: "⛬", modelLabel: "Claude Sonnet 4.6" },
+};
+
+// Maps the agent's DB `role` to its roster subtitle. Falls back to the raw role.
+const ROLE_LABEL: Record<string, string> = {
+  orchestrator: "Orchestration Engine",
+  developer: "Lead Developer",
+  qa: "QA Critic",
+  researcher: "Researcher",
+  devops: "DevOps",
+  designer: "Designer",
 };
 
 function formatTime(d: Date): string {
@@ -83,7 +94,7 @@ export default async function HomePage() {
     return {
       id: a.id,
       name: a.name,
-      role: a.role === "orchestrator" ? "Orchestration Engine" : "Lead Developer",
+      role: ROLE_LABEL[a.role] ?? a.role,
       model: display.modelLabel,
       system_prompt: a.system_prompt,
       color: a.color ?? "from-slate-400 to-slate-600",

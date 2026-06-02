@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { and, desc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { messages, projects, sessions } from '@/db/schema';
@@ -9,6 +9,8 @@ import { agents } from '@/db/schema';
 import { ensureWorktree } from '@/lib/worktree';
 import { createDispatchServer, DISPATCH_SERVER_NAME, DISPATCH_TOOL_NAME } from '@/lib/dispatch';
 import { toTerminalEvent } from '@/lib/terminal-events';
+import { buildOrchestratorPrompt, type TranscriptMessage } from '@/lib/conversation';
+import { parseMention } from '@/lib/mention';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,13 +35,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .then((r) => r[0]);
   if (!session) return new Response('Session not found', { status: 404 });
 
-  const lastUserMessage = await db
+  // Whole session, chronological (rowid tie-breaks a dispatch turn so it stays
+  // Sage-pre → specialist → Sage-post — same ordering page.tsx uses).
+  const conversation = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.session_id, sessionId), eq(messages.role, 'user')))
-    .orderBy(desc(messages.created_at))
-    .limit(1)
-    .then((r) => r[0]);
+    .where(eq(messages.session_id, sessionId))
+    .orderBy(asc(messages.created_at), asc(sql`rowid`));
+  const lastUserMessage = [...conversation].reverse().find((m) => m.role === 'user');
   if (!lastUserMessage) return new Response('No user prompt to respond to', { status: 400 });
 
   const project = await db
@@ -49,12 +52,27 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     .limit(1)
     .then((r) => r[0]);
 
-  const sage = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.id, 'sage'))
-    .limit(1)
-    .then((r) => r[0]);
+  const allAgents = await db.select().from(agents);
+  const sage = allAgents.find((a) => a.id === 'sage');
+  const agentLabels: Record<string, string> = Object.fromEntries(
+    allAgents.map((a) => [a.id, a.id === 'sage' ? 'Sage' : `${a.name} (${a.role})`]),
+  );
+  const transcript = buildOrchestratorPrompt(
+    conversation.map((m): TranscriptMessage => ({
+      role: m.role as TranscriptMessage['role'],
+      agentId: m.agent_id,
+      content: m.content,
+    })),
+    agentLabels,
+  );
+
+  // Direct addressing: a leading "@<agent>" routes the turn to that specialist
+  // (bypassing Sage). No / unrecognized mention → Sage. A directly-addressed
+  // specialist gets NO dispatch tool (only Sage orchestrates).
+  const { agentId: mentionId } = parseMention(lastUserMessage.content, allAgents);
+  const addressed = mentionId && mentionId !== 'sage' ? allAgents.find((a) => a.id === mentionId) : undefined;
+  const primary = addressed ?? sage;
+  const primaryId = primary?.id ?? 'sage';
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -64,28 +82,31 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         // each dispatch boundary (and once at the end), so a dispatch turn lands
         // in the DB as Sage-pre → specialist → Sage-post in true chronological
         // order. usage from the final `done` is attributed to the closing flush.
-        let sageBuffer = '';
-        let sageEmitted = false;
+        // The primary agent's text accumulates here. On the Sage path it's flushed
+        // at each dispatch boundary (Sage-pre → specialist → Sage-post); a directly
+        // addressed specialist has no dispatch, so it's just flushed once at the end.
+        let primaryBuffer = '';
+        let primaryEmitted = false;
         let costUsd: number | undefined;
         let tokensIn: number | undefined;
         let tokensOut: number | undefined;
 
-        const flushSage = async (usage?: { costUsd?: number; tokensIn?: number; tokensOut?: number }) => {
-          if (!sageBuffer.trim()) return;
+        const flushPrimary = async (usage?: { costUsd?: number; tokensIn?: number; tokensOut?: number }) => {
+          if (!primaryBuffer.trim()) return;
           const now = new Date();
           await db.insert(messages).values({
             id: `msg_${bytesToHex(randomBytes(8))}`,
             session_id: sessionId,
-            agent_id: 'sage',
+            agent_id: primaryId,
             role: 'agent',
-            content: sageBuffer,
+            content: primaryBuffer,
             token_count_in: usage?.tokensIn,
             token_count_out: usage?.tokensOut,
             cost_usd: usage?.costUsd,
             created_at: now,
           });
-          sageBuffer = '';
-          sageEmitted = true;
+          primaryBuffer = '';
+          primaryEmitted = true;
         };
 
         // Run the agent inside this session's own git worktree (isolation: edits
@@ -121,7 +142,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         // in-process `dispatch_agent` MCP tool. The dispatched agent runs in the
         // SAME worktree, streams to the operator through these closures, and its
         // final summary is returned to Sage as the tool result.
-        const dispatchServer = createDispatchServer({
+        const dispatchServer = addressed
+          ? null
+          : createDispatchServer({
           workingDir,
           signal: req.signal,
           emit: (event) => controller.enqueue(sseEncode(event)),
@@ -139,40 +162,44 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
               created_at: now,
             });
           },
-          onBeforeDispatch: () => flushSage(),
+          onBeforeDispatch: () => flushPrimary(),
         });
 
         // Interactive approval gates aren't achievable on this SDK (see the
         // week-3 plan Day 1). v1 safety = capability allowlist (below) +
         // worktree isolation (above) + operator diff review.
         for await (const event of runClaudeAgent({
-          prompt: lastUserMessage.content,
+          prompt: transcript,
           workingDir,
-          model: sage?.model,
-          systemPrompt: sage?.system_prompt,
-          allowedTools: sage?.tools_allowlist ?? undefined,
-          mcpServers: { [DISPATCH_SERVER_NAME]: dispatchServer },
-          extraAllowedTools: [DISPATCH_TOOL_NAME],
-          // The dispatch_agent MCP call blocks while Atlas works — well past the
-          // 60s default SDK stream-close timeout. Give it 10 minutes.
+          model: primary?.model,
+          systemPrompt: primary?.system_prompt,
+          allowedTools: primary?.tools_allowlist ?? undefined,
+          ...(dispatchServer
+            ? {
+                mcpServers: { [DISPATCH_SERVER_NAME]: dispatchServer },
+                extraAllowedTools: [DISPATCH_TOOL_NAME],
+              }
+            : {}),
+          // The dispatch_agent MCP call blocks while a specialist works — well past
+          // the 60s default SDK stream-close timeout. Harmless for a direct agent.
           extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000' },
           signal: req.signal, // operator "Stop" closes the EventSource → aborts the SDK
         })) {
-          const term = toTerminalEvent(event, 'sage');
+          const term = toTerminalEvent(event, primaryId);
           if (term) controller.enqueue(sseEncode(term as unknown as { type: string; [k: string]: unknown }));
 
           if (event.type === 'token') {
-            sageBuffer += event.content;
+            primaryBuffer += event.content;
           } else if (event.type === 'tool') {
-            // Sage's own tool activity (Read/Grep/dispatch_agent…) → live STATE box.
+            // The primary agent's tool activity (Read/Grep/dispatch_agent…) → STATE box.
             controller.enqueue(
-              sseEncode({ type: 'activity', agent_id: 'sage', tool: event.name, input: event.input }),
+              sseEncode({ type: 'activity', agent_id: primaryId, tool: event.name, input: event.input }),
             );
           } else if (event.type === 'done') {
             costUsd = event.costUsd;
             tokensIn = event.tokensIn;
             tokensOut = event.tokensOut;
-            if (!sageBuffer && event.fullText) sageBuffer = event.fullText;
+            if (!primaryBuffer && event.fullText) primaryBuffer = event.fullText;
           }
           // Forward the raw event for the client (token rendering relies on this).
           // Skip raw tool_result entirely: the client never consumes raw results,
@@ -183,8 +210,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
         // Flush Sage's closing text (post-dispatch summary, or its whole reply
         // when no dispatch happened); the turn's usage rides on this message.
-        await flushSage({ costUsd, tokensIn, tokensOut });
-        if (sageEmitted) {
+        await flushPrimary({ costUsd, tokensIn, tokensOut });
+        if (primaryEmitted) {
           await db.update(sessions).set({ updated_at: new Date() }).where(eq(sessions.id, sessionId));
         }
 
