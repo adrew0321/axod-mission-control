@@ -848,14 +848,40 @@ export default function MissionControl({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
             {messages.length === 0 && (
               <div className="text-center text-[#5c6470] font-mono text-xs py-16 select-none">
                 Let&apos;s start fresh then…
               </div>
             )}
-            {messages.map((msg) => (
-              <div key={msg.id} className="max-w-full">
+            {messages.map((msg) => {
+              const speaker = msg.role === "agent" ? team.find((a) => a.id === msg.agentId) : undefined;
+              const accent =
+                msg.role === "user"
+                  ? "#00e0ff"
+                  : msg.role === "agent"
+                    ? AGENT_GLOW[msg.agentId ?? ""] ?? "#93c5fd"
+                    : "#5c6470";
+              return (
+              <div key={msg.id} className="max-w-full flex gap-2.5">
+                <div className="shrink-0 pt-0.5 select-none">
+                  {msg.role === "user" ? (
+                    <div className="w-6 h-6 rounded-md bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black text-[8px] font-extrabold">
+                      AX
+                    </div>
+                  ) : msg.role === "agent" ? (
+                    <div
+                      className={`w-6 h-6 rounded-md bg-gradient-to-br ${speaker?.color ?? "from-slate-400 to-slate-600"} flex items-center justify-center text-black shadow-sm`}
+                    >
+                      <AgentIcon id={msg.agentId ?? ""} className="w-3.5 h-3.5" />
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-md bg-[#161c25] border border-[#1e2632] flex items-center justify-center text-[#3b82f6] text-[11px]">
+                      ❖
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
                 {msg.role !== "system" && (
                   <div className="flex items-center gap-2 mb-1.5 text-[10px] font-mono">
                     <span
@@ -880,14 +906,16 @@ export default function MissionControl({
 
                 {msg.role === "system" && !msg.approval && (
                   <div className="flex items-center gap-2 py-1.5 px-3 bg-[#161c25] border border-[#1e2632] rounded-md text-[11px] font-mono text-[#8b949e]">
-                    <span className="text-[#3b82f6]">❖</span>
                     <span>{msg.content}</span>
                     <span className="text-[#5c6470] ml-auto">{msg.timestamp}</span>
                   </div>
                 )}
 
                 {msg.role === "user" && (
-                  <div className="text-xs leading-relaxed p-3 rounded-md border bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap">
+                  <div
+                    className="text-xs leading-relaxed p-3 rounded-md border border-l-2 bg-[#161c25]/80 border-[#2a3441] text-[#e6edf3] whitespace-pre-wrap"
+                    style={{ borderLeftColor: accent }}
+                  >
                     {msg.content}
                   </div>
                 )}
@@ -900,7 +928,8 @@ export default function MissionControl({
                       {segments.map((segment, i) => (
                         <div
                           key={i}
-                          className="text-xs leading-relaxed p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#8b949e]"
+                          className="text-xs leading-relaxed p-3 rounded-md border border-l-2 bg-[#11161d] border-[#1e2632] text-[#8b949e]"
+                          style={{ borderLeftColor: accent }}
                         >
                           <Markdown>{segment}</Markdown>
                         </div>
@@ -1009,8 +1038,10 @@ export default function MissionControl({
                     )}
                   </div>
                 )}
+                </div>
               </div>
-            ))}
+              );
+            })}
 
             {isTyping && (
               <div className="flex items-center gap-1.5 text-xs text-[#5c6470] font-mono">
