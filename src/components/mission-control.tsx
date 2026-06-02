@@ -71,8 +71,9 @@ function AgentIcon({ id, className }: { id: string; className?: string }) {
 // but the exact target (file / command / pattern) always stays visible so the
 // operator knows precisely what's happening.
 const IDLE_STATE: Record<string, string> = {
-  sage: "Awaiting your word",
-  atlas: "Tools down — ready to build",
+  sage: "Standing by at the helm",
+  atlas: "Hammer cooled — ready to forge",
+  echo: "Red pen capped — for now",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -109,6 +110,28 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
         return "Consulting the archives…";
       case "TodoWrite":
         return "Drawing up the plan…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "echo") {
+    // Echo — the QA critic with a red pen.
+    switch (tool) {
+      case "Read":
+        return `Inspecting ${file}`;
+      case "Glob":
+        return "Casing the codebase…";
+      case "Grep":
+        return input?.pattern ? `Combing for trouble: "${clip(input.pattern, 28)}"` : "Combing for trouble…";
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        return /\bgit\s+diff\b/.test(cmd)
+          ? "Cross-examining the diff"
+          : `Running the gauntlet: ${clip(input?.command)}`;
+      }
+      case "TodoWrite":
+        return "Tallying the verdict…";
       default:
         return genericFallback();
     }
@@ -428,7 +451,12 @@ export default function MissionControl({
             );
             setAgentActivity((prev) => ({
               ...prev,
-              [dispatchAgentId]: dispatchAgentId === "atlas" ? "Warming the forge…" : "Spinning up…",
+              [dispatchAgentId]:
+                dispatchAgentId === "atlas"
+                  ? "Warming the forge…"
+                  : dispatchAgentId === "echo"
+                    ? "Sharpening the red pen…"
+                    : "Spinning up…",
               sage: `Handing the build to ${dispatchAgentName} →`,
             }));
             dispatchStreamId = `dispatch_${dispatchAgentId}_${Date.now()}`;
@@ -786,13 +814,11 @@ export default function MissionControl({
                 )}
 
                 {msg.role === "agent" && (() => {
-                  const segments = splitMessageSegments(msg.content);
-                  // An empty streaming bubble (before the first token) still needs
-                  // a render target, so fall back to a single empty segment.
-                  const rendered = segments.length > 0 ? segments : [""];
+                  const hasText = msg.content.trim().length > 0;
+                  const segments = hasText ? splitMessageSegments(msg.content) : [];
                   return (
                     <div className="space-y-1.5">
-                      {rendered.map((segment, i) => (
+                      {segments.map((segment, i) => (
                         <div
                           key={i}
                           className="text-xs leading-relaxed p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#8b949e]"
@@ -800,6 +826,17 @@ export default function MissionControl({
                           <Markdown>{segment}</Markdown>
                         </div>
                       ))}
+
+                      {/* No text yet: while streaming with nothing else to show,
+                          render a working spinner instead of an empty box. When a
+                          dispatch card is attached (Sage handed off with no preamble),
+                          show just the card — never an empty bubble. */}
+                      {!hasText && msg.isStreaming && !msg.dispatch && (
+                        <div className="text-xs p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
+                          <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
+                          working…
+                        </div>
+                      )}
 
                       {msg.dispatch && (() => {
                         const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
