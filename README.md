@@ -2,7 +2,7 @@
 
 > Personal command center for orchestrating AI agent teams to do development work.
 
-**Status:** Weeks 1–4 released to `main` · **Echo (QA agent) + orchestrator session memory** landed on `dev` · Week 5 (VPS deploy) next · v1 ≈ 90%
+**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · Week 5 (VPS deploy) next · v1 ≈ 90%
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
 **License:** MIT (applied on first public release)
 
@@ -12,7 +12,7 @@ Open Mission Control. Type a prompt. Say *"I want to build this today."* A team 
 
 ## Architecture (one paragraph)
 
-A **3-pane web app**: agent-team roster on the left, orchestrator chat in the middle, live workspace tabs (Preview / Plan / Code / Terminal) on the right. Powered by the **Claude Agent SDK** — Sage runs as the orchestrator and dispatches specialists (currently Atlas) via an in-process `dispatch_agent` MCP tool; each specialist runs through the SDK in the session's **isolated git worktree**. **SQLite** (WAL, via Drizzle) for state. **Server-Sent Events** for streaming. Below `md` the layout collapses to a tab-switched mobile view. Next up: Docker Compose deploy to a Hetzner VPS behind Nginx + Let's Encrypt. Future: **OpenClaw** gateway for Discord so you can chat with agents from anywhere.
+A **3-pane web app**: agent-team roster on the left, orchestrator chat in the middle, live workspace tabs (Preview / Plan / Code / Terminal) on the right. Powered by the **Claude Agent SDK** — Sage runs as the orchestrator and dispatches specialists (Atlas the developer, Echo the QA critic) via an in-process `dispatch_agent` MCP tool, with the full session conversation as memory; each specialist runs through the SDK in the session's **isolated git worktree**. Operators can also **`@`-address a specialist directly** (`@Atlas …`) to bypass Sage for tight iteration. **SQLite** (WAL, via Drizzle) for state. **Server-Sent Events** for streaming. Below `md` the layout collapses to a tab-switched mobile view. Next up: a bare-VM deploy to a Hetzner VPS behind Caddy + Let's Encrypt. Future: **OpenClaw** gateway for Discord so you can chat with agents from anywhere.
 
 ## The team
 
@@ -35,7 +35,7 @@ The roster is **DB-driven** — each agent is a row in the `agents` table (id, r
 2. **Week 2 — Single agent end-to-end** ✅ — Claude Agent SDK + SQLite + tool allowlist + worktrees + stop/abort
 3. **Week 3 — Sage + team-of-agents** ✅ — `dispatch_agent` orchestration, Atlas as first specialist, live per-agent roster state, live worktree diff
 4. **Week 4 — Workspace tabs** ✅ — Preview (build-and-serve), Code (Monaco diff, collapsible file list), Plan (live `TodoWrite` checklist), Terminal (live streamed output) · **mobile-responsive** layout
-5. **Week 5 — VPS deploy + dogfood ship** ⏳ — Docker Compose → Hetzner, Nginx + HTTPS, ship one real AXOD CREATIVE change end-to-end
+5. **Week 5 — VPS deploy + dogfood ship** ⏳ — bare-VM (systemd + Caddy) on Hetzner + HTTPS, ship one real AXOD CREATIVE change end-to-end (plan written; revises the ADR-002 Docker lock)
 
 ### v1 finish line (what's left)
 
@@ -53,7 +53,7 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | Version | Adds | Notes |
 |---|---|---|
 | **v1 (now)** | VPS deploy + HTTPS + one dogfood ship | Closes v1's definition of done |
-| **v1.1** ✅ | **Echo** (QA critic) — shipped on `dev` | First post-v1 agent; no new tools — proved the "3rd agent" path. Session memory landed alongside it. |
+| **v1.1** ✅ | **Echo** (QA critic) + session memory + `@`-mention addressing + roster polish | First post-v1 agent (no new tools — proved the "3rd agent" path); Sage now keeps full session context; `@Atlas`/`@Echo` route straight to a specialist; roster cards got depth + active-state motion. |
 | **v1.2** | **Nova** (researcher) | Build the `web_search` / `web_fetch` tool plumbing |
 | **v1.3** | **Forge** (devops) + **Pixel** (designer) | Forge reuses git tooling; Pixel needs `image_generate` |
 | **v1.4** | Multi-project switcher | Mission Control itself + client repos |
