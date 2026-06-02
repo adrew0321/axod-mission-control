@@ -2,7 +2,7 @@
 
 > Personal command center for orchestrating AI agent teams to do development work.
 
-**Status:** Weeks 1–4 complete & released to `main` · **Week 5 (VPS deploy) in progress** · v1 ≈ 90%
+**Status:** Weeks 1–4 released to `main` · **Echo (QA agent) + orchestrator session memory** landed on `dev` · Week 5 (VPS deploy) next · v1 ≈ 90%
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
 **License:** MIT (applied on first public release)
 
@@ -22,12 +22,12 @@ The roster is **DB-driven** — each agent is a row in the `agents` table (id, r
 |---|---|---|---|---|
 | 🜂 | **Sage** | Orchestrator | Claude Opus 4.7 | ✅ shipped |
 | ⚒ | **Atlas** | Lead Developer | Claude Sonnet 4.6 | ✅ shipped |
-| ⛬ | **Echo** | QA Critic | Sonnet 4.6 | ⏭ **next hire** (v1.1) |
+| ⛬ | **Echo** | QA Critic | Sonnet 4.6 | ✅ shipped (on `dev`) |
 | ⌕ | **Nova** | Researcher | Sonnet 4.6 + web tools | v1.2 |
 | ⛁ | **Forge** | DevOps / CI / Deploy | Haiku 4.5 | v1.3 |
 | ◊ | **Pixel** | Designer / Mockups | Sonnet 4.6 | v1.3 |
 
-> **Re-sequenced from the original spec:** Echo (QA) is promoted to the next hire because it needs **zero new tool plumbing** (`read_file` + `run_command` only) and closes the quality loop on Atlas's diffs. Nova and Pixel, which need new web-search / image-generation tools, move later. See [where we're going](#where-were-going).
+> **Echo shipped** as the first post-v1 agent (it needed **zero new tool plumbing** — `read_file` + `run_command` — and closes the quality loop on Atlas's diffs). Nova and Pixel, which need new web-search / image-generation tools, are next. See [where we're going](#where-were-going).
 
 ## Build phases (5 weeks to v1)
 
@@ -53,7 +53,7 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | Version | Adds | Notes |
 |---|---|---|
 | **v1 (now)** | VPS deploy + HTTPS + one dogfood ship | Closes v1's definition of done |
-| **v1.1** | **Echo** (QA critic) | First post-v1 agent; no new tools — proves the "3rd agent" path |
+| **v1.1** ✅ | **Echo** (QA critic) — shipped on `dev` | First post-v1 agent; no new tools — proved the "3rd agent" path. Session memory landed alongside it. |
 | **v1.2** | **Nova** (researcher) | Build the `web_search` / `web_fetch` tool plumbing |
 | **v1.3** | **Forge** (devops) + **Pixel** (designer) | Forge reuses git tooling; Pixel needs `image_generate` |
 | **v1.4** | Multi-project switcher | Mission Control itself + client repos |
