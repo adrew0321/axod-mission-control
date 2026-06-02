@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Lock,
   RefreshCw,
+  Eraser,
   Layers,
   ArrowRight,
   ShieldCheck,
@@ -810,11 +811,23 @@ export default function MissionControl({
               <span className="text-[10px] font-mono text-[#5c6470] tracking-wider block">ID: {session.id}</span>
             </div>
 
-            <div className="hidden sm:flex text-[10px] font-mono text-[#8b949e] flex items-center gap-1">
-              <span className="text-[#5c6470]">Target Directory:</span>
-              <code className="bg-[#161c25] border border-[#1e2632] px-1.5 py-0.2 rounded text-[#00e0ff]">
-                {session.repoPath}
-              </code>
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex text-[10px] font-mono text-[#8b949e] items-center gap-1">
+                <span className="text-[#5c6470]">Target Directory:</span>
+                <code className="bg-[#161c25] border border-[#1e2632] px-1.5 py-0.2 rounded text-[#00e0ff]">
+                  {session.repoPath}
+                </code>
+              </div>
+              {messages.length > 0 && (
+                <button
+                  onClick={() => setMessages([])}
+                  title="Clear the conversation view (kept in history — reload to restore)"
+                  className="shrink-0 flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#161c25] border border-[#2a3441] hover:border-cyan-500/40 px-2 py-0.5 rounded transition-colors"
+                >
+                  <Eraser className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 
