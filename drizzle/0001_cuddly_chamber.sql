@@ -1,0 +1,1 @@
+ALTER TABLE `sessions` ADD `cleared_at` integer;

@@ -609,6 +609,23 @@ export default function MissionControl({
     setInputText(preset);
   };
 
+  // Clear the session log: set a server-side cleared_at marker so the view AND
+  // Sage's memory start fresh (and persist across reloads). Messages stay in the
+  // DB; nothing is deleted.
+  const handleClearLog = async () => {
+    try {
+      const res = await fetch(`/api/sessions/${session.id}/clear`, { method: "POST" });
+      if (res.ok) {
+        setMessages([]);
+        setSendError(null);
+      } else {
+        setSendError("Couldn't clear the log — try again.");
+      }
+    } catch {
+      setSendError("Couldn't clear the log — try again.");
+    }
+  };
+
   const sage = team.find((a) => a.id === "sage");
   const otherAgents = team.filter((a) => a.id !== "sage");
 
@@ -820,8 +837,8 @@ export default function MissionControl({
               </div>
               {messages.length > 0 && (
                 <button
-                  onClick={() => setMessages([])}
-                  title="Clear the conversation view (kept in history — reload to restore)"
+                  onClick={handleClearLog}
+                  title="Clear the conversation — fresh start for you and Sage (messages kept in history, not deleted)"
                   className="shrink-0 flex items-center gap-1 text-[9.5px] font-mono text-[#8b949e] hover:text-[#00e0ff] bg-[#161c25] border border-[#2a3441] hover:border-cyan-500/40 px-2 py-0.5 rounded transition-colors"
                 >
                   <Eraser className="w-3 h-3" />
@@ -832,6 +849,11 @@ export default function MissionControl({
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.length === 0 && (
+              <div className="text-center text-[#5c6470] font-mono text-xs py-16 select-none">
+                Let&apos;s start fresh then…
+              </div>
+            )}
             {messages.map((msg) => (
               <div key={msg.id} className="max-w-full">
                 {msg.role !== "system" && (

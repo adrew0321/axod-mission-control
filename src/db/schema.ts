@@ -27,6 +27,10 @@ export const sessions = sqliteTable('sessions', {
   branch: text('branch'),
   worktree_path: text('worktree_path'),
   status: text('status').notNull(),
+  // When set, the conversation log + Sage's memory transcript only include
+  // messages created after this timestamp (operator "Clear"). Messages before it
+  // stay in the DB (archived, not deleted).
+  cleared_at: integer('cleared_at', { mode: 'timestamp' }),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
