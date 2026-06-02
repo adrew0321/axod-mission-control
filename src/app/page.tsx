@@ -1,4 +1,4 @@
-import { desc, asc, eq, sql } from "drizzle-orm";
+import { desc, asc, eq, sql, and, gt } from "drizzle-orm";
 import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
 import MissionControl from "@/components/mission-control";
@@ -62,10 +62,19 @@ export default async function HomePage() {
     .limit(1)
     .then((rows) => rows[0]);
 
+  // Cleared sessions only surface messages created after the clear marker; the
+  // rest stay in the DB (archived). cleared_at is null for un-cleared sessions.
   const messageRows = await db
     .select()
     .from(messages)
-    .where(eq(messages.session_id, currentSessionRow.id))
+    .where(
+      currentSessionRow.cleared_at
+        ? and(
+            eq(messages.session_id, currentSessionRow.id),
+            gt(messages.created_at, currentSessionRow.cleared_at),
+          )
+        : eq(messages.session_id, currentSessionRow.id),
+    )
     // rowid (insertion order) breaks created_at ties so a dispatch turn keeps
     // its true order: Sage-pre → specialist → Sage-post, even within one second.
     .orderBy(asc(messages.created_at), asc(sql`rowid`));

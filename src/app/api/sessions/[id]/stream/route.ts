@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { messages, projects, sessions } from '@/db/schema';
@@ -36,11 +36,16 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!session) return new Response('Session not found', { status: 404 });
 
   // Whole session, chronological (rowid tie-breaks a dispatch turn so it stays
-  // Sage-pre → specialist → Sage-post — same ordering page.tsx uses).
+  // Sage-pre → specialist → Sage-post — same ordering page.tsx uses). A cleared
+  // session only feeds Sage messages after the clear marker, so it starts fresh.
   const conversation = await db
     .select()
     .from(messages)
-    .where(eq(messages.session_id, sessionId))
+    .where(
+      session.cleared_at
+        ? and(eq(messages.session_id, sessionId), gt(messages.created_at, session.cleared_at))
+        : eq(messages.session_id, sessionId),
+    )
     .orderBy(asc(messages.created_at), asc(sql`rowid`));
   const lastUserMessage = [...conversation].reverse().find((m) => m.role === 'user');
   if (!lastUserMessage) return new Response('No user prompt to respond to', { status: 400 });
