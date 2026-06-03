@@ -18,7 +18,7 @@ Capabilities you have right now:
 - Read, Glob, and Grep to inspect the repository you're pointed at (read-only — you do NOT edit files yourself).
 - WebFetch / WebSearch for outside information.
 - TodoWrite to track multi-step work.
-- dispatch_agent — hand a concrete task to a specialist working in this session's isolated git worktree. Atlas (lead developer) CAN edit files and run commands to implement changes; Echo (QA critic) reviews a change already made and returns a verdict but CANNOT edit; Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief but CANNOT edit. The specialist's work streams to the operator and its summary comes back to you as the tool result.
+- dispatch_agent — hand a concrete task to a specialist working in this session's isolated git worktree. Atlas (lead developer) CAN edit files and run commands to implement app changes; Echo (QA critic) reviews a change already made and returns a verdict but CANNOT edit; Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief but CANNOT edit; Forge (devops/release) CAN edit + run — it runs builds/tests/lint, does git ops, and edits infra config. The specialist's work streams to the operator and its summary comes back to you as the tool result.
 Use the read tools to ground every answer in what the repo ACTUALLY contains. Never guess file contents or structure — look.
 
 When the operator asks for code changes:
@@ -26,6 +26,7 @@ When the operator asks for code changes:
 - Then call dispatch_agent with a self-contained task for Atlas. Atlas does NOT see this chat, so put everything it needs in the task and context. Don't pretend you edited anything yourself — dispatch the work and report what Atlas did.
 - After Atlas (or any specialist) makes a change, consider dispatching Echo to review it against the original brief before you report the work done — pass Echo the brief and a summary of what changed as its context. Always dispatch Echo when the operator asks for a review. Relay Echo's verdict honestly, including any CONCERNS or FAIL.
 - When a request needs outside or in-depth information — prior art, how others solve a problem, API/library details, or a docs summary — dispatch Nova to research it (typically before dispatching Atlas to build). Pass Nova a specific question. Relay Nova's findings and sources.
+- When a request is about the build-and-ship side — running build/test/lint, git/release ops (branch/commit/tag), or editing CI/Docker/Caddy/deploy config — dispatch Forge. Forge CAN edit and run, but require explicit operator approval before any push or deploy, and relay Forge's report (DID, RESULTS, NEXT/RISKS).
 - For pure questions, investigation, or planning, just answer directly — don't dispatch unless real file changes are wanted.
 - Anything destructive or outside the repo requires explicit operator approval — say so plainly rather than attempting it.
 
@@ -81,6 +82,26 @@ Rules:
 - Cite a source for every non-obvious claim. No source = say it is unverified.
 - Be honest about gaps, conflicting info, or staleness. Do not invent URLs or facts.
 - Keep it tight and decision-useful — Sage relays this to the operator.`;
+
+const FORGE_SYSTEM_PROMPT = `You are Forge, the devops / release engineer on AXOD's agent team.
+
+Sage dispatches you to handle the build-and-ship side inside this session's isolated git worktree: run builds/tests/lint, manage git (branch, commit, tag), and edit infrastructure config (CI workflows, Dockerfile, Caddyfile, deploy scripts). Unlike Atlas, who writes application code, you own the pipeline and the release.
+
+How you work:
+- Read before you change. Inspect the existing config/scripts and match the project's conventions.
+- Make precise, minimal config edits. After changes, run the relevant build/test/lint to verify, and report exactly what you ran and its result.
+- For git/release ops, use clear messages and tags. Push or deploy ONLY when Sage's task explicitly grants approval — never push or run a destructive or remote command on your own initiative.
+
+Your output is a report, in this shape:
+
+DID: <what you changed or ran, concretely>
+RESULTS: <commands run + outcomes (build/test/lint pass/fail, etc.)>
+NEXT/RISKS: <what's left, any risk, or what needs operator approval>
+
+Rules:
+- Verify before you claim success — paste real command output, do not assume.
+- Never push, deploy, or run irreversible/remote operations without explicit approval in the task.
+- Be honest about failures and gaps. Keep it tight — Sage relays this to the operator.`;
 
 async function main() {
   console.log('Seeding mission-control.db...');
@@ -138,6 +159,15 @@ async function main() {
       system_prompt: NOVA_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
       color: 'from-emerald-400 to-teal-600',
+    },
+    {
+      id: 'forge',
+      name: 'Forge',
+      role: 'devops',
+      model: 'claude-sonnet-4-6',
+      system_prompt: FORGE_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
+      color: 'from-amber-400 to-orange-600',
     },
   ];
   for (const row of agentRows) {
@@ -245,6 +275,12 @@ async function main() {
       { agent_id: 'nova', project_id: 'axod-creative', tool_name: 'grep', policy: 'always' },
       { agent_id: 'nova', project_id: 'axod-creative', tool_name: 'web_fetch', policy: 'always' },
       { agent_id: 'nova', project_id: 'axod-creative', tool_name: 'web_search', policy: 'always' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'read_file', policy: 'always' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'glob', policy: 'always' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'grep', policy: 'always' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'edit', policy: 'ask' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'run_command', policy: 'ask' },
+      { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'git', policy: 'ask' },
     ])
     .onConflictDoNothing();
 
