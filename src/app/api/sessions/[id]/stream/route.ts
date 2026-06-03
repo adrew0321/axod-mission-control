@@ -159,6 +159,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
               id: `msg_${bytesToHex(randomBytes(8))}`,
               session_id: sessionId,
               agent_id: agentId,
+              dispatched_via: primaryId,
               role: 'agent',
               content,
               token_count_in: usage.tokensIn,
