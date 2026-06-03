@@ -37,6 +37,7 @@ import { parseMention } from "@/lib/mention";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 import PlanView from "@/components/plan-view";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
+import { dispatchFlavor } from "@/lib/dispatch-presentation";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -1047,7 +1048,9 @@ export default function MissionControl({
                               {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
                               {dispatchAgent?.role ?? "Specialist"}
                             </div>
-                            <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
+                            <p className="text-[11px] text-[#8b949e] mt-1 italic">
+                              {dispatchFlavor(msg.dispatch.agentId, msg.dispatch.agentName)}
+                            </p>
                           </div>
                         );
                       })()}
