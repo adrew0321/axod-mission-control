@@ -38,9 +38,9 @@ with attribution derived from the real flag via the new helper (`dispatchAttribu
 
 ## 4. Rendering (`src/components/mission-control.tsx`)
 
-- **Dispatch card:** replace the raw-task paragraph (`<p>{msg.dispatch.task}</p>`, currently line ~1049) with a **persona flavor line** from `dispatchFlavor(agentId, name)`. The task brief is Sage's internal instruction to the specialist — not something the operator acts on — so it is dropped from the card entirely.
-- **Dispatched reply bubble** (both the live-streaming bubble and reloaded messages where `dispatched_via` is set): render **collapsed** — a `view {name}'s report ▾` / `hide ▴` toggle that expands to show the full content. Collapse applies during live streaming too; live activity remains visible via the dispatch card's "Running" state and the roster STATUS panel, so nothing is lost. Expand state is local UI: a `Set<string>` of expanded message ids in component state.
-- **Direct `@` replies** (`dispatched_via` is `null`): unchanged — full render.
+- **Dispatch card (self-contained):** a dispatched specialist's **own message** (`dispatchedVia` set) renders *as* the Orchestrated Dispatch card — status badge (Running/Done/Failed) + `{agent} → {role}` + the **persona flavor line** from `dispatchFlavor(agentId, name)`, with the raw report nested **inside** as an inline collapsible block (`view {name}'s report ▾` / `hide ▴`). The task brief is dropped (Sage's internal instruction, not operator-facing). Because the card is the specialist message's own render, it appears identically **live** (`isStreaming`) and **on reload** (`dispatched_via` persists) — previously the card was attached to Sage's message and existed only during live streaming. The earlier separate Sage-attached card and the sibling collapsed-reply bubble are retired in favor of this single nested card.
+- **Status** derives from the specialist message: `isStreaming → Running`, `dispatchFailed → Failed` (a client flag set on `dispatch_done` when errored; not persisted), else `Done`. Collapse applies during streaming too; the card's "Running" badge + the roster STATUS panel keep live activity visible. Expand state is local UI: a `Set<string>` of expanded message ids.
+- **Direct `@` replies** (`dispatchedVia` undefined): unchanged — full render, no card.
 
 ## 5. Flavor + attribution helpers (new module)
 
