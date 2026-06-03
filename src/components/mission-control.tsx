@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Compass,
   ChevronDown,
+  ChevronUp,
   Terminal as TerminalIcon,
   FileText,
   Send,
@@ -251,6 +252,14 @@ export default function MissionControl({
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const toggleReply = (id: string) =>
+    setExpandedReplies((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   const [activeTab, setActiveTab] = useState<string>("plan");
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
@@ -989,22 +998,43 @@ export default function MissionControl({
                   const segments = hasText ? splitMessageSegments(msg.content) : [];
                   return (
                     <div className="space-y-1.5">
-                      {segments.map((segment, i) => (
-                        <div
-                          key={i}
-                          className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
-                          style={{ borderLeftColor: accent, backgroundColor: tint }}
+                      {msg.dispatchedVia && hasText && !expandedReplies.has(msg.id) ? (
+                        <button
+                          onClick={() => toggleReply(msg.id)}
+                          className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
                         >
-                          <Markdown>{segment}</Markdown>
-                          {msg.isStreaming && i === segments.length - 1 && (
-                            <span
-                              aria-hidden
-                              className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
-                              style={{ backgroundColor: accent }}
-                            />
+                          <ChevronDown className="w-3 h-3" />
+                          view {msg.senderName}&apos;s report
+                        </button>
+                      ) : (
+                        <>
+                          {segments.map((segment, i) => (
+                            <div
+                              key={i}
+                              className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
+                              style={{ borderLeftColor: accent, backgroundColor: tint }}
+                            >
+                              <Markdown>{segment}</Markdown>
+                              {msg.isStreaming && i === segments.length - 1 && (
+                                <span
+                                  aria-hidden
+                                  className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
+                                  style={{ backgroundColor: accent }}
+                                />
+                              )}
+                            </div>
+                          ))}
+                          {msg.dispatchedVia && hasText && (
+                            <button
+                              onClick={() => toggleReply(msg.id)}
+                              className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
+                            >
+                              <ChevronUp className="w-3 h-3" />
+                              hide {msg.senderName}&apos;s report
+                            </button>
                           )}
-                        </div>
-                      ))}
+                        </>
+                      )}
 
                       {/* No text yet: show a working spinner ONLY when the global
                           "… is typing" indicator isn't already covering this turn
