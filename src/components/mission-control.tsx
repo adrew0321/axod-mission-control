@@ -83,6 +83,7 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   if (agentId === "sage") return { accent: "#3b82f6", tint: "rgba(59,130,246,0.08)" };
   if (agentId === "atlas") return { accent: "#6366f1", tint: "rgba(99,102,241,0.08)" };
   if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
+  if (agentId === "nova") return { accent: "#10b981", tint: "rgba(16,185,129,0.08)" };
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
@@ -98,6 +99,7 @@ const IDLE_STATE: Record<string, string> = {
   sage: "Standing by at the helm",
   atlas: "Hammer cooled — ready to forge",
   echo: "Red pen capped — for now",
+  nova: "Telescope stowed — ready to dig",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -156,6 +158,25 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
       }
       case "TodoWrite":
         return "Tallying the verdict…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "nova") {
+    // Nova — the researcher with a telescope.
+    switch (tool) {
+      case "WebSearch":
+      case "WebFetch":
+        return "Scouring the web…";
+      case "Read":
+        return `Reading up on ${file}`;
+      case "Grep":
+        return input?.pattern ? `Digging for "${clip(input.pattern, 28)}"` : "Digging through the code…";
+      case "Glob":
+        return "Casing the codebase…";
+      case "TodoWrite":
+        return "Outlining the findings…";
       default:
         return genericFallback();
     }
