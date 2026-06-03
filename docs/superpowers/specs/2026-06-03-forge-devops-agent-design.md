@@ -106,3 +106,13 @@ Pixel (own cycle) · image-generation plumbing · the actual VPS deploy infrastr
 - `pnpm build` clean; `pnpm test` stays 51/51 (config + prompt; no pure-module logic added).
 - Re-seed: `pnpm seed` upserts Sage's prompt and inserts Forge; roster shows Forge (amber, Cog) — `agents` count 4 → 5, `tool_permissions` 15 → 21.
 - Live smoke: operator asks Sage a devops task (e.g. "Forge, run the build and tests and report") → Sage dispatches Forge → Forge runs the commands, returns a `DID, RESULTS, NEXT/RISKS` report with real output → Sage relays. Confirm Forge can act (edit/run) but does NOT push or deploy without explicit approval.
+
+## What actually happened (2026-06-03)
+
+Shipped on `feature/forge-devops`, executed via subagent-driven development (fresh implementer + spec/quality reviews per task).
+
+- The "no new tool plumbing" finding held: a full doer just reuses Atlas's existing `Edit`/`Write`/`Bash` tools, so the change was a `DISPATCHABLE` entry + dispatch descriptions (`dispatch.ts`), the seed row + Sage-prompt updates + `tool_permissions` (`seed.ts`), and three UI cohesion touches (`mission-control.tsx`). `ROLE_LABEL` already had `devops → "DevOps"`, so no `page.tsx` change.
+- Two review catches were folded in: a stale in-file comment listing the dispatchable agents (added Forge), and a label mismatch — the prompt emits a `NEXT/RISKS:` header while Sage's relay bullet and the docs said `NEXT-RISKS`; unified everything on `NEXT/RISKS`.
+- Model: shipped on `claude-sonnet-4-6` (not the roadmap's Haiku 4.5) because Forge edits infra config where uncompiled mistakes are costly; Haiku remains a one-line documented fallback.
+- Verification clean: `pnpm build` compiled; `pnpm test` stayed 51/51; `pnpm seed` → `agents: 5`, `tool_permissions: 21`; the `forge` row matched this spec exactly.
+- Live smoke (operator-run): confirmed — Sage dispatched Forge, the "Running the pipeline…" status showed (amber), and the dispatch streamed correctly. (Follow-up UX noted separately: collapse dispatched-specialist replies so only Sage's relayed summary shows in the thread, with a persona flavor line on the dispatch card.)
