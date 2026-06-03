@@ -84,6 +84,7 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   if (agentId === "atlas") return { accent: "#6366f1", tint: "rgba(99,102,241,0.08)" };
   if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
   if (agentId === "nova") return { accent: "#10b981", tint: "rgba(16,185,129,0.08)" };
+  if (agentId === "forge") return { accent: "#f59e0b", tint: "rgba(245,158,11,0.08)" };
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
@@ -100,6 +101,7 @@ const IDLE_STATE: Record<string, string> = {
   atlas: "Hammer cooled — ready to forge",
   echo: "Red pen capped — for now",
   nova: "Telescope stowed — ready to dig",
+  forge: "Gears idle — ready to ship",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -177,6 +179,37 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
         return "Casing the codebase…";
       case "TodoWrite":
         return "Outlining the findings…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "forge") {
+    // Forge — the devops/release engineer at the controls (machinery, not smithing).
+    switch (tool) {
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        if (/\bgit\s+(tag|commit|push)\b/.test(cmd)) return "Cutting the release…";
+        if (/\b(deploy|ship|caddy|docker\s+(build|push)|rsync|scp)\b/.test(cmd)) return "Shipping it…";
+        if (/\b(build|test|lint|vitest|jest|pnpm|npm|tsc)\b/.test(cmd)) return "Running the pipeline…";
+        return `Turning the gears: ${clip(input?.command)}`;
+      }
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Wiring up → ${file}`;
+      case "Read":
+        return `Checking the manifest: ${file}`;
+      case "Glob":
+        return "Mapping the pipeline…";
+      case "Grep":
+        return input?.pattern ? `Tracing the config: "${clip(input.pattern, 28)}"` : "Tracing the config…";
+      case "WebFetch":
+      case "WebSearch":
+        return "Consulting the ops docs…";
+      case "TodoWrite":
+        return "Drafting the runbook…";
       default:
         return genericFallback();
     }
