@@ -574,6 +574,7 @@ export default function MissionControl({
                 agentId: dispatchAgentId,
                 senderName: dispatchAgentName,
                 attribution: "via Sage",
+                dispatchedVia: "sage",
                 content: "",
                 timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                 isStreaming: true,
