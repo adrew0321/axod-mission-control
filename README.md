@@ -2,7 +2,7 @@
 
 > Personal command center for orchestrating AI agent teams to do development work.
 
-**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · Week 5 (VPS deploy) next · v1 ≈ 90%
+**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · **v1.2** — Nova (researcher, on `dev`) · Week 5 (VPS deploy) next · v1 ≈ 90%
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
 **License:** MIT (applied on first public release)
 
@@ -23,11 +23,11 @@ The roster is **DB-driven** — each agent is a row in the `agents` table (id, r
 | 🜂 | **Sage** | Orchestrator | Claude Opus 4.7 | ✅ shipped |
 | ⚒ | **Atlas** | Lead Developer | Claude Sonnet 4.6 | ✅ shipped |
 | ⛬ | **Echo** | QA Critic | Sonnet 4.6 | ✅ shipped (on `dev`) |
-| ⌕ | **Nova** | Researcher | Sonnet 4.6 + web tools | v1.2 |
+| ⌕ | **Nova** | Researcher | Sonnet 4.6 + web tools | ✅ shipped (on `dev`) |
 | ⛁ | **Forge** | DevOps / CI / Deploy | Haiku 4.5 | v1.3 |
 | ◊ | **Pixel** | Designer / Mockups | Sonnet 4.6 | v1.3 |
 
-> **Echo shipped** as the first post-v1 agent (it needed **zero new tool plumbing** — `read_file` + `run_command` — and closes the quality loop on Atlas's diffs). Nova and Pixel, which need new web-search / image-generation tools, are next. See [where we're going](#where-were-going).
+> **Echo and Nova shipped** as the first post-v1 agents — both needed **zero new tool plumbing**. Echo (`read_file` + `run_command`) closes the quality loop on Atlas's diffs; Nova's `WebSearch`/`WebFetch` turned out to be SDK built-ins already passed through by the runner, so it was just as cheap. Pixel, which needs image-generation tooling, is next. See [where we're going](#where-were-going).
 
 ## Build phases (5 weeks to v1)
 
@@ -54,7 +54,7 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 |---|---|---|
 | **v1 (now)** | VPS deploy + HTTPS + one dogfood ship | Closes v1's definition of done |
 | **v1.1** ✅ | **Echo** (QA critic) + session memory + `@`-mention addressing + roster polish | First post-v1 agent (no new tools — proved the "3rd agent" path); Sage now keeps full session context; `@Atlas`/`@Echo` route straight to a specialist; roster cards got depth + active-state motion. |
-| **v1.2** | **Nova** (researcher) | Build the `web_search` / `web_fetch` tool plumbing |
+| **v1.2** ✅ | **Nova** (researcher) | No new plumbing — `WebSearch`/`WebFetch` are SDK built-ins already passed through by the runner, so Nova was as cheap as Echo |
 | **v1.3** | **Forge** (devops) + **Pixel** (designer) | Forge reuses git tooling; Pixel needs `image_generate` |
 | **v1.4** | Multi-project switcher | Mission Control itself + client repos |
 | **v1.5** | Discord via OpenClaw gateway | Chat with agents from anywhere |
@@ -70,7 +70,7 @@ Adding a specialist that uses **existing** tools (read / edit / run_command / gi
 3. **Update Sage's system prompt** so it knows the new member exists and when to route to them.
 4. Seed a `tool_permissions` policy (`always` / `ask` / `deny`) per (agent, project, tool).
 
-No UI changes needed — the roster, icons, and accent colors for Nova / Echo / Pixel / Forge are already wired in `mission-control.tsx`. Agents needing **new tool types** (Nova's web search, Pixel's image gen) additionally require wiring those tools into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
+No UI changes needed — the roster, icons, and accent colors for Nova / Echo / Pixel / Forge are already wired in `mission-control.tsx`. Agents needing **new tool types** (e.g. Pixel's image gen) additionally require wiring those tools into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
 
 ## Documents
 

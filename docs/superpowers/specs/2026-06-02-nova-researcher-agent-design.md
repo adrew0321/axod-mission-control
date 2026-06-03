@@ -93,3 +93,12 @@ Forge / Pixel (own cycles) · any new tool types · changing the dispatch mechan
 - `pnpm build` clean; `pnpm test` 51/51 (config + prompt; no pure-module logic added).
 - Re-seed: `pnpm seed` upserts Sage's prompt and inserts Nova; roster shows Nova (emerald, Telescope) — `agents` count 3 → 4.
 - Live smoke: operator asks Sage a research question (e.g. "what's the current recommended way to do X?") → Sage dispatches Nova → Nova uses WebSearch/WebFetch, returns a `FINDINGS/SOURCES/SUMMARY` brief with real links → Sage relays. Confirm Nova made no edits.
+
+## What actually happened (2026-06-03)
+
+Shipped on `feature/nova-researcher` exactly as planned — no surprises, no scope changes.
+
+- The "no new tool plumbing" finding held: `WebSearch`/`WebFetch` were already passed through by the runner, so the whole change was a `DISPATCHABLE` entry + dispatch descriptions (`dispatch.ts`), the seed row + Sage-prompt updates + `tool_permissions` (`seed.ts`), and three UI cohesion touches (`mission-control.tsx`). No runner/schema/new-tool changes.
+- Commits: `f0a48c2` (Task 1, dispatch) · `50fa1d2` (Task 2, seed) · `d82118a` (Task 3, UI).
+- Verification clean: `pnpm build` compiled; `pnpm test` stayed **51/51**; `pnpm seed` → `agents: 4`, `tool_permissions: 15`; the `nova` row matched this spec exactly.
+- Live smoke (operator-run): confirmed working — Sage dispatches Nova, the "Scouring the web…" status shows, Nova returns a sourced brief, and Nova makes no edits.
