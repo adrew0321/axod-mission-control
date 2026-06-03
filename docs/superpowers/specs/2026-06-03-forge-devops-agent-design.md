@@ -105,4 +105,4 @@ Pixel (own cycle) · image-generation plumbing · the actual VPS deploy infrastr
 
 - `pnpm build` clean; `pnpm test` stays 51/51 (config + prompt; no pure-module logic added).
 - Re-seed: `pnpm seed` upserts Sage's prompt and inserts Forge; roster shows Forge (amber, Cog) — `agents` count 4 → 5, `tool_permissions` 15 → 21.
-- Live smoke: operator asks Sage a devops task (e.g. "Forge, run the build and tests and report") → Sage dispatches Forge → Forge runs the commands, returns a `DID/RESULTS/NEXT-RISKS` report with real output → Sage relays. Confirm Forge can act (edit/run) but does NOT push or deploy without explicit approval.
+- Live smoke: operator asks Sage a devops task (e.g. "Forge, run the build and tests and report") → Sage dispatches Forge → Forge runs the commands, returns a `DID, RESULTS, NEXT/RISKS` report with real output → Sage relays. Confirm Forge can act (edit/run) but does NOT push or deploy without explicit approval.

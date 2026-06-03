@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add Forge, a full-doer devops/release agent Sage can dispatch to run builds/tests/lint, manage git (branch/commit/tag), and edit infra config — returning a structured DID/RESULTS/NEXT-RISKS report.
+**Goal:** Add Forge, a full-doer devops/release agent Sage can dispatch to run builds/tests/lint, manage git (branch/commit/tag), and edit infra config — returning a structured report (DID, RESULTS, NEXT/RISKS).
 
 **Architecture:** Mirrors the Echo/Nova path — a DB row + a `DISPATCHABLE` enum entry + a Sage-prompt update + permissions, plus three small UI cohesion touches. Forge is a *doer* like Atlas, so it reuses Atlas's existing tools (`Edit`/`Write`/`Bash`) — there are **no runner, schema, or new-tool changes**. The roster UI (Cog icon, amber accent) and `ROLE_LABEL` (`devops → "DevOps"`) are already wired, so **no `page.tsx` change**.
 
@@ -114,7 +114,7 @@ with:
 - [ ] **Step 3: Teach Sage WHEN to use Forge.** Insert this bullet immediately **after** the existing "When a request needs outside or in-depth information ... dispatch Nova to research it ..." bullet:
 
 ```ts
-- When a request is about the build-and-ship side — running build/test/lint, git/release ops (branch/commit/tag), or editing CI/Docker/Caddy/deploy config — dispatch Forge. Forge CAN edit and run, but require explicit operator approval before any push or deploy, and relay Forge's DID/RESULTS/NEXT-RISKS report.
+- When a request is about the build-and-ship side — running build/test/lint, git/release ops (branch/commit/tag), or editing CI/Docker/Caddy/deploy config — dispatch Forge. Forge CAN edit and run, but require explicit operator approval before any push or deploy, and relay Forge's report (DID, RESULTS, NEXT/RISKS).
 ```
 
 - [ ] **Step 4: Add the Forge agent row.** In the `agentRows` array, add this object after the Nova row (after the Nova object's closing `},`, before the closing `]`):
@@ -261,7 +261,7 @@ Expected: build clean; `tests 51 / pass 51 / fail 0`.
 
 - [ ] **Step 1: Drive a devops dispatch.** With `pnpm dev` running and logged in, ask Sage a devops task, e.g.: *"Sage, have Forge run the build and the test suite and report the results."*
 
-- [ ] **Step 2: Verify the flow.** Expect: Sage dispatches Forge ("Forge · via Sage", amber), Forge's status shows "Running the pipeline…", and Forge's reply contains a `DID / RESULTS / NEXT-RISKS` report with **real command output**. Then ask Forge to make a small config edit (e.g. a comment in a config file) and confirm it CAN edit + commit, but does **not** push without explicit approval.
+- [ ] **Step 2: Verify the flow.** Expect: Sage dispatches Forge ("Forge · via Sage", amber), Forge's status shows "Running the pipeline…", and Forge's reply contains a `DID, RESULTS, NEXT/RISKS` report with **real command output**. Then ask Forge to make a small config edit (e.g. a comment in a config file) and confirm it CAN edit + commit, but does **not** push without explicit approval.
 
 - [ ] **Step 3: Note the result** in the spec's wrap-up (whether Forge respected the no-push-without-approval rule, report quality — prompt-tuning candidates).
 
