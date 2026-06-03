@@ -604,7 +604,7 @@ export default function MissionControl({
             const failed = Boolean(evt.errored);
             setMessages((prev) =>
               prev.map((m) => {
-                if (m.id === bubbleId) return { ...m, isStreaming: false };
+                if (m.id === bubbleId) return { ...m, isStreaming: false, dispatchFailed: failed };
                 if (m.dispatch && m.dispatch.status === "working")
                   return {
                     ...m,
@@ -996,94 +996,128 @@ export default function MissionControl({
                 {msg.role === "agent" && (() => {
                   const hasText = msg.content.trim().length > 0;
                   const segments = hasText ? splitMessageSegments(msg.content) : [];
-                  return (
-                    <div className="space-y-1.5">
-                      {msg.dispatchedVia && hasText && !expandedReplies.has(msg.id) ? (
-                        <button
-                          onClick={() => toggleReply(msg.id)}
-                          className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
-                        >
-                          <ChevronDown className="w-3 h-3" />
-                          view {msg.senderName}&apos;s report
-                        </button>
-                      ) : (
-                        <>
-                          {segments.map((segment, i) => (
-                            <div
-                              key={i}
-                              className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
-                              style={{ borderLeftColor: accent, backgroundColor: tint }}
-                            >
-                              <Markdown>{segment}</Markdown>
-                              {msg.isStreaming && i === segments.length - 1 && (
-                                <span
-                                  aria-hidden
-                                  className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
-                                  style={{ backgroundColor: accent }}
-                                />
-                              )}
+
+                  // A dispatched specialist's turn renders as a self-contained
+                  // Orchestrated Dispatch card: status + agent → role + persona
+                  // flavor line, with the raw report nested inside as an
+                  // expandable block. Same render live (isStreaming) and on
+                  // reload (dispatchedVia persists), so the card survives refresh.
+                  if (msg.dispatchedVia) {
+                    const dispatchAgent = team.find((a) => a.id === msg.agentId);
+                    const status = msg.dispatchFailed
+                      ? "failed"
+                      : msg.isStreaming
+                        ? "working"
+                        : "completed";
+                    const expanded = expandedReplies.has(msg.id);
+                    return (
+                      <div className="mt-1 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
+                        <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
+                        <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5" />
+                            Orchestrated Dispatch
+                          </div>
+                          {status === "working" ? (
+                            <span className="text-[#3fb950] animate-pulse">Running</span>
+                          ) : status === "failed" ? (
+                            <span className="text-red-500">Failed</span>
+                          ) : (
+                            <span className="text-[#3fb950]">Done</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
+                          <span
+                            className={`w-5 h-5 rounded bg-gradient-to-br ${
+                              dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
+                            } flex items-center justify-center text-black`}
+                          >
+                            <AgentIcon id={msg.agentId ?? ""} className="w-3 h-3" />
+                          </span>
+                          {msg.senderName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
+                          {dispatchAgent?.role ?? "Specialist"}
+                        </div>
+                        <p className="text-[11px] text-[#8b949e] mt-1 italic">
+                          {dispatchFlavor(msg.agentId, msg.senderName)}
+                        </p>
+
+                        {hasText &&
+                          (expanded ? (
+                            <div className="mt-2 space-y-1.5">
+                              {segments.map((segment, i) => (
+                                <div
+                                  key={i}
+                                  className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
+                                  style={{ borderLeftColor: accent, backgroundColor: tint }}
+                                >
+                                  <Markdown>{segment}</Markdown>
+                                  {msg.isStreaming && i === segments.length - 1 && (
+                                    <span
+                                      aria-hidden
+                                      className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
+                                      style={{ backgroundColor: accent }}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => toggleReply(msg.id)}
+                                className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
+                              >
+                                <ChevronUp className="w-3 h-3" />
+                                hide {msg.senderName}&apos;s report
+                              </button>
                             </div>
-                          ))}
-                          {msg.dispatchedVia && hasText && (
+                          ) : (
                             <button
                               onClick={() => toggleReply(msg.id)}
-                              className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
+                              className="mt-2 text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
                             >
-                              <ChevronUp className="w-3 h-3" />
-                              hide {msg.senderName}&apos;s report
+                              <ChevronDown className="w-3 h-3" />
+                              view {msg.senderName}&apos;s report
                             </button>
-                          )}
-                        </>
-                      )}
+                          ))}
 
-                      {/* No text yet: show a working spinner ONLY when the global
-                          "… is typing" indicator isn't already covering this turn
-                          (i.e. a dispatched specialist's bubble, where isTyping is
-                          false). Avoids a double spinner on a direct @-addressed turn.
-                          When a dispatch card is attached, show just the card. */}
-                      {!hasText && msg.isStreaming && !msg.dispatch && !isTyping && (
+                        {/* Still streaming, no text yet: a small working hint inside the card. */}
+                        {!hasText && msg.isStreaming && (
+                          <div className="mt-2 text-[10.5px] p-2 rounded border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
+                            <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
+                            working…
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Normal agent bubble (Sage, or a direct @-addressed specialist).
+                  return (
+                    <div className="space-y-1.5">
+                      {segments.map((segment, i) => (
+                        <div
+                          key={i}
+                          className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
+                          style={{ borderLeftColor: accent, backgroundColor: tint }}
+                        >
+                          <Markdown>{segment}</Markdown>
+                          {msg.isStreaming && i === segments.length - 1 && (
+                            <span
+                              aria-hidden
+                              className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
+                              style={{ backgroundColor: accent }}
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      {/* No text yet: working spinner when the global "… is typing"
+                          indicator isn't already covering this turn (avoids a
+                          double spinner on a direct @-addressed turn). */}
+                      {!hasText && msg.isStreaming && !isTyping && (
                         <div className="text-xs p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
                           <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
                           working…
                         </div>
                       )}
-
-                      {msg.dispatch && (() => {
-                        const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
-                        const status = msg.dispatch.status;
-                        return (
-                          <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
-                            <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
-                            <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5" />
-                                Orchestrated Dispatch
-                              </div>
-                              {status === "working" ? (
-                                <span className="text-[#3fb950] animate-pulse">Running</span>
-                              ) : status === "failed" ? (
-                                <span className="text-red-500">Failed</span>
-                              ) : (
-                                <span className="text-[#3fb950]">Done</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
-                              <span
-                                className={`w-5 h-5 rounded bg-gradient-to-br ${
-                                  dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
-                                } flex items-center justify-center text-black`}
-                              >
-                                <AgentIcon id={msg.dispatch.agentId} className="w-3 h-3" />
-                              </span>
-                              {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
-                              {dispatchAgent?.role ?? "Specialist"}
-                            </div>
-                            <p className="text-[11px] text-[#8b949e] mt-1 italic">
-                              {dispatchFlavor(msg.dispatch.agentId, msg.dispatch.agentName)}
-                            </p>
-                          </div>
-                        );
-                      })()}
                     </div>
                   );
                 })()}
