@@ -56,7 +56,7 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **v1.1** ✅ | **Echo** (QA critic) + session memory + `@`-mention addressing + roster polish | First post-v1 agent (no new tools — proved the "3rd agent" path); Sage now keeps full session context; `@Atlas`/`@Echo` route straight to a specialist; roster cards got depth + active-state motion. |
 | **v1.2** ✅ | **Nova** (researcher) | No new plumbing — `WebSearch`/`WebFetch` are SDK built-ins already passed through by the runner, so Nova was as cheap as Echo |
 | **v1.3** ✅ | **Forge** (devops) + **Pixel** (designer) | Forge: full doer like Atlas — reuses existing edit/run/git tooling; Sonnet 4.6 over the roadmap's Haiku 4.5 since it edits infra config (Dockerfile/Caddyfile/CI) where mistakes are costly. Pixel: a *code-mockup* designer (HTML/CSS/Tailwind/SVG → Preview tab), so the assumed `image_generate` plumbing was never needed. Roster complete |
-| **v1.4** | Multi-project switcher | Mission Control itself + client repos |
+| **v1.4** ✅ | Multi-project switcher | Switch the active repo (cookie-persisted) + add projects in-app (validates a local git repo); Mission Control seeded as a 2nd project. Mission Control itself + client repos |
 | **v1.5** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
 

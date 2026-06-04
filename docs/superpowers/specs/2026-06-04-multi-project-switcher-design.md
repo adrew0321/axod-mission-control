@@ -85,3 +85,11 @@ Pure (no DB/fs), unit-tested under `tsx --test`:
 
 - **Unit (node:test):** `resolveActiveProject` (each fallback branch + empty), `slugifyProjectId` (spaces/punctuation/case/collapse), `validateNewProjectInput` (missing name, missing path, ok).
 - **Build + manual:** `pnpm build` clean; `pnpm test` green (existing 54 + new). Manual: switch AXOD Creative ↔ Mission Control (header reflects it, persists across reload); add a project pointing at a real local repo and confirm it becomes active; add with a bad path and confirm the inline error; dispatch an agent and confirm it operates in the switched project's repo.
+
+## What actually happened (2026-06-04)
+
+Shipped on `feature/multi-project-switcher` via subagent-driven execution (8 tasks). Build clean, `pnpm test` **59/59** (54 + 5 new helper tests). The plan's deliberate cross-task type errors (page.tsx props until Task 6, the AddProjectDialog import until Task 7) resolved exactly as designed; first fully-green build at Task 7.
+
+- Implemented per spec: `mc_active_project` cookie + `resolveActiveProject` (page.tsx), `getOrCreateActiveSession`, `POST /api/projects/active` (switch), `POST /api/projects` (add — validates the path exists, is a directory, and contains `.git`), the `ProjectSwitcher` dropdown, the `AddProjectDialog` modal, and Mission Control seeded as a 2nd project (`process.cwd()`).
+- Operator smoke confirmed: switching works and persists across reload; the add-project validation correctly rejects a non-git folder with an inline error.
+- Follow-ups identified during the smoke (next epic): a **repo-path picker** (browse the filesystem) + "create new local repo" in the add-project modal, and a **project File Explorer** tab with a themed tree + syntax-highlighted viewer. Tracked separately.
