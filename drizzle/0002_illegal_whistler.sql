@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `dispatched_via` text REFERENCES agents(id);

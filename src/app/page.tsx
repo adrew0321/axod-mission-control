@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
 import MissionControl from "@/components/mission-control";
 import { type Agent, type Message, type Session } from "@/lib/mock-data";
+import { dispatchAttribution } from "@/lib/dispatch-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -139,8 +140,7 @@ export default async function HomePage() {
     const agentRow = m.agent_id ? teamRows.find((a) => a.id === m.agent_id) : undefined;
     const senderName =
       m.role === "user" ? "AXOD" : agentRow?.name ?? "System";
-    const attribution =
-      m.agent_id && m.agent_id !== "sage" && m.role === "agent" ? "via Sage" : undefined;
+    const attribution = dispatchAttribution(m.dispatched_via);
 
     return {
       id: m.id,
@@ -150,6 +150,7 @@ export default async function HomePage() {
       content: m.content,
       timestamp: formatTime(m.created_at),
       attribution,
+      dispatchedVia: m.dispatched_via ?? undefined,
     };
   });
 

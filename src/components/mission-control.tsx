@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Compass,
   ChevronDown,
+  ChevronUp,
   Terminal as TerminalIcon,
   FileText,
   Send,
@@ -37,6 +38,7 @@ import { parseMention } from "@/lib/mention";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 import PlanView from "@/components/plan-view";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
+import { dispatchFlavor } from "@/lib/dispatch-presentation";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -83,6 +85,9 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   if (agentId === "sage") return { accent: "#3b82f6", tint: "rgba(59,130,246,0.08)" };
   if (agentId === "atlas") return { accent: "#6366f1", tint: "rgba(99,102,241,0.08)" };
   if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
+  if (agentId === "nova") return { accent: "#10b981", tint: "rgba(16,185,129,0.08)" };
+  if (agentId === "forge") return { accent: "#f59e0b", tint: "rgba(245,158,11,0.08)" };
+  if (agentId === "pixel") return { accent: "#ec4899", tint: "rgba(236,72,153,0.08)" };
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
@@ -98,6 +103,9 @@ const IDLE_STATE: Record<string, string> = {
   sage: "Standing by at the helm",
   atlas: "Hammer cooled — ready to forge",
   echo: "Red pen capped — for now",
+  nova: "Telescope stowed — ready to dig",
+  forge: "Gears idle — ready to ship",
+  pixel: "Brushes down — ready to design",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -161,6 +169,85 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
     }
   }
 
+  if (agentId === "nova") {
+    // Nova — the researcher with a telescope.
+    switch (tool) {
+      case "WebSearch":
+      case "WebFetch":
+        return "Scouring the web…";
+      case "Read":
+        return `Reading up on ${file}`;
+      case "Grep":
+        return input?.pattern ? `Digging for "${clip(input.pattern, 28)}"` : "Digging through the code…";
+      case "Glob":
+        return "Casing the codebase…";
+      case "TodoWrite":
+        return "Outlining the findings…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "forge") {
+    // Forge — the devops/release engineer at the controls (machinery, not smithing).
+    switch (tool) {
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        if (/\bgit\s+(tag|commit|push)\b/.test(cmd)) return "Cutting the release…";
+        if (/\b(deploy|ship|caddy|docker\s+(build|push)|rsync|scp)\b/.test(cmd)) return "Shipping it…";
+        if (/\b(build|test|lint|vitest|jest|pnpm|npm|tsc)\b/.test(cmd)) return "Running the pipeline…";
+        return `Turning the gears: ${clip(input?.command)}`;
+      }
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Wiring up → ${file}`;
+      case "Read":
+        return `Checking the manifest: ${file}`;
+      case "Glob":
+        return "Mapping the pipeline…";
+      case "Grep":
+        return input?.pattern ? `Tracing the config: "${clip(input.pattern, 28)}"` : "Tracing the config…";
+      case "WebFetch":
+      case "WebSearch":
+        return "Consulting the ops docs…";
+      case "TodoWrite":
+        return "Drafting the runbook…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "pixel") {
+    // Pixel — the designer at the easel (studio, not code-logic).
+    switch (tool) {
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Sketching → ${file}`;
+      case "Read":
+        return `Studying the canvas: ${file}`;
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        if (/\b(build|astro|dev|preview|vite|tsc)\b/.test(cmd)) return "Rendering the mockup…";
+        return `Mixing tools: ${clip(input?.command)}`;
+      }
+      case "Glob":
+        return "Surveying the canvas…";
+      case "Grep":
+        return input?.pattern ? `Matching swatches: "${clip(input.pattern, 28)}"` : "Matching swatches…";
+      case "WebFetch":
+      case "WebSearch":
+        return "Gathering inspiration…";
+      case "TodoWrite":
+        return "Sketching the layout…";
+      default:
+        return genericFallback();
+    }
+  }
+
   // Sage — the calm navigator/orchestrator (and default voice).
   switch (tool) {
     case "Read":
@@ -196,6 +283,14 @@ export default function MissionControl({
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const toggleReply = (id: string) =>
+    setExpandedReplies((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   const [activeTab, setActiveTab] = useState<string>("plan");
   const [inputText, setInputText] = useState<string>("");
   const [session] = useState<Session>(initialSession);
@@ -280,7 +375,8 @@ export default function MissionControl({
     setMessages(initialMessages);
   }, [initialMessages]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
   const esRef = useRef<EventSource | null>(null);
 
   function handleStop() {
@@ -293,12 +389,18 @@ export default function MissionControl({
     startTransition(() => router.refresh());
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Keep the conversation pinned to the latest message. Instant (not smooth) so a
+  // post-turn router.refresh() — which briefly swaps the streamed bubbles for their
+  // DB copies — doesn't visibly "snap." Only auto-pins when the operator is already
+  // near the bottom, so scrolling up to read history isn't yanked back down.
   useEffect(() => {
-    scrollToBottom();
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (!didInitialScrollRef.current || nearBottom) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+    }
   }, [messages, isTyping]);
 
   // Refresh the worktree diff whenever the operator opens the Code Diff tab.
@@ -520,6 +622,7 @@ export default function MissionControl({
                 agentId: dispatchAgentId,
                 senderName: dispatchAgentName,
                 attribution: "via Sage",
+                dispatchedVia: "sage",
                 content: "",
                 timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                 isStreaming: true,
@@ -539,7 +642,7 @@ export default function MissionControl({
             const failed = Boolean(evt.errored);
             setMessages((prev) =>
               prev.map((m) => {
-                if (m.id === bubbleId) return { ...m, isStreaming: false };
+                if (m.id === bubbleId) return { ...m, isStreaming: false, dispatchFailed: failed };
                 if (m.dispatch && m.dispatch.status === "working")
                   return {
                     ...m,
@@ -748,7 +851,7 @@ export default function MissionControl({
             </div>
           )}
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-1.5 flex flex-col gap-1">
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
@@ -861,7 +964,7 @@ export default function MissionControl({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-5">
             {messages.length === 0 && (
               <div className="text-center text-[#5c6470] font-mono text-xs py-16 select-none">
                 Let&apos;s start fresh then…
@@ -931,6 +1034,100 @@ export default function MissionControl({
                 {msg.role === "agent" && (() => {
                   const hasText = msg.content.trim().length > 0;
                   const segments = hasText ? splitMessageSegments(msg.content) : [];
+
+                  // A dispatched specialist's turn renders as a self-contained
+                  // Orchestrated Dispatch card: status + agent → role + persona
+                  // flavor line, with the raw report nested inside as an
+                  // expandable block. Same render live (isStreaming) and on
+                  // reload (dispatchedVia persists), so the card survives refresh.
+                  if (msg.dispatchedVia) {
+                    const dispatchAgent = team.find((a) => a.id === msg.agentId);
+                    const status = msg.dispatchFailed
+                      ? "failed"
+                      : msg.isStreaming
+                        ? "working"
+                        : "completed";
+                    const expanded = expandedReplies.has(msg.id);
+                    return (
+                      <div className="mt-1 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
+                        <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
+                        <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5" />
+                            Orchestrated Dispatch
+                          </div>
+                          {status === "working" ? (
+                            <span className="text-[#3fb950] animate-pulse">Running</span>
+                          ) : status === "failed" ? (
+                            <span className="text-red-500">Failed</span>
+                          ) : (
+                            <span className="text-[#3fb950]">Done</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
+                          <span
+                            className={`w-5 h-5 rounded bg-gradient-to-br ${
+                              dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
+                            } flex items-center justify-center text-black`}
+                          >
+                            <AgentIcon id={msg.agentId ?? ""} className="w-3 h-3" />
+                          </span>
+                          {msg.senderName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
+                          {dispatchAgent?.role ?? "Specialist"}
+                        </div>
+                        <p className="text-[11px] text-[#8b949e] mt-1 italic">
+                          {dispatchFlavor(msg.agentId, msg.senderName)}
+                        </p>
+
+                        {hasText &&
+                          (expanded ? (
+                            <div className="mt-2 space-y-1.5">
+                              {segments.map((segment, i) => (
+                                <div
+                                  key={i}
+                                  className="text-xs leading-relaxed p-3 rounded-md border border-l-2 border-[#1e2632] text-[#8b949e]"
+                                  style={{ borderLeftColor: accent, backgroundColor: tint }}
+                                >
+                                  <Markdown>{segment}</Markdown>
+                                  {msg.isStreaming && i === segments.length - 1 && (
+                                    <span
+                                      aria-hidden
+                                      className="inline-block w-[7px] h-3.5 ml-0.5 align-text-bottom rounded-sm animate-blink"
+                                      style={{ backgroundColor: accent }}
+                                    />
+                                  )}
+                                </div>
+                              ))}
+                              <button
+                                onClick={() => toggleReply(msg.id)}
+                                className="text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
+                              >
+                                <ChevronUp className="w-3 h-3" />
+                                hide {msg.senderName}&apos;s report
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => toggleReply(msg.id)}
+                              className="mt-2 text-[10.5px] font-mono text-[#5c6470] hover:text-[#00e0ff] flex items-center gap-1 px-2 py-1 rounded border border-[#1e2632] hover:border-cyan-500/30 transition-colors"
+                            >
+                              <ChevronDown className="w-3 h-3" />
+                              view {msg.senderName}&apos;s report
+                            </button>
+                          ))}
+
+                        {/* Still streaming, no text yet: a small working hint inside the card. */}
+                        {!hasText && msg.isStreaming && (
+                          <div className="mt-2 text-[10.5px] p-2 rounded border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
+                            <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
+                            working…
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // Normal agent bubble (Sage, or a direct @-addressed specialist).
                   return (
                     <div className="space-y-1.5">
                       {segments.map((segment, i) => (
@@ -950,52 +1147,15 @@ export default function MissionControl({
                         </div>
                       ))}
 
-                      {/* No text yet: show a working spinner ONLY when the global
-                          "… is typing" indicator isn't already covering this turn
-                          (i.e. a dispatched specialist's bubble, where isTyping is
-                          false). Avoids a double spinner on a direct @-addressed turn.
-                          When a dispatch card is attached, show just the card. */}
-                      {!hasText && msg.isStreaming && !msg.dispatch && !isTyping && (
+                      {/* No text yet: working spinner when the global "… is typing"
+                          indicator isn't already covering this turn (avoids a
+                          double spinner on a direct @-addressed turn). */}
+                      {!hasText && msg.isStreaming && !isTyping && (
                         <div className="text-xs p-3 rounded-md border bg-[#11161d] border-[#1e2632] text-[#5c6470] flex items-center gap-1.5 font-mono">
                           <RefreshCw className="w-3 h-3 animate-spin text-[#00e0ff]" />
                           working…
                         </div>
                       )}
-
-                      {msg.dispatch && (() => {
-                        const dispatchAgent = team.find((a) => a.id === msg.dispatch!.agentId);
-                        const status = msg.dispatch.status;
-                        return (
-                          <div className="mt-3 p-2.5 bg-[#060810] border border-cyan-500/10 rounded-md relative group overflow-hidden">
-                            <div className="absolute left-0 inset-y-0 w-1 bg-gradient-to-b from-[#00e0ff] to-transparent" />
-                            <div className="flex justify-between items-center text-[9px] font-mono text-cyan-400 uppercase tracking-wider mb-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <Layers className="w-3.5 h-3.5" />
-                                Orchestrated Dispatch
-                              </div>
-                              {status === "working" ? (
-                                <span className="text-[#3fb950] animate-pulse">Running</span>
-                              ) : status === "failed" ? (
-                                <span className="text-red-500">Failed</span>
-                              ) : (
-                                <span className="text-[#3fb950]">Done</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs font-semibold text-[#e6edf3]">
-                              <span
-                                className={`w-5 h-5 rounded bg-gradient-to-br ${
-                                  dispatchAgent?.color ?? "from-blue-400 to-indigo-600"
-                                } flex items-center justify-center text-black`}
-                              >
-                                <AgentIcon id={msg.dispatch.agentId} className="w-3 h-3" />
-                              </span>
-                              {msg.dispatch.agentName} <ArrowRight className="w-3 h-3 text-[#5c6470]" />{" "}
-                              {dispatchAgent?.role ?? "Specialist"}
-                            </div>
-                            <p className="text-[11px] text-[#8b949e] mt-1">{msg.dispatch.task}</p>
-                          </div>
-                        );
-                      })()}
                     </div>
                   );
                 })()}
@@ -1079,8 +1239,6 @@ export default function MissionControl({
                 </span>
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
 
           <div className="px-4 py-2 border-t border-[#1e2632] bg-[#11161d]/50 flex gap-2 overflow-x-auto shrink-0 select-none">
@@ -1373,7 +1531,7 @@ export default function MissionControl({
       </div>
 
       {/* ─── Footer strip ─── */}
-      <footer className="hidden md:flex h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 flex items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
+      <footer className="hidden md:flex h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950] shadow-[0_0_4px_#3fb950]" />
@@ -1384,10 +1542,15 @@ export default function MissionControl({
             WORKDIR: <code className="text-[#8b949e]">{session.worktreePath}</code>
           </span>
         </div>
+        <span className="tracking-wide">
+          Powered by <span className="text-cyan-400">AXOD</span> · Built in Detroit
+        </span>
         <div className="flex items-center gap-3">
           <span className="text-cyan-400">Claude SDK Engine active</span>
           <span>•</span>
           <span>v1.0.0-skeleton</span>
+          <span>•</span>
+          <span>© 2026 AXOD</span>
         </div>
       </footer>
     </div>
