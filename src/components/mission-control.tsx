@@ -87,6 +87,7 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
   if (agentId === "nova") return { accent: "#10b981", tint: "rgba(16,185,129,0.08)" };
   if (agentId === "forge") return { accent: "#f59e0b", tint: "rgba(245,158,11,0.08)" };
+  if (agentId === "pixel") return { accent: "#ec4899", tint: "rgba(236,72,153,0.08)" };
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
@@ -104,6 +105,7 @@ const IDLE_STATE: Record<string, string> = {
   echo: "Red pen capped — for now",
   nova: "Telescope stowed — ready to dig",
   forge: "Gears idle — ready to ship",
+  pixel: "Brushes down — ready to design",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -212,6 +214,35 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
         return "Consulting the ops docs…";
       case "TodoWrite":
         return "Drafting the runbook…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "pixel") {
+    // Pixel — the designer at the easel (studio, not code-logic).
+    switch (tool) {
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Sketching → ${file}`;
+      case "Read":
+        return `Studying the canvas: ${file}`;
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        if (/\b(build|astro|dev|preview|vite|tsc)\b/.test(cmd)) return "Rendering the mockup…";
+        return `Mixing tools: ${clip(input?.command)}`;
+      }
+      case "Glob":
+        return "Surveying the canvas…";
+      case "Grep":
+        return input?.pattern ? `Matching swatches: "${clip(input.pattern, 28)}"` : "Matching swatches…";
+      case "WebFetch":
+      case "WebSearch":
+        return "Gathering inspiration…";
+      case "TodoWrite":
+        return "Sketching the layout…";
       default:
         return genericFallback();
     }
@@ -344,7 +375,8 @@ export default function MissionControl({
     setMessages(initialMessages);
   }, [initialMessages]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
   const esRef = useRef<EventSource | null>(null);
 
   function handleStop() {
@@ -357,12 +389,18 @@ export default function MissionControl({
     startTransition(() => router.refresh());
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Keep the conversation pinned to the latest message. Instant (not smooth) so a
+  // post-turn router.refresh() — which briefly swaps the streamed bubbles for their
+  // DB copies — doesn't visibly "snap." Only auto-pins when the operator is already
+  // near the bottom, so scrolling up to read history isn't yanked back down.
   useEffect(() => {
-    scrollToBottom();
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (!didInitialScrollRef.current || nearBottom) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+    }
   }, [messages, isTyping]);
 
   // Refresh the worktree diff whenever the operator opens the Code Diff tab.
@@ -813,7 +851,7 @@ export default function MissionControl({
             </div>
           )}
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-1.5 flex flex-col gap-1">
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
@@ -926,7 +964,7 @@ export default function MissionControl({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-5">
             {messages.length === 0 && (
               <div className="text-center text-[#5c6470] font-mono text-xs py-16 select-none">
                 Let&apos;s start fresh then…
@@ -1201,8 +1239,6 @@ export default function MissionControl({
                 </span>
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
 
           <div className="px-4 py-2 border-t border-[#1e2632] bg-[#11161d]/50 flex gap-2 overflow-x-auto shrink-0 select-none">

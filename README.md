@@ -2,7 +2,7 @@
 
 > Personal command center for orchestrating AI agent teams to do development work.
 
-**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · **v1.2** — Nova (researcher) · **v1.3** — Forge (devops, on `dev`) · Week 5 (VPS deploy) next · v1 ≈ 90%
+**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · **v1.2** — Nova (researcher) · **v1.3** — Forge (devops) + Pixel (designer) — **full 6-agent roster complete** (on `dev`) · Week 5 (VPS deploy) next · v1 ≈ 90%
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
 **License:** MIT (applied on first public release)
 
@@ -25,9 +25,9 @@ The roster is **DB-driven** — each agent is a row in the `agents` table (id, r
 | ⛬ | **Echo** | QA Critic | Sonnet 4.6 | ✅ shipped (on `dev`) |
 | ⌕ | **Nova** | Researcher | Sonnet 4.6 + web tools | ✅ shipped (on `dev`) |
 | ⛁ | **Forge** | DevOps / CI / Deploy | Sonnet 4.6 | ✅ shipped (on `dev`) |
-| ◊ | **Pixel** | Designer / Mockups | Sonnet 4.6 | v1.3 |
+| ◊ | **Pixel** | Designer / Mockups | Sonnet 4.6 | ✅ shipped (on `dev`) |
 
-> **Echo and Nova shipped** as the first post-v1 agents — both needed **zero new tool plumbing**. Echo (`read_file` + `run_command`) closes the quality loop on Atlas's diffs; Nova's `WebSearch`/`WebFetch` turned out to be SDK built-ins already passed through by the runner, so it was just as cheap. Pixel, which needs image-generation tooling, is next. See [where we're going](#where-were-going).
+> **The full 6-agent roster is shipped** (on `dev`) — Echo, Nova, Forge, and Pixel all needed **zero new tool plumbing**. Echo (`read_file` + `run_command`) closes the quality loop on Atlas's diffs; Nova's `WebSearch`/`WebFetch` were SDK built-ins; Forge reuses Atlas's edit/run/git tools for devops; and Pixel turned out the same — a *code-mockup* designer (HTML/CSS/Tailwind/SVG) that renders in the existing Preview tab, so the roadmap's assumed `image_generate` tooling was never needed (it stays a possible future Pixel power). See [where we're going](#where-were-going).
 
 ## Build phases (5 weeks to v1)
 
@@ -55,7 +55,7 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **v1 (now)** | VPS deploy + HTTPS + one dogfood ship | Closes v1's definition of done |
 | **v1.1** ✅ | **Echo** (QA critic) + session memory + `@`-mention addressing + roster polish | First post-v1 agent (no new tools — proved the "3rd agent" path); Sage now keeps full session context; `@Atlas`/`@Echo` route straight to a specialist; roster cards got depth + active-state motion. |
 | **v1.2** ✅ | **Nova** (researcher) | No new plumbing — `WebSearch`/`WebFetch` are SDK built-ins already passed through by the runner, so Nova was as cheap as Echo |
-| **v1.3** | **Forge** ✅ (devops, shipped) + **Pixel** (designer, pending) | Forge: full doer like Atlas — reuses existing edit/run/git tooling, so no new plumbing; Sonnet 4.6 over the roadmap's Haiku 4.5 since it edits infra config (Dockerfile/Caddyfile/CI) where mistakes are costly. Pixel: still needs new `image_generate` tool plumbing |
+| **v1.3** ✅ | **Forge** (devops) + **Pixel** (designer) | Forge: full doer like Atlas — reuses existing edit/run/git tooling; Sonnet 4.6 over the roadmap's Haiku 4.5 since it edits infra config (Dockerfile/Caddyfile/CI) where mistakes are costly. Pixel: a *code-mockup* designer (HTML/CSS/Tailwind/SVG → Preview tab), so the assumed `image_generate` plumbing was never needed. Roster complete |
 | **v1.4** | Multi-project switcher | Mission Control itself + client repos |
 | **v1.5** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
@@ -70,7 +70,7 @@ Adding a specialist that uses **existing** tools (read / edit / run_command / gi
 3. **Update Sage's system prompt** so it knows the new member exists and when to route to them.
 4. Seed a `tool_permissions` policy (`always` / `ask` / `deny`) per (agent, project, tool).
 
-No UI changes needed — the roster, icons, and accent colors for Nova / Echo / Pixel / Forge are already wired in `mission-control.tsx`. Agents needing **new tool types** (e.g. Pixel's image gen) additionally require wiring those tools into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
+No UI changes needed — the roster, icons, and accent colors for all six agents are already wired in `mission-control.tsx`. Agents needing **new tool types** (e.g. a future raster `image_generate`) would additionally require wiring those tools into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
 
 ## Documents
 

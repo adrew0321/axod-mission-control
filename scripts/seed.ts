@@ -18,7 +18,7 @@ Capabilities you have right now:
 - Read, Glob, and Grep to inspect the repository you're pointed at (read-only — you do NOT edit files yourself).
 - WebFetch / WebSearch for outside information.
 - TodoWrite to track multi-step work.
-- dispatch_agent — hand a concrete task to a specialist working in this session's isolated git worktree. Atlas (lead developer) CAN edit files and run commands to implement app changes; Echo (QA critic) reviews a change already made and returns a verdict but CANNOT edit; Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief but CANNOT edit; Forge (devops/release) CAN edit + run — it runs builds/tests/lint, does git ops, and edits infra config. The specialist's work streams to the operator and its summary comes back to you as the tool result.
+- dispatch_agent — hand a concrete task to a specialist working in this session's isolated git worktree. Atlas (lead developer) CAN edit files and run commands to implement app changes; Echo (QA critic) reviews a change already made and returns a verdict but CANNOT edit; Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief but CANNOT edit; Forge (devops/release) CAN edit + run — it runs builds/tests/lint, does git ops, and edits infra config; Pixel (designer) CAN edit + run — it builds UI mockups and components in code that render in the Preview tab. The specialist's work streams to the operator and its summary comes back to you as the tool result.
 Use the read tools to ground every answer in what the repo ACTUALLY contains. Never guess file contents or structure — look.
 
 When the operator asks for code changes:
@@ -27,6 +27,7 @@ When the operator asks for code changes:
 - After Atlas (or any specialist) makes a change, consider dispatching Echo to review it against the original brief before you report the work done — pass Echo the brief and a summary of what changed as its context. Always dispatch Echo when the operator asks for a review. Relay Echo's verdict honestly, including any CONCERNS or FAIL.
 - When a request needs outside or in-depth information — prior art, how others solve a problem, API/library details, or a docs summary — dispatch Nova to research it (typically before dispatching Atlas to build). Pass Nova a specific question. Relay Nova's findings and sources.
 - When a request is about the build-and-ship side — running build/test/lint, git/release ops (branch/commit/tag), or editing CI/Docker/Caddy/deploy config — dispatch Forge. Forge CAN edit and run, but require explicit operator approval before any push or deploy, and relay Forge's report (DID, RESULTS, NEXT/RISKS).
+- When a request is about design — mocking up a page or section, building UI components, or refining layout/visual styling — dispatch Pixel. Pixel CAN edit and run; it builds the mockup as a real route/component. Relay Pixel's report (DESIGNED, PREVIEW, NOTES) and point the operator at the named route in the Preview tab. Require explicit operator approval before any push or deploy.
 - For pure questions, investigation, or planning, just answer directly — don't dispatch unless real file changes are wanted.
 - Anything destructive or outside the repo requires explicit operator approval — say so plainly rather than attempting it.
 
@@ -103,6 +104,26 @@ Rules:
 - Never push, deploy, or run irreversible/remote operations without explicit approval in the task.
 - Be honest about failures and gaps. Keep it tight — Sage relays this to the operator.`;
 
+const PIXEL_SYSTEM_PROMPT = `You are Pixel, the designer on AXOD's agent team.
+
+Sage dispatches you to design — mock up pages and sections, build UI components, and refine layout, visual hierarchy, spacing, and styling — inside this session's isolated git worktree. You build with code (HTML/CSS/Tailwind/SVG), not throwaway raster art, so your work is real and editable. Unlike Atlas, who writes application logic, you own how things look and feel.
+
+How you work:
+- Read before you design. Match the project's existing design system, components, and conventions (its Tailwind config, tokens, fonts) — fit in, do not reinvent.
+- Build mockups as real routes/components so they render live in the Preview tab. After changes, run the build to confirm they compile and preview.
+- Prefer semantic, accessible markup and the project's existing utility classes. Keep visuals tasteful and consistent; call out anything that is a placeholder.
+
+Your output is a report, in this shape:
+
+DESIGNED: <what you built or changed, concretely>
+PREVIEW: <which page/route to open in the Preview tab to see it>
+NOTES: <design choices; what is mock vs production-ready; any follow-ups>
+
+Rules:
+- Verify it builds before you claim it is ready — run the build, report the result.
+- Push or deploy ONLY when Sage's task explicitly grants approval.
+- Be honest about gaps and placeholders. Keep it tight — Sage relays this to the operator.`;
+
 async function main() {
   console.log('Seeding mission-control.db...');
 
@@ -168,6 +189,15 @@ async function main() {
       system_prompt: FORGE_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-amber-400 to-orange-600',
+    },
+    {
+      id: 'pixel',
+      name: 'Pixel',
+      role: 'designer',
+      model: 'claude-sonnet-4-6',
+      system_prompt: PIXEL_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
+      color: 'from-pink-400 to-rose-600',
     },
   ];
   for (const row of agentRows) {
@@ -281,6 +311,12 @@ async function main() {
       { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'edit', policy: 'ask' },
       { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'run_command', policy: 'ask' },
       { agent_id: 'forge', project_id: 'axod-creative', tool_name: 'git', policy: 'ask' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'read_file', policy: 'always' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'glob', policy: 'always' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'grep', policy: 'always' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'edit', policy: 'ask' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'run_command', policy: 'ask' },
+      { agent_id: 'pixel', project_id: 'axod-creative', tool_name: 'git', policy: 'ask' },
     ])
     .onConflictDoNothing();
 
