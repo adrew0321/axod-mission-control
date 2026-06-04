@@ -16,6 +16,11 @@ export interface Agent {
   lastActive: string;
 }
 
+export interface ProjectOption {
+  id: string;
+  name: string;
+}
+
 export interface Session {
   id: string;
   title: string;
