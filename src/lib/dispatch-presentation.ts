@@ -12,6 +12,8 @@ export function dispatchFlavor(agentId: string | null | undefined, name: string)
       return 'Nova trains the telescope';
     case 'forge':
       return 'Forge fires up the pipeline';
+    case 'pixel':
+      return 'Pixel sets up the easel';
     default:
       return `${name} gets to work`;
   }

@@ -87,6 +87,7 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   if (agentId === "echo") return { accent: "#8b5cf6", tint: "rgba(139,92,246,0.08)" };
   if (agentId === "nova") return { accent: "#10b981", tint: "rgba(16,185,129,0.08)" };
   if (agentId === "forge") return { accent: "#f59e0b", tint: "rgba(245,158,11,0.08)" };
+  if (agentId === "pixel") return { accent: "#ec4899", tint: "rgba(236,72,153,0.08)" };
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
@@ -104,6 +105,7 @@ const IDLE_STATE: Record<string, string> = {
   echo: "Red pen capped — for now",
   nova: "Telescope stowed — ready to dig",
   forge: "Gears idle — ready to ship",
+  pixel: "Brushes down — ready to design",
 };
 function idleState(agentId: string): string {
   return IDLE_STATE[agentId] ?? "Idle — standing by";
@@ -212,6 +214,35 @@ function friendlyActivity(agentId: string, tool: string, input?: Record<string, 
         return "Consulting the ops docs…";
       case "TodoWrite":
         return "Drafting the runbook…";
+      default:
+        return genericFallback();
+    }
+  }
+
+  if (agentId === "pixel") {
+    // Pixel — the designer at the easel (studio, not code-logic).
+    switch (tool) {
+      case "Edit":
+      case "MultiEdit":
+      case "Write":
+      case "NotebookEdit":
+        return `Sketching → ${file}`;
+      case "Read":
+        return `Studying the canvas: ${file}`;
+      case "Bash": {
+        const cmd = typeof input?.command === "string" ? input.command : "";
+        if (/\b(build|astro|dev|preview|vite|tsc)\b/.test(cmd)) return "Rendering the mockup…";
+        return `Mixing tools: ${clip(input?.command)}`;
+      }
+      case "Glob":
+        return "Surveying the canvas…";
+      case "Grep":
+        return input?.pattern ? `Matching swatches: "${clip(input.pattern, 28)}"` : "Matching swatches…";
+      case "WebFetch":
+      case "WebSearch":
+        return "Gathering inspiration…";
+      case "TodoWrite":
+        return "Sketching the layout…";
       default:
         return genericFallback();
     }
