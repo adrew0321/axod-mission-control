@@ -85,6 +85,11 @@ export default function LoginForm() {
       >
         {pending ? "Authenticating..." : "Sign In"}
       </button>
+
+      <p className="mt-5 text-center text-[9.5px] font-mono text-[#5c6470] tracking-wide">
+        Powered by <span className="text-cyan-400">AXOD</span> · Built in Detroit
+      </p>
+      <p className="mt-1 text-center text-[9px] font-mono text-[#3a424d]">© 2026 AXOD</p>
     </form>
   );
 }

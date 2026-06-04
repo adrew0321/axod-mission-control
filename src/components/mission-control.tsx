@@ -1531,7 +1531,7 @@ export default function MissionControl({
       </div>
 
       {/* ─── Footer strip ─── */}
-      <footer className="hidden md:flex h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 flex items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
+      <footer className="hidden md:flex h-8 w-full bg-[#11161d] border-t border-[#1e2632] px-4 items-center justify-between text-[10px] font-mono text-[#5c6470] shrink-0 select-none">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950] shadow-[0_0_4px_#3fb950]" />
@@ -1542,10 +1542,15 @@ export default function MissionControl({
             WORKDIR: <code className="text-[#8b949e]">{session.worktreePath}</code>
           </span>
         </div>
+        <span className="tracking-wide">
+          Powered by <span className="text-cyan-400">AXOD</span> · Built in Detroit
+        </span>
         <div className="flex items-center gap-3">
           <span className="text-cyan-400">Claude SDK Engine active</span>
           <span>•</span>
           <span>v1.0.0-skeleton</span>
+          <span>•</span>
+          <span>© 2026 AXOD</span>
         </div>
       </footer>
     </div>
