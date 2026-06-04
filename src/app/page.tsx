@@ -1,9 +1,12 @@
 import { desc, asc, eq, sql, and, gt } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
 import MissionControl from "@/components/mission-control";
 import { type Agent, type Message, type Session } from "@/lib/mock-data";
 import { dispatchAttribution } from "@/lib/dispatch-presentation";
+import { resolveActiveProject, ACTIVE_PROJECT_COOKIE } from "@/lib/projects";
+import { getOrCreateActiveSession } from "@/lib/active-project";
 
 export const dynamic = "force-dynamic";
 
@@ -40,28 +43,31 @@ function relativeAge(d: Date): string {
 export default async function HomePage() {
   const teamRows = await db.select().from(agents);
 
-  const currentSessionRow = await db
+  const projectRows = await db.select().from(projects);
+  if (projectRows.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#060810] text-[#8b949e] font-mono text-sm">
+        No projects yet — run <code className="text-[#00e0ff] ml-1">pnpm seed</code> to populate
+        the database.
+      </div>
+    );
+  }
+
+  const recentSession = await db
     .select()
     .from(sessions)
     .orderBy(desc(sessions.updated_at))
     .limit(1)
     .then((rows) => rows[0]);
 
-  if (!currentSessionRow) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#060810] text-[#8b949e] font-mono text-sm">
-        No sessions yet — run <code className="text-[#00e0ff] ml-1">pnpm seed</code> to populate
-        the database.
-      </div>
-    );
-  }
+  const jar = await cookies();
+  const project = resolveActiveProject(
+    projectRows,
+    jar.get(ACTIVE_PROJECT_COOKIE)?.value,
+    recentSession?.project_id,
+  )!; // non-null: projectRows is non-empty (guarded above)
 
-  const project = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.id, currentSessionRow.project_id))
-    .limit(1)
-    .then((rows) => rows[0]);
+  const currentSessionRow = await getOrCreateActiveSession(project.id);
 
   // Cleared sessions only surface messages created after the clear marker; the
   // rest stay in the DB (archived). cleared_at is null for un-cleared sessions.
@@ -177,6 +183,8 @@ export default async function HomePage() {
       team={team}
       session={sessionForUi}
       initialMessages={messagesForUi}
+      projects={projectRows.map((p) => ({ id: p.id, name: p.name }))}
+      activeProjectId={project.id}
     />
   );
 }

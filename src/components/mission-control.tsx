@@ -30,7 +30,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Agent, Message, Session } from "@/lib/mock-data";
+import type { Agent, Message, Session, ProjectOption } from "@/lib/mock-data";
+import ProjectSwitcher from "@/components/project-switcher";
+import AddProjectDialog from "@/components/add-project-dialog";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
@@ -44,6 +46,8 @@ export interface MissionControlProps {
   team: Agent[];
   session: Session;
   initialMessages: Message[];
+  projects: ProjectOption[];
+  activeProjectId: string;
 }
 
 // Per-agent identity: a distinct line icon + accent color matching each
@@ -279,9 +283,12 @@ export default function MissionControl({
   team: initialTeam,
   session: initialSession,
   initialMessages,
+  projects,
+  activeProjectId,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
+  const [addProjectOpen, setAddProjectOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
@@ -761,11 +768,11 @@ export default function MissionControl({
 
           <div className="hidden sm:block h-4 w-[1px] bg-[#1e2632]" />
 
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#1e2632] rounded-md cursor-pointer hover:bg-[#1c2330] transition-colors">
-            <span className="text-[9px] font-mono text-[#5c6470] uppercase tracking-wider">PROJECT</span>
-            <span className="text-xs font-semibold text-[#e6edf3]">{session.project}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-[#5c6470]" />
-          </div>
+          <ProjectSwitcher
+            projects={projects}
+            activeProjectId={activeProjectId}
+            onAddProject={() => setAddProjectOpen(true)}
+          />
 
           <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#2a3441] rounded-md">
             <div className="w-2 h-2 rounded-full bg-[#3fb950] animate-pulse shadow-[0_0_8px_#3fb950]" />
@@ -1553,6 +1560,7 @@ export default function MissionControl({
           <span>© 2026 AXOD</span>
         </div>
       </footer>
+      <AddProjectDialog open={addProjectOpen} onClose={() => setAddProjectOpen(false)} />
     </div>
   );
 }
