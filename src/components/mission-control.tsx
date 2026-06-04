@@ -1548,7 +1548,7 @@ export default function MissionControl({
         <div className="flex items-center gap-3">
           <span className="text-cyan-400">Claude SDK Engine active</span>
           <span>•</span>
-          <span>v1.0.0-skeleton</span>
+          <span>v1.3.0</span>
           <span>•</span>
           <span>© 2026 AXOD</span>
         </div>
