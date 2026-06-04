@@ -18,10 +18,10 @@ export const DISPATCH_TOOL_NAME = `mcp__${DISPATCH_SERVER_NAME}__dispatch_agent`
  * Specialists Sage may dispatch. Enum-restricted so Sage can't invent an agent.
  * Sage itself is intentionally absent (no self-dispatch / recursion), as is any
  * agent that isn't yet a real SDK runner. Atlas (developer) implements; Echo (QA
- * critic) reviews; Nova (researcher) investigates; Forge (devops) builds and ships
- * — all run in this session's worktree.
+ * critic) reviews; Nova (researcher) investigates; Forge (devops) builds and ships;
+ * Pixel (designer) mocks up UI — all run in this session's worktree.
  */
-const DISPATCHABLE = ['atlas', 'echo', 'nova', 'forge'] as const;
+const DISPATCHABLE = ['atlas', 'echo', 'nova', 'forge', 'pixel'] as const;
 
 export interface DispatchTokenUsage {
   costUsd?: number;
@@ -65,11 +65,11 @@ function buildTaskPrompt(task: string, context?: string): string {
 export function createDispatchServer(ctx: DispatchContext) {
   const dispatchTool = tool(
     'dispatch_agent',
-    'Hand a concrete, self-contained task to a specialist working in this session\'s isolated git worktree. Atlas (lead developer) edits files and runs commands to implement app changes; Echo (QA critic) reviews work already made and returns a verdict (cannot edit); Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief (cannot edit); Forge (devops/release) runs builds/tests/lint, manages git, and edits infra config (can edit + run). You (Sage) plan and coordinate; the specialist does the work. Returns the specialist\'s final summary.',
+    'Hand a concrete, self-contained task to a specialist working in this session\'s isolated git worktree. Atlas (lead developer) edits files and runs commands to implement app changes; Echo (QA critic) reviews work already made and returns a verdict (cannot edit); Nova (researcher) investigates via web search/fetch and repo reading and returns a sourced brief (cannot edit); Forge (devops/release) runs builds/tests/lint, manages git, and edits infra config (can edit + run); Pixel (designer) builds UI mockups and components in code that render in the Preview tab (can edit + run). You (Sage) plan and coordinate; the specialist does the work. Returns the specialist\'s final summary.',
     {
       agent_id: z
         .enum(DISPATCHABLE)
-        .describe('Which specialist to dispatch: "atlas" (lead developer — implements app code changes), "echo" (QA critic — reviews a change already made and returns a verdict; cannot edit), "nova" (researcher — investigates via web + repo and returns a sourced brief; cannot edit), or "forge" (devops/release — runs builds/tests/lint, git ops, and edits infra config; can edit + run).'),
+        .describe('Which specialist to dispatch: "atlas" (lead developer — implements app code changes), "echo" (QA critic — reviews a change already made and returns a verdict; cannot edit), "nova" (researcher — investigates via web + repo and returns a sourced brief; cannot edit), "forge" (devops/release — runs builds/tests/lint, git ops, and edits infra config; can edit + run), or "pixel" (designer — builds UI mockups/components in code that render in the Preview tab; can edit + run).'),
       task: z
         .string()
         .min(1)
