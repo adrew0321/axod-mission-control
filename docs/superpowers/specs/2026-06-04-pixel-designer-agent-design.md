@@ -106,3 +106,15 @@ The roster already renders Pixel (Palette icon + pink accent via `AGENT_ICON`/`A
 - `pnpm build` clean; `pnpm test` stays 54/54 (config + prompt; no pure-module logic added).
 - Re-seed: `pnpm seed` upserts Sage's prompt and inserts Pixel; roster shows Pixel (pink, Palette) — `agents` count 5 → 6, `tool_permissions` 21 → 27.
 - Live smoke: operator asks Sage a design task (e.g. "Pixel, mock up a pricing section for the landing page") → Sage dispatches Pixel → Pixel builds the mockup as a real route/component, runs the build, returns a `DESIGNED / PREVIEW / NOTES` report → operator opens the named route in the Preview tab and sees it. Confirm Pixel can act (edit/run) but does NOT push or deploy without explicit approval.
+
+## What actually happened (2026-06-04)
+
+Shipped on `feature/pixel-designer` via subagent-driven execution. Pixel completes the six-agent v1 roster (Sage · Atlas · Echo · Nova · Forge · Pixel).
+
+- The "no new plumbing" finding held: a code-mockup designer reuses Atlas's existing `Edit`/`Write`/`Bash`, and the Preview tab already builds + serves the worktree site, so no `image_generate` tool was needed. The change was the `DISPATCHABLE` entry + dispatch descriptions, the seed row + Sage-prompt updates + `tool_permissions`, a `dispatchFlavor` `pixel` case ("Pixel sets up the easel"), and three UI cohesion touches. `ROLE_LABEL` already had `designer → "Designer"`, so no `page.tsx` change.
+- Model: `claude-sonnet-4-6` (Haiku 4.5 documented fallback).
+- Verification clean: `pnpm build` compiled; `pnpm test` 54/54 (51 + 3 helper tests); `pnpm seed` → `agents: 6`, `tool_permissions: 27`; the `pixel` row matched this spec exactly; roster shows Pixel (pink, Palette, "Designer").
+- **Two pre-existing UI bugs surfaced during the smoke and were fixed (not caused by Pixel)** — committed on this branch:
+  1. **Conversation "snap back up"** on load / after a turn. Root cause: an unguarded `scrollIntoView({behavior:"smooth"})` plus the `persisted` handler dropping the streamed bubbles and then `router.refresh()` re-adding their DB copies with new React keys (remount + scroll collapse). Fixed by pinning to the bottom instantly via the container's `scrollTop`, with a near-bottom guard + first-load jump.
+  2. **Roster not scrollable** (6th agent, Pixel, cut off). Fixed by adding `min-h-0` to the roster `ScrollArea` (the same flexbox fix as the terminal scroll, commit `5608212`).
+- Live design smoke (operator-run): the dispatch flow was observed working (Sage scans the target repo and dispatches Pixel); a full mockup-render confirmation can be run anytime on `dev`.
