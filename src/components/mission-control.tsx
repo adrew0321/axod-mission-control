@@ -375,7 +375,8 @@ export default function MissionControl({
     setMessages(initialMessages);
   }, [initialMessages]);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const didInitialScrollRef = useRef(false);
   const esRef = useRef<EventSource | null>(null);
 
   function handleStop() {
@@ -388,12 +389,18 @@ export default function MissionControl({
     startTransition(() => router.refresh());
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
+  // Keep the conversation pinned to the latest message. Instant (not smooth) so a
+  // post-turn router.refresh() — which briefly swaps the streamed bubbles for their
+  // DB copies — doesn't visibly "snap." Only auto-pins when the operator is already
+  // near the bottom, so scrolling up to read history isn't yanked back down.
   useEffect(() => {
-    scrollToBottom();
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (!didInitialScrollRef.current || nearBottom) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+    }
   }, [messages, isTyping]);
 
   // Refresh the worktree diff whenever the operator opens the Code Diff tab.
@@ -844,7 +851,7 @@ export default function MissionControl({
             </div>
           )}
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             <div className="p-1.5 flex flex-col gap-1">
               {otherAgents.map((member) => {
                 const isWorking = workingAgents.includes(member.id);
@@ -957,7 +964,7 @@ export default function MissionControl({
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-5">
             {messages.length === 0 && (
               <div className="text-center text-[#5c6470] font-mono text-xs py-16 select-none">
                 Let&apos;s start fresh then…
@@ -1232,8 +1239,6 @@ export default function MissionControl({
                 </span>
               </div>
             )}
-
-            <div ref={messagesEndRef} />
           </div>
 
           <div className="px-4 py-2 border-t border-[#1e2632] bg-[#11161d]/50 flex gap-2 overflow-x-auto shrink-0 select-none">
