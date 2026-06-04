@@ -38,6 +38,8 @@ export interface Message {
   content: string;
   timestamp: string;
   attribution?: string;
+  dispatchedVia?: string;
+  dispatchFailed?: boolean;
   isStreaming?: boolean;
   dispatch?: {
     agentId: string;

@@ -39,6 +39,7 @@ export const messages = sqliteTable('messages', {
   id: text('id').primaryKey(),
   session_id: text('session_id').references(() => sessions.id).notNull(),
   agent_id: text('agent_id').references(() => agents.id),
+  dispatched_via: text('dispatched_via').references(() => agents.id),
   role: text('role').notNull(),
   content: text('content').notNull(),
   tool_calls: text('tool_calls', { mode: 'json' }).$type<unknown>(),

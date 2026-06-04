@@ -15,6 +15,13 @@
       "when": 1780423241846,
       "tag": "0001_cuddly_chamber",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780520175682,
+      "tag": "0002_illegal_whistler",
+      "breakpoints": true
     }
   ]
 }
