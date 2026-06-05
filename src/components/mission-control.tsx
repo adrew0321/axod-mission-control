@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useTransition, useCallback } from "
 import { useRouter } from "next/navigation";
 import {
   Compass,
+  FolderTree,
   ChevronDown,
   ChevronUp,
   Terminal as TerminalIcon,
@@ -39,6 +40,7 @@ import { splitMessageSegments } from "@/lib/message-segments";
 import { parseMention } from "@/lib/mention";
 import TerminalView, { type TerminalLine } from "@/components/terminal-view";
 import PlanView from "@/components/plan-view";
+import FileExplorer from "@/components/file-explorer";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
 import { dispatchFlavor } from "@/lib/dispatch-presentation";
 
@@ -1383,6 +1385,18 @@ export default function MissionControl({
                   </span>
                 )}
               </button>
+
+              <button
+                onClick={() => setActiveTab("files")}
+                className={`px-2 sm:px-3 flex items-center gap-1 sm:gap-1.5 border-b-2 text-[10px] sm:text-xs font-mono uppercase tracking-wider transition-colors ${
+                  activeTab === "files"
+                    ? "border-[#00e0ff] text-[#00e0ff] font-semibold"
+                    : "border-transparent text-[#5c6470] hover:text-[#8b949e]"
+                }`}
+              >
+                <FolderTree className="w-3.5 h-3.5" />
+                Files
+              </button>
             </div>
 
             <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-mono text-[#8b949e]">
@@ -1486,6 +1500,8 @@ export default function MissionControl({
                 <TerminalView lines={terminalLines} />
               </div>
             )}
+
+            {activeTab === "files" && <FileExplorer projectId={activeProjectId} />}
           </div>
         </section>
       </main>
