@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { PanelLeftClose, PanelLeftOpen, RefreshCw } from "lucide-react";
+import { defineVividTheme, VIVID_THEME } from "@/lib/monaco-theme";
 
 // Monaco is heavy and browser-only — load it lazily, client-side, only when the
 // Code tab is open. @monaco-editor/react fetches the editor via its default CDN
@@ -172,7 +173,8 @@ export default function DiffViewer({
             ) : (
               <DiffEditor
                 height="100%"
-                theme="vs-dark"
+                theme={VIVID_THEME}
+                beforeMount={defineVividTheme}
                 language={languageFromPath(active?.path ?? "")}
                 original={active?.original ?? ""}
                 modified={active?.modified ?? ""}
