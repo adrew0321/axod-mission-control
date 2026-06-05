@@ -61,3 +61,11 @@ Operator opens **Files** → `FileTree` fetches `/api/files?projectId=<active>&d
 ## Out of scope (later epics)
 
 Repo-path picker / create-repo (Epic B) · broader font/color polish beyond the tree + syntax (Epic C) · editing, search, image/binary rendering, diff/blame.
+
+## What actually happened (2026-06-04)
+
+Shipped on `feature/file-explorer` via subagent-driven execution (7 tasks). Build clean, `pnpm test` **64/64** (59 + 5 new helper tests).
+
+- Implemented per spec: pure helpers (`fileLanguage`/`fileIcon`/`EXCLUDED_DIRS` in `file-tree.ts`, `resolveWithinRoot` in `safe-path.ts`); `GET /api/files` (list) + `GET /api/files/content` (size/binary-guarded), both `projectId`-scoped and path-traversal-guarded; the lazy recursive `FileTree`; `FileExplorer` with a read-only Monaco viewer; a shared `vivid-dark` Monaco theme applied to both the Files viewer and the Code Diff tab.
+- **One fix mid-build:** `lucide-react@1.16` tightened `IconComponentProps` (now requires `iconNode`), so the dynamic-by-name icon lookup's `ComponentType` cast didn't typecheck — switched to lucide's own `LucideIcon` type via an `unknown` cast. (The implementer correctly flagged it as BLOCKED rather than improvising.)
+- Operator smoke confirmed: tree renders the active repo (no `node_modules`/`.git`), folders lazy-load with the Vivid icons/colors, files open syntax-highlighted, and switching projects resets the tree. Epics B (repo-path picker) and C (broader polish) remain.
