@@ -69,3 +69,12 @@ Open modal → `FolderPicker` loads `os.homedir()` → operator navigates (each 
 ## Out of scope
 
 Remote `git clone`, file (non-directory) browsing in the picker, editing/removing projects, recursive repo search.
+
+## What actually happened (2026-06-05)
+
+Shipped on `feature/repo-picker` via subagent-driven execution (6 tasks). Build clean, `pnpm test` **68/68** (64 + 4 new helper tests).
+
+- Implemented per spec: `validateRepoName`/`breadcrumbSegments` (tested); `GET /api/fs/browse` (home default, `isRepo`, Windows drives, auth-gated, security note in code); `POST /api/projects` `create` flag (mkdir + `git init -b`); `FolderPicker` (breadcrumb + up + drive switcher + list); `AddProjectDialog` rewritten with the existing/create mode toggle.
+- No blockers this round; all builds green at each task.
+- Operator smoke confirmed: both modes work (pick an existing repo, or create a new one that gets `git init`'d), and validation rejects bad new-folder names.
+- Follow-ups requested during the smoke (next): **remove a project** from the switcher, and a **resizable Files panel** (drag the tree/viewer split). Tracked as the next enhancements.
