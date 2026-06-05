@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
+import FolderPicker from "@/components/folder-picker";
+import { validateRepoName } from "@/lib/fs-browse";
 
 export default function AddProjectDialog({
   open,
@@ -12,8 +14,10 @@ export default function AddProjectDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const [mode, setMode] = useState<"existing" | "create">("existing");
   const [name, setName] = useState("");
-  const [repoPath, setRepoPath] = useState("");
+  const [browsed, setBrowsed] = useState<string | null>(null); // current folder in the picker
+  const [newFolder, setNewFolder] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("dev");
   const [githubUrl, setGithubUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -21,15 +25,35 @@ export default function AddProjectDialog({
 
   if (!open) return null;
 
+  function join(parent: string, child: string): string {
+    const sep = /^[A-Za-z]:/.test(parent) ? "\\" : "/";
+    return parent.replace(/[\\/]+$/, "") + sep + child;
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!browsed) {
+      setError(mode === "create" ? "Pick a parent folder." : "Pick the repo folder.");
+      return;
+    }
+    let repoPath = browsed;
+    if (mode === "create") {
+      const v = validateRepoName(newFolder);
+      if (!v.ok) {
+        setError(v.error);
+        return;
+      }
+      repoPath = join(browsed, newFolder.trim());
+    }
+
     setPending(true);
     try {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, repoPath, defaultBranch, githubUrl }),
+        body: JSON.stringify({ name, repoPath, defaultBranch, githubUrl, create: mode === "create" }),
       });
       if (!res.ok) {
         const b = await res.json().catch(() => ({}));
@@ -54,7 +78,7 @@ export default function AddProjectDialog({
       <form
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={submit}
-        className="w-[400px] bg-[#11161d] border border-[#1e2632] rounded-lg p-6 shadow-lg shadow-black/40"
+        className="w-[440px] bg-[#11161d] border border-[#1e2632] rounded-lg p-6 shadow-lg shadow-black/40"
       >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-semibold text-[#e6edf3] font-heading">Add project</h2>
@@ -66,8 +90,32 @@ export default function AddProjectDialog({
         <label className={labelCls}>Name</label>
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="My Client Site" required />
 
-        <label className={labelCls}>Repo path (local)</label>
-        <input className={inputCls} value={repoPath} onChange={(e) => setRepoPath(e.target.value)} placeholder="c:/Users/.../my-repo" required />
+        <div className="flex gap-1 mb-3 p-0.5 bg-[#060810] border border-[#2a3441] rounded-md text-[11px] font-mono">
+          {(["existing", "create"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setError(null); }}
+              className={`flex-1 py-1 rounded transition-colors ${
+                mode === m ? "bg-[#161c25] text-[#00e0ff]" : "text-[#5c6470] hover:text-[#8b949e]"
+              }`}
+            >
+              {m === "existing" ? "Use existing repo" : "Create new"}
+            </button>
+          ))}
+        </div>
+
+        <label className={labelCls}>{mode === "create" ? "Parent folder" : "Repo folder"}</label>
+        <div className="mb-3">
+          <FolderPicker value={browsed} onChange={setBrowsed} />
+        </div>
+
+        {mode === "create" && (
+          <>
+            <label className={labelCls}>New folder name</label>
+            <input className={inputCls} value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder="my-new-repo" />
+          </>
+        )}
 
         <label className={labelCls}>Default branch</label>
         <input className={inputCls} value={defaultBranch} onChange={(e) => setDefaultBranch(e.target.value)} placeholder="dev" />
@@ -86,7 +134,7 @@ export default function AddProjectDialog({
           disabled={pending}
           className="w-full bg-[#00e0ff] hover:bg-[#00c0dd] disabled:opacity-50 text-black font-bold py-2 rounded-md text-xs transition-colors"
         >
-          {pending ? "Adding…" : "Add project"}
+          {pending ? "Working…" : mode === "create" ? "Create + add project" : "Add project"}
         </button>
       </form>
     </div>

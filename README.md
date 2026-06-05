@@ -57,7 +57,8 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **v1.2** ✅ | **Nova** (researcher) | No new plumbing — `WebSearch`/`WebFetch` are SDK built-ins already passed through by the runner, so Nova was as cheap as Echo |
 | **v1.3** ✅ | **Forge** (devops) + **Pixel** (designer) | Forge: full doer like Atlas — reuses existing edit/run/git tooling; Sonnet 4.6 over the roadmap's Haiku 4.5 since it edits infra config (Dockerfile/Caddyfile/CI) where mistakes are costly. Pixel: a *code-mockup* designer (HTML/CSS/Tailwind/SVG → Preview tab), so the assumed `image_generate` plumbing was never needed. Roster complete |
 | **v1.4** ✅ | Multi-project switcher | Switch the active repo (cookie-persisted) + add projects in-app (validates a local git repo); Mission Control seeded as a 2nd project. Mission Control itself + client repos |
-| **Workspace** ✅ | File Explorer tab | Browse the active project's repo — themed lazy tree (file-type icons + colors) + read-only Monaco viewer (Vivid syntax theme, also applied to Code Diff). Epic A of 3 (B: in-app repo-path picker, C: broader theme polish) |
+| **Workspace** ✅ | File Explorer tab | Browse the active project's repo — themed lazy tree (file-type icons + colors) + read-only Monaco viewer (Vivid syntax theme, also applied to Code Diff). Epic A of 3 |
+| **Workspace** ✅ | Add-project repo picker | Browse the machine's folders to pick an existing local git repo, or create a new one (mkdir + `git init`), from the Add-project modal. Epic B of 3 (C: broader theme polish remains) |
 | **v1.5** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
 
