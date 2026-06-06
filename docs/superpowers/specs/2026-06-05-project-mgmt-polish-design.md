@@ -62,3 +62,10 @@ No DOM/DB; unit-tested:
 ## Out of scope
 
 Renaming/editing projects, multi-select removal, undo, resizing other workspace panes, deleting repo files on disk.
+
+## What actually happened (2026-06-06)
+
+Shipped on `feature/project-mgmt-polish` (5 tasks; helpers via a subagent, the route + two component rewrites applied directly for speed). Build clean, `pnpm test` **72/72** (68 + 4 new helper tests).
+
+- Implemented per spec: `clampTreeWidth`/`nextActiveProjectId` (tested); `DELETE /api/projects/[id]` (last-project guard, 404, FK-safe manual cascade, active-cookie repoint, no fs); `ProjectSwitcher` per-row trash + inline confirm ("files on disk are kept"); `FileExplorer` draggable splitter (clamped 160–560, `localStorage` persist, double-click reset).
+- Operator smoke confirmed: remove non-active / active (repoints) / last-project guard all work; the Files tree resizes, persists across reload, and double-click resets.
