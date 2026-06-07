@@ -43,6 +43,8 @@ import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
 import { dispatchFlavor } from "@/lib/dispatch-presentation";
 import { type LiveFeedEvent } from "@/lib/live-feed";
 import LiveFeedView from "@/components/live-feed-view";
+import TaskBoardView from "@/components/task-board-view";
+import type { BoardColumns } from "@/lib/task-board";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -51,6 +53,7 @@ export interface MissionControlProps {
   projects: ProjectOption[];
   activeProjectId: string;
   initialLiveFeedEvents: LiveFeedEvent[];
+  initialTaskBoard: BoardColumns;
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -241,6 +244,7 @@ export default function MissionControl({
   projects,
   activeProjectId,
   initialLiveFeedEvents,
+  initialTaskBoard,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
@@ -248,10 +252,22 @@ export default function MissionControl({
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [activeSection, setActiveSection] = useState<string>("agent-team");
   const [liveFeedEvents, setLiveFeedEvents] = useState<LiveFeedEvent[]>(initialLiveFeedEvents);
+  const [taskBoard, setTaskBoard] = useState<BoardColumns>(initialTaskBoard);
 
   useEffect(() => {
     setLiveFeedEvents(initialLiveFeedEvents);
   }, [initialLiveFeedEvents]);
+
+  // Keep the board in sync when the server re-renders (e.g. after a dispatch refresh).
+  useEffect(() => {
+    setTaskBoard(initialTaskBoard);
+  }, [initialTaskBoard]);
+
+  // Re-fetch the board after a create/move/delete that doesn't trigger a full refresh.
+  const refreshTaskBoard = async () => {
+    const res = await fetch(`/api/tasks?project_id=${encodeURIComponent(activeProjectId)}`);
+    if (res.ok) setTaskBoard((await res.json()) as BoardColumns);
+  };
 
   // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
@@ -808,7 +824,15 @@ export default function MissionControl({
           onLogout={handleLogout}
         />
 
-        {activeSection === "live-feed" ? (
+        {activeSection === "task-board" ? (
+          <TaskBoardView
+            board={taskBoard}
+            projectId={activeProjectId}
+            onSelectSession={handleSelectSession}
+            onDispatched={handleSelectSession}
+            onRefresh={refreshTaskBoard}
+          />
+        ) : activeSection === "live-feed" ? (
           <LiveFeedView
             events={liveFeedEvents}
             team={team}
