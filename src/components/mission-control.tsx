@@ -20,11 +20,6 @@ import {
   ArrowRight,
   ShieldCheck,
   Eye,
-  Hammer,
-  Telescope,
-  Bug,
-  Palette,
-  Cog,
   Users,
   MessageSquare,
   Briefcase,
@@ -32,6 +27,9 @@ import {
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Agent, Message, Session, ProjectOption } from "@/lib/mock-data";
+import NavSidebar from "@/components/nav-sidebar";
+import RosterPanel from "@/components/roster-panel";
+import { AgentIcon } from "@/components/mission-control-bits";
 import ProjectSwitcher from "@/components/project-switcher";
 import AddProjectDialog from "@/components/add-project-dialog";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
@@ -52,37 +50,6 @@ export interface MissionControlProps {
   activeProjectId: string;
 }
 
-// Per-agent identity: a distinct line icon + accent color matching each
-// personality, used for the avatar, roster card border, and name.
-const AGENT_ICON: Record<string, LucideIcon> = {
-  sage: Compass, // navigator / orchestrator
-  atlas: Hammer, // builder / smith
-  nova: Telescope, // researcher
-  echo: Bug, // QA critic
-  pixel: Palette, // designer
-  forge: Cog, // devops
-};
-
-const AGENT_ACCENT: Record<string, { border: string; name: string; bg: string }> = {
-  sage: { border: "border-cyan-500/40", name: "text-cyan-300", bg: "bg-cyan-500/30" },
-  atlas: { border: "border-indigo-500/40", name: "text-indigo-300", bg: "bg-indigo-500/30" },
-  nova: { border: "border-emerald-500/40", name: "text-emerald-300", bg: "bg-emerald-500/30" },
-  echo: { border: "border-violet-500/40", name: "text-violet-300", bg: "bg-violet-500/30" },
-  pixel: { border: "border-pink-500/40", name: "text-pink-300", bg: "bg-pink-500/30" },
-  forge: { border: "border-amber-500/40", name: "text-amber-300", bg: "bg-amber-500/30" },
-};
-
-// Raw accent hex per agent, fed to the `--glow` CSS var so the active card's
-// breathing glow + sheen tint match the agent's identity. Falls back to cyan.
-const AGENT_GLOW: Record<string, string> = {
-  sage: "#00e0ff",
-  atlas: "#6366f1",
-  nova: "#10b981",
-  echo: "#8b5cf6",
-  pixel: "#ec4899",
-  forge: "#f59e0b",
-};
-
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
 // The operator is cyan; Sage is a distinct blue (so "you vs Sage" reads at a
 // glance); other agents use their own hue.
@@ -97,26 +64,9 @@ function speakerStyle(role: string, agentId?: string | null): { accent: string; 
   return { accent: "#93c5fd", tint: "rgba(147,197,253,0.06)" };
 }
 
-function AgentIcon({ id, className }: { id: string; className?: string }) {
-  const Icon = AGENT_ICON[id] ?? Sparkles;
-  return <Icon className={className} />;
-}
-
 // Each agent has its own voice in the STATE panel. The persona flavors the verb,
 // but the exact target (file / command / pattern) always stays visible so the
 // operator knows precisely what's happening.
-const IDLE_STATE: Record<string, string> = {
-  sage: "Standing by at the helm",
-  atlas: "Hammer cooled — ready to forge",
-  echo: "Red pen capped — for now",
-  nova: "Telescope stowed — ready to dig",
-  forge: "Gears idle — ready to ship",
-  pixel: "Brushes down — ready to design",
-};
-function idleState(agentId: string): string {
-  return IDLE_STATE[agentId] ?? "Idle — standing by";
-}
-
 function friendlyActivity(agentId: string, tool: string, input?: Record<string, unknown>): string {
   const basename = (p: unknown) => (typeof p === "string" ? p.split(/[\\/]/).pop() || p : "");
   const clip = (s: unknown, n = 40) => {
@@ -809,139 +759,18 @@ export default function MissionControl({
       </header>
 
       <main className="flex-1 w-full flex overflow-hidden">
-        {/* ─── LEFT PANE: TEAM ROSTER ─── */}
-        <section className={`w-full md:w-[280px] bg-[#11161d] border-r border-[#1e2632] flex flex-col shrink-0 ${
-          mobileActiveTab === "team" ? "flex" : "hidden md:flex"
-        }`}>
-          <div className="p-3 border-b border-[#1e2632] flex items-center justify-between shrink-0 select-none">
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono text-[#5c6470] tracking-widest uppercase">AGENT TEAM</span>
-              <span className="bg-[#161c25] border border-[#2a3441] text-[#e6edf3] px-1.5 py-0.2 rounded text-[9px] font-mono">
-                {team.length}
-              </span>
-            </div>
-            <button className="text-[#00e0ff] hover:text-[#00c0dd] transition-colors">
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
+        {/* ─── LEFT: NAV RAIL (view switcher) ─── */}
+        <NavSidebar onLogout={handleLogout} />
 
-          {sage && (
-            <div className="p-4 border-b border-[#1e2632] bg-gradient-to-b from-[#00e0ff]/[0.03] to-transparent relative group">
-              <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-gradient-to-b from-cyan-400 to-blue-500 rounded-r" />
-              <div className="text-[9px] font-mono text-[#00e0ff] tracking-wider uppercase mb-2">ORCHESTRATOR</div>
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
-                    workingAgents.includes("sage")
-                      ? "shadow-[0_0_16px_-3px_#00e0ff] ring-1 ring-white/20"
-                      : "shadow-cyan-500/10"
-                  }`}
-                >
-                  <AgentIcon id="sage" className="w-5 h-5" />
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#11161d] bg-[#3fb950] shadow-[0_0_5px_#3fb950] animate-pulse" />
-                </div>
-                <div className="flex-1 min-width-0">
-                  <div className="font-semibold text-sm text-[#e6edf3] font-heading leading-tight">{sage.name}</div>
-                  <div className="text-[10px] font-mono text-[#8b949e]">Orchestration Engine</div>
-                </div>
-              </div>
-
-              <div className="mt-3 p-2 bg-[#161c25] border border-[#1e2632] rounded text-[11px] leading-relaxed text-[#8b949e]">
-                <span className="font-mono text-[9px] text-[#5c6470] uppercase tracking-wider block mb-1">STATUS</span>
-                {workingAgents.includes("sage") ? (
-                  <span className="text-[#00e0ff] flex items-center gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
-                    <span className="line-clamp-2">{agentActivity.sage ?? "Working…"}</span>
-                  </span>
-                ) : (
-                  <span className="text-[#8b949e] line-clamp-2">{idleState("sage")}</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          <ScrollArea className="flex-1 min-h-0">
-            <div className="p-1.5 flex flex-col gap-1">
-              {otherAgents.map((member) => {
-                const isWorking = workingAgents.includes(member.id);
-                const activity = agentActivity[member.id];
-                const accent = AGENT_ACCENT[member.id] ?? { border: "border-[#00e0ff]/40", name: "text-[#e6edf3]", bg: "bg-[#161c25]/40" };
-                return (
-                <div
-                  key={member.id}
-                  style={{ "--glow": AGENT_GLOW[member.id] ?? "#00e0ff" } as React.CSSProperties}
-                  className={`group relative overflow-hidden p-2.5 rounded-lg border transition-all duration-200 cursor-pointer flex flex-col gap-2 ring-1 ring-inset ring-white/[0.04] shadow-md shadow-black/40 hover:-translate-y-0.5 hover:shadow-lg ${accent.bg} ${
-                    isWorking
-                      ? `${accent.border} animate-breathe`
-                      : "border-transparent hover:border-[#2a3441]"
-                  }`}
-                >
-                  {/* top-lit glass highlight for depth */}
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white/[0.05] to-transparent"
-                  />
-                  {/* slow diagonal sheen sweep while the agent is active */}
-                  {isWorking && (
-                    <span
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 animate-sheen bg-[linear-gradient(110deg,transparent_35%,rgba(255,255,255,0.06)_50%,transparent_65%)] bg-[length:250%_100%]"
-                    />
-                  )}
-                  <div className="relative flex items-start gap-2.5">
-                    <div
-                      className={`w-8 h-8 rounded-md bg-gradient-to-br ${member.color} flex items-center justify-center text-black relative shadow-md transition-shadow duration-300 ${
-                        isWorking ? "ring-1 ring-white/20 shadow-[0_0_14px_-3px_var(--glow)]" : ""
-                      }`}
-                    >
-                      <AgentIcon id={member.id} className="w-4 h-4" />
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-[#11161d] ${
-                          isWorking ? "bg-[#3fb950] shadow-[0_0_4px_#3fb950] animate-pulse" : "bg-[#5c6470]"
-                        }`}
-                      />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-baseline">
-                        <span className={`font-semibold text-xs font-heading ${accent.name}`}>{member.name}</span>
-                        <span className="text-[9px] font-mono text-[#5c6470]">
-                          {isWorking ? "now" : member.lastActive}
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-mono text-[#8b949e]">{member.role}</div>
-                    </div>
-                  </div>
-
-                  <div className="p-1.5 bg-[#0a0e14]/50 rounded border border-[#1e2632]/80 text-[10px] text-[#8b949e]">
-                    <div
-                      className={`font-semibold flex items-center gap-1 mb-0.5 ${
-                        isWorking ? "text-[#3fb950]" : "text-[#5c6470]"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block w-1 h-1 rounded-full ${
-                          isWorking ? "bg-[#3fb950] animate-ping" : "bg-[#5c6470]"
-                        }`}
-                      />
-                      {isWorking ? "ACTIVE" : "STATUS"}
-                    </div>
-                    <p className="line-clamp-2 leading-normal">
-                      {isWorking ? activity ?? "Working…" : idleState(member.id)}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-between items-center text-[9px] font-mono text-[#5c6470]">
-                    <span className="bg-[#1c2330] text-[#8b949e] px-1.5 py-0.5 rounded border border-[#2a3441]">
-                      {member.model}
-                    </span>
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          </ScrollArea>
-        </section>
+        {/* ─── AGENT TEAM VIEW · column 1: roster ─── */}
+        <RosterPanel
+          team={team}
+          sage={sage}
+          otherAgents={otherAgents}
+          workingAgents={workingAgents}
+          agentActivity={agentActivity}
+          mobileActive={mobileActiveTab === "team"}
+        />
 
         {/* ─── MIDDLE PANE: ORCHESTRATOR CHAT ─── */}
         <section className={`flex-1 bg-[#0a0e14] border-r border-[#1e2632] flex flex-col min-w-0 md:min-w-[400px] ${
