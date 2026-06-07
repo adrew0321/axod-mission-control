@@ -154,3 +154,25 @@ All routes are `verifySession`-gated (cookie auth, like the rest of the app).
 Assignee/direct-to-specialist routing · per-card tags/labels · within-column reordering ·
 SSE-driven live board · cross-project "all projects" aggregation toggle (v1 scopes to the
 active project) · bulk actions.
+
+## What actually happened (2026-06-07)
+
+Shipped on `feature/task-board` (7 commits) via subagent-driven execution. Build clean,
+`pnpm test` **84/84**. Implemented per spec, with these notes from the smoke test:
+
+- **Dispatch had to actually run Sage.** A turn only runs when the *client* opens the SSE
+  stream. The first cut seeded the user message in the PATCH route, but nothing opened the
+  stream, so a dispatched card just sat there. Fix: the PATCH route now **returns** the
+  seeded `prompt` (instead of inserting it) along with the new `sessionId`; the client
+  switches to that session and runs the prompt through the **same `sendText` path the chat
+  box uses** — which is what streams + persists the turn. (`src/app/api/tasks/[id]/route.ts`,
+  `handleTaskDispatched` + the `pendingDispatch` effect in `mission-control.tsx`.)
+- **`session` was frozen at mount** (`useState(initialSession)` with no sync), so it never
+  reflected `router.refresh()`. Made it track the `initialSession` prop so switching/
+  dispatching re-points the chat. This also firmed up plain session-selection.
+- `handleSendMessage` was refactored to delegate to a reusable `sendText(text)` (body
+  unchanged) so dispatch and the chat form share one path.
+- Auto cards are **session-level** and dedupe any session linked to a manual card; idle
+  empty sessions (no agent messages) are filtered via a `hasActivity` count in `getTaskBoard`.
+- Pre-existing `dev` breakage fixed along the way: the stale `nav-sections.test.ts`
+  assertion (Live Feed had flipped sections to live without updating it).

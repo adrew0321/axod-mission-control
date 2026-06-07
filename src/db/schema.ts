@@ -81,6 +81,19 @@ export const artifacts = sqliteTable('artifacts', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const tasks = sqliteTable('tasks', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
+  title: text('title').notNull(),
+  description: text('description'),
+  // 'todo' | 'in_progress' | 'done' (the board column)
+  status: text('status').notNull(),
+  // Set when the card is dispatched; links the card to its session run.
+  session_id: text('session_id').references(() => sessions.id),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 export const auth_users = sqliteTable('auth_users', {
   id: text('id').primaryKey(),
   email: text('email').unique().notNull(),

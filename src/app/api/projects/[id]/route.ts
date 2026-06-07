@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { projects, sessions, messages, approvals, artifacts, tool_permissions } from '@/db/schema';
+import { projects, sessions, messages, approvals, artifacts, tool_permissions, tasks } from '@/db/schema';
 import { SESSION_COOKIE, verifySession, cookieOptions } from '@/lib/auth';
 import { ACTIVE_PROJECT_COOKIE } from '@/lib/projects';
 import { nextActiveProjectId } from '@/lib/ui-helpers';
@@ -36,6 +36,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
       await db.delete(artifacts).where(inArray(artifacts.session_id, sessionIds));
       await db.delete(sessions).where(inArray(sessions.id, sessionIds));
     }
+    await db.delete(tasks).where(eq(tasks.project_id, id));
     await db.delete(tool_permissions).where(eq(tool_permissions.project_id, id));
     await db.delete(projects).where(eq(projects.id, id));
   } catch (e) {

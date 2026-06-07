@@ -12,7 +12,9 @@ test('NAV_SECTIONS has unique ids and required fields', () => {
   }
 });
 
-test('Agent Team is the only live section', () => {
+test('agent-team is live and every soon section stays soon', () => {
   const live = NAV_SECTIONS.filter((s) => s.status === 'live').map((s) => s.id);
-  assert.deepEqual(live, ['agent-team']);
+  assert.ok(live.includes('agent-team'), 'agent-team is live');
+  // Live sections are the ones with a real view wired up.
+  assert.deepEqual(live, ['agent-team', 'live-feed', 'task-board']);
 });

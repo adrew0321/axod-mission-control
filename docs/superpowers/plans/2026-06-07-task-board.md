@@ -1,5 +1,7 @@
 # Task Board Implementation Plan
 
+> **STATUS: ✅ Shipped 2026-06-07** on `feature/task-board` (build clean, 84/84 tests). See the spec's "What actually happened" for the one runtime deviation (dispatch returns the prompt for the client to stream, rather than seeding it server-side).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a hybrid Kanban **Task Board** view to Mission Control: operator-created cards that dispatch through Sage, alongside read-only session-level cards that mirror agent work.
