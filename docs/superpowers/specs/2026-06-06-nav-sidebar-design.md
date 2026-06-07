@@ -67,3 +67,13 @@ The section list is a typed constant; a node:test asserts intent so flags don't 
 ## Out of scope (later epics)
 
 C2 polish (typography/spacing/thread/accents) · making any `soon` section functional (Skills/Memory/Dreaming/Scheduler/etc.) · a real `runtime` field or Hermes/OpenClaw runtime integration (the badge is cosmetic now) · drag-resizing the navbar (it's a two-state toggle).
+
+## What actually happened (2026-06-06)
+
+Shipped on `feature/nav-sidebar` via inline execution. Build clean, `pnpm test` **74/74** (72 + 2 `NAV_SECTIONS` tests).
+
+- The design **evolved during the smoke** (operator feedback): instead of the roster living *inside* the navbar, the rail became a thin **view-switcher** and the **roster moved out** into `RosterPanel` as the first column of the **Agent Team view** (`rail | roster | session logs | workspace`). "Agent Team" is the one live view; the other sections (Live Feed / Task Board / Proposals / Skills / Memory / Dreaming / Scheduler) are dimmed "soon" placeholders that will each become their own view.
+- Shared agent bits (`AGENT_ICON/ACCENT/GLOW`, `AgentIcon`, `idleState`) were extracted to `mission-control-bits.tsx` so the thread and the roster share one source.
+- Each agent shows a cosmetic `claude-sdk` runtime badge (the seam for a future `runtime` field → Hermes/OpenClaw runtimes).
+- One alignment fix from the smoke: the roster header was `p-3` (uneven with the `h-11` Session Logs / tab headers); set to `h-11` so all top sub-headers' bottom borders line up, and the roster section forced to full height.
+- **Next epics (queued):** C2 polish; making the `soon` sections live (Skills/Memory/Dreaming/Scheduler/Live Feed/Task Board/Proposals); the real Hermes runtime integration + Dream/Curator engine.
