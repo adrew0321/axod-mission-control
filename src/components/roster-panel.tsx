@@ -27,11 +27,11 @@ export default function RosterPanel({
 }) {
   return (
     <section
-      className={`w-full md:w-[260px] bg-[#11161d] border-r border-[#1e2632] flex flex-col shrink-0 ${
+      className={`w-full md:w-[260px] h-full min-h-0 overflow-hidden bg-[#11161d] border-r border-[#1e2632] flex flex-col shrink-0 ${
         mobileActive ? "flex" : "hidden md:flex"
       }`}
     >
-      <div className="p-3 border-b border-[#1e2632] flex items-center justify-between shrink-0 select-none">
+      <div className="h-11 px-3 border-b border-[#1e2632] flex items-center justify-between shrink-0 select-none">
         <div className="flex items-center gap-2">
           <span className="text-[10px] font-mono text-[#5c6470] tracking-widest uppercase">AGENT TEAM</span>
           <span className="bg-[#161c25] border border-[#2a3441] text-[#e6edf3] px-1.5 py-0.2 rounded text-[9px] font-mono">
