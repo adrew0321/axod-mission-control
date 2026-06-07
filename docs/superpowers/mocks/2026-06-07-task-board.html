@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Task Board Mock</title>
+  <style>
+    body {font-family: 'Inter', system-ui, sans-serif; background: #0d1117; color: #c9d1d9; margin:0; padding:20px;}
+    .board {display:flex; gap:16px; overflow-x:auto;}
+    .column {background: rgba(255,255,255,0.04); border-radius:12px; flex:0 0 300px; display:flex; flex-direction:column;}
+    .column-header {padding:12px 16px; font-weight:600; font-size:1.1rem; border-bottom:1px solid rgba(255,255,255,0.08);}
+    .card {background: rgba(255,255,255,0.08); margin:12px; padding:12px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.2); transition:transform .2s;}
+    .card:hover {transform:translateY(-2px); background: rgba(255,255,255,0.12);}
+    .tag {display:inline-block; background:#1f6feb; color:#fff; border-radius:4px; padding:2px 6px; font-size:0.75rem; margin-right:4px;}
+  </style>
+</head>
+<body>
+  <h1 style="font-family:'Inter',sans-serif; margin-bottom:24px;">🚀 Task Board (Kanban) – Mockup</h1>
+  <div class="board">
+    <div class="column" id="todo">
+      <div class="column-header">📝 To‑Do</div>
+      <div class="card">
+        <div class="tag">backend</div>
+        <strong>Persist Todo snapshots</strong>
+        <p>Save Todo items as `artifacts` of type "plan".</p>
+      </div>
+      <div class="card">
+        <div class="tag">frontend</div>
+        <strong>Design column layout</strong>
+        <p>Create responsive CSS grid for the board.</p>
+      </div>
+    </div>
+    <div class="column" id="in‑progress">
+      <div class="column-header">⚙️ In‑Progress</div>
+      <div class="card">
+        <div class="tag">api</div>
+        <strong>Implement `savePlanSnapshot`</strong>
+        <p>Write helper in `src/lib/plans.ts`.</p>
+      </div>
+    </div>
+    <div class="column" id="done">
+      <div class="column-header">✅ Done</div>
+      <div class="card">
+        <div class="tag">devops</div>
+        <strong>Merge Live Feed to main</strong>
+        <p>Live Feed feature deployed and merged.</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

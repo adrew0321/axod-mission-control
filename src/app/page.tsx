@@ -8,6 +8,7 @@ import { dispatchAttribution } from "@/lib/dispatch-presentation";
 import { resolveActiveProject, ACTIVE_PROJECT_COOKIE } from "@/lib/projects";
 import { getOrCreateActiveSession } from "@/lib/active-project";
 import { getLiveFeed } from "@/lib/live-feed";
+import { getTaskBoard } from "@/lib/task-board-data";
 
 export const dynamic = "force-dynamic";
 
@@ -180,6 +181,7 @@ export default async function HomePage() {
   void sageRow;
 
   const liveFeedEvents = await getLiveFeed();
+  const initialTaskBoard = await getTaskBoard(project.id);
 
   return (
     <MissionControl
@@ -189,6 +191,7 @@ export default async function HomePage() {
       projects={projectRows.map((p) => ({ id: p.id, name: p.name }))}
       activeProjectId={project.id}
       initialLiveFeedEvents={liveFeedEvents}
+      initialTaskBoard={initialTaskBoard}
     />
   );
 }

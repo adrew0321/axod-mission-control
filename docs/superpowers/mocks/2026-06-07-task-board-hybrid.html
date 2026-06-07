@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Task Board — hybrid (reflects agents + you direct work)</title>
+<style>
+  :root{
+    --bg:#0a0e14; --rail:#0d1117; --panel:#11161d; --card:#161c25;
+    --border:#1e2632; --border2:#2a3441; --cyan:#00e0ff; --text:#e6edf3;
+    --muted:#8b949e; --dim:#5c6470; --green:#3fb950; --amber:#f0a020; --violet:#a371f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:13px}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  .rail{width:180px;background:var(--rail);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+  .rail .top{height:44px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--border)}
+  .rail .top span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+  .rail .group{padding:8px 6px 2px;font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:#3a424d}
+  .nav{display:flex;align-items:center;gap:8px;margin:1px 6px;padding:6px 8px;border-radius:6px;font-size:11px;color:var(--muted)}
+  .nav.active{background:#11233a;color:var(--cyan)}
+  .nav.soon{color:#3a424d}
+  .nav .soon-tag{margin-left:auto;font-size:8px;letter-spacing:.1em;text-transform:uppercase}
+  .nav .ico{width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;flex-shrink:0}
+  .sep{height:1px;background:var(--border);margin:8px 6px}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .head{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .head .title{display:flex;align-items:center;gap:10px}
+  .head .title b{font-family:Georgia,serif;font-weight:600;font-size:14px}
+  .legend{display:flex;gap:12px;font-size:10px;color:var(--dim);align-items:center}
+  .legend .k{display:inline-flex;align-items:center;gap:4px}
+  .pip{width:8px;height:8px;border-radius:2px}
+  .pip.auto{background:var(--cyan)} .pip.you{background:var(--amber)}
+  .newbtn{font-size:11px;color:#06210f;background:var(--cyan);border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-family:inherit}
+  .toolbar{display:flex;align-items:center;gap:14px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;background:#0c1117}
+
+  .board{flex:1;display:flex;gap:14px;padding:16px;overflow-x:auto;align-items:flex-start}
+  .col{flex:0 0 310px;background:var(--panel);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;max-height:100%}
+  .col-h{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .col-h .dot{width:7px;height:7px;border-radius:50%}
+  .col-h .nm{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .col-h .ct{margin-left:auto;font-size:9px;color:var(--dim);background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:1px 6px}
+  .col.todo .dot{background:var(--dim)} .col.prog .dot{background:var(--amber)} .col.done .dot{background:var(--green)}
+  .col.prog{border-color:rgba(240,160,32,.25)}
+  .cards{padding:10px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;min-height:60px}
+
+  .c{background:var(--card);border:1px solid var(--border);border-left:2px solid var(--accent,var(--border2));border-radius:8px;padding:10px 11px;position:relative}
+  .c .t{font-size:12.5px;color:var(--text);line-height:1.35;margin-bottom:7px;padding-right:16px}
+  .c .src{font-size:9px;color:var(--dim);margin-bottom:8px;display:flex;align-items:center;gap:5px}
+  .c .foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tag{font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--border2);background:#0f141b;color:var(--muted)}
+  .tag.proj{color:#7ee787;border-color:#23371f}
+  .av{width:18px;height:18px;border-radius:5px;color:#000;font-size:9px;font-weight:700;font-family:Georgia,serif;display:flex;align-items:center;justify-content:center}
+  .av.sage{background:linear-gradient(135deg,#22d3ee,#3b82f6)} .av.forge{background:linear-gradient(135deg,#fb923c,#ef4444)}
+  .av.pixel{background:linear-gradient(135deg,#f472b6,#a371f7)} .av.nova{background:linear-gradient(135deg,#34d399,#06b6d4)}
+  .av.scout{background:linear-gradient(135deg,#fbbf24,#f59e0b)}
+  .assign{font-size:9px;color:var(--cyan);border:1px dashed #1f3a44;border-radius:4px;padding:1px 6px;margin-left:auto;cursor:pointer}
+  .working{display:inline-flex;gap:4px;align-items:center;color:var(--amber);font-size:10px}
+  .spin{width:9px;height:9px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+
+  /* origin marker (top-right corner) */
+  .c .origin{position:absolute;top:8px;right:9px;font-size:8px;letter-spacing:.06em;text-transform:uppercase}
+  .c.auto{ }
+  .c.auto .origin{color:var(--cyan)}
+  .c.auto .origin::before{content:"● auto"}
+  .c.you{cursor:grab}
+  .c.you .origin{color:var(--amber)}
+  .c.you .origin::before{content:"⋮⋮ you";letter-spacing:0}
+  .c.auto::after{content:"⌁ locked · driven by agent";position:absolute;bottom:6px;right:9px;font-size:8px;color:#3a424d}
+  .c.auto{padding-bottom:18px}
+
+  /* mid-drag ghost showing dispatch */
+  .c.ghost{opacity:.65;border-style:dashed!important;border-color:var(--cyan)!important;transform:rotate(-1.2deg);box-shadow:0 8px 20px rgba(0,0,0,.5)}
+  .c.ghost .disp{color:var(--cyan);font-size:9px;margin-top:6px;display:flex;gap:4px;align-items:center}
+  .dropline{height:2px;background:var(--cyan);box-shadow:0 0 8px var(--cyan);border-radius:2px;margin:2px 0}
+
+  .newcard{margin:10px;border:1px dashed var(--border2);border-radius:8px;padding:9px;color:var(--dim);font-size:11px;text-align:center;cursor:pointer}
+  .note{position:fixed;bottom:12px;left:196px;font-size:10px;color:var(--dim);max-width:62vw;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="top"><span>Mission Control</span></div>
+    <div class="group">Operational</div>
+    <div class="nav"><span class="ico"></span>Agent Team</div>
+    <div class="nav"><span class="ico"></span>Live Feed</div>
+    <div class="nav active"><span class="ico"></span>Task Board</div>
+    <div class="nav soon"><span class="ico"></span>Proposals<span class="soon-tag">soon</span></div>
+    <div class="sep"></div>
+    <div class="group">System</div>
+    <div class="nav soon"><span class="ico"></span>Skills<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Memory<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Dreaming<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Scheduler<span class="soon-tag">soon</span></div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div class="title"><b>Task Board</b></div>
+      <button class="newbtn">+ New task</button>
+    </div>
+    <div class="toolbar">
+      <div class="legend">
+        <span class="k"><span class="pip auto"></span>auto · mirrors agent work (locked)</span>
+        <span class="k"><span class="pip you"></span>yours · drag to In-Progress to dispatch</span>
+      </div>
+      <span style="margin-left:auto;font-size:10px;color:var(--dim)">All projects ▾</span>
+    </div>
+
+    <div class="board">
+      <!-- TO-DO -->
+      <div class="col todo">
+        <div class="col-h"><span class="dot"></span><span class="nm">To-Do</span><span class="ct">4</span></div>
+        <div class="cards">
+          <div class="c you">
+            <div class="origin"></div>
+            <div class="t">Make the Skills section live</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span><span class="assign">assign ▾</span></div>
+          </div>
+
+          <!-- card being dragged → about to dispatch -->
+          <div class="c you ghost">
+            <div class="origin"></div>
+            <div class="t">Add drizzle-zod validators to routes</div>
+            <div class="foot"><span class="tag">api</span><span class="tag proj">axod-creative</span></div>
+            <div class="disp">⇣ release to <b>Forge</b> on drop · Sage spawns a session</div>
+          </div>
+
+          <div class="c you">
+            <div class="origin"></div>
+            <div class="t">Wire the Dream/Curator cron</div>
+            <div class="foot"><span class="tag">backend</span><span class="tag proj">mission-control</span><span class="assign">assign ▾</span></div>
+          </div>
+
+          <div class="c auto" style="--accent:var(--violet)">
+            <div class="origin"></div>
+            <div class="t">Persist Todo snapshots as plan artifacts</div>
+            <div class="src">◷ pending todo · plan "live-feed"</div>
+            <div class="foot"><span class="tag">backend</span><span class="tag proj">mission-control</span></div>
+          </div>
+        </div>
+        <div class="newcard">+ add a task</div>
+      </div>
+
+      <!-- IN PROGRESS -->
+      <div class="col prog">
+        <div class="col-h"><span class="dot"></span><span class="nm">In-Progress</span><span class="ct">2</span></div>
+        <div class="cards">
+          <div class="dropline"></div>
+          <div class="c auto" style="--accent:var(--amber)">
+            <div class="origin"></div>
+            <div class="t">Add a GitHub Actions CI pipeline</div>
+            <div class="src"><span class="working"><span class="spin"></span>Forge working · session "ci-setup"</span></div>
+            <div class="foot"><span class="tag">devops</span><span class="tag proj">mission-control</span><span class="av forge">F</span></div>
+          </div>
+          <div class="c you" style="--accent:#f472b6">
+            <div class="origin"></div>
+            <div class="t">Login screen — vivid variant polish</div>
+            <div class="src">⏳ dispatched by you · awaiting approval (Write)</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span><span class="av pixel">P</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DONE -->
+      <div class="col done">
+        <div class="col-h"><span class="dot"></span><span class="nm">Done</span><span class="ct">3</span></div>
+        <div class="cards">
+          <div class="c you" style="--accent:var(--green)">
+            <div class="origin"></div>
+            <div class="t">Collapsible nav rail + Agent Team view</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span></div>
+          </div>
+          <div class="c auto" style="--accent:var(--green)">
+            <div class="origin"></div>
+            <div class="t">Reproduce + root-cause scroll-snap bug</div>
+            <div class="src">✓ Scout replied · resolved</div>
+            <div class="foot"><span class="tag">bug</span><span class="tag proj">mission-control</span><span class="av scout">B</span></div>
+          </div>
+          <div class="c auto" style="--accent:var(--green)">
+            <div class="origin"></div>
+            <div class="t">Research candidate validation libs</div>
+            <div class="src">✓ Nova replied · recommended drizzle-zod</div>
+            <div class="foot"><span class="tag">research</span><span class="tag proj">axod-creative</span><span class="av nova">N</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="note"><b>Hybrid:</b> <span style="color:var(--cyan)">auto</span> cards are read-only roll-ups of what agents are already doing (plan todos · active sessions · completed replies). <span style="color:var(--amber)">your</span> cards are created &amp; draggable — drag one into In-Progress and Sage dispatches the assignee, then it auto-advances to Done. One board, both worlds.</div>
+</body>
+</html>

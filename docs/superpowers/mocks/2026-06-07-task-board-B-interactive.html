@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Task Board B — interactive (drag → dispatch)</title>
+<style>
+  :root{
+    --bg:#0a0e14; --rail:#0d1117; --panel:#11161d; --card:#161c25;
+    --border:#1e2632; --border2:#2a3441; --cyan:#00e0ff; --text:#e6edf3;
+    --muted:#8b949e; --dim:#5c6470; --green:#3fb950; --amber:#f0a020; --violet:#a371f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:13px}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  .rail{width:180px;background:var(--rail);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+  .rail .top{height:44px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid var(--border)}
+  .rail .top span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+  .rail .group{padding:8px 6px 2px;font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:#3a424d}
+  .nav{display:flex;align-items:center;gap:8px;margin:1px 6px;padding:6px 8px;border-radius:6px;font-size:11px;color:var(--muted)}
+  .nav.active{background:#11233a;color:var(--cyan)}
+  .nav.soon{color:#3a424d}
+  .nav .soon-tag{margin-left:auto;font-size:8px;letter-spacing:.1em;text-transform:uppercase}
+  .nav .ico{width:14px;height:14px;border:1.5px solid currentColor;border-radius:3px;flex-shrink:0}
+  .sep{height:1px;background:var(--border);margin:8px 6px}
+
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .head{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .head .title{display:flex;align-items:center;gap:10px}
+  .head .title b{font-family:Georgia,serif;font-weight:600;font-size:14px}
+  .banner{font-size:10px;color:var(--amber);background:rgba(240,160,32,.08);border:1px solid rgba(240,160,32,.3);padding:3px 9px;border-radius:999px}
+  .newbtn{font-size:11px;color:#06210f;background:var(--cyan);border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-family:inherit}
+
+  .board{flex:1;display:flex;gap:14px;padding:16px;overflow-x:auto;align-items:flex-start}
+  .col{flex:0 0 300px;background:var(--panel);border:1px solid var(--border);border-radius:10px;display:flex;flex-direction:column;max-height:100%}
+  .col-h{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .col-h .dot{width:7px;height:7px;border-radius:50%}
+  .col-h .nm{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+  .col-h .ct{margin-left:auto;font-size:9px;color:var(--dim);background:var(--card);border:1px solid var(--border2);border-radius:4px;padding:1px 6px}
+  .col.backlog .dot{background:var(--dim)} .col.dispatch .dot{background:var(--cyan);box-shadow:0 0 6px var(--cyan)}
+  .col.prog .dot{background:var(--amber)} .col.done .dot{background:var(--green)}
+  .cards{padding:10px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;min-height:60px}
+
+  .c{background:var(--card);border:1px solid var(--border);border-left:2px solid var(--accent,var(--border2));border-radius:8px;padding:10px 11px;cursor:grab;position:relative}
+  .c::before{content:"⋮⋮";position:absolute;top:8px;right:9px;color:var(--dim);font-size:11px;letter-spacing:-2px}
+  .c .t{font-size:12.5px;color:var(--text);line-height:1.35;margin-bottom:7px;padding-right:14px}
+  .c .foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .tag{font-size:9px;padding:1px 6px;border-radius:4px;border:1px solid var(--border2);background:#0f141b;color:var(--muted)}
+  .tag.proj{color:#7ee787;border-color:#23371f}
+  .assign{font-size:9px;color:var(--cyan);border:1px dashed #1f3a44;border-radius:4px;padding:1px 6px;margin-left:auto}
+  .av{width:18px;height:18px;border-radius:5px;color:#000;font-size:9px;font-weight:700;font-family:Georgia,serif;display:flex;align-items:center;justify-content:center}
+  .av.sage{background:linear-gradient(135deg,#22d3ee,#3b82f6)} .av.forge{background:linear-gradient(135deg,#fb923c,#ef4444)}
+  .av.pixel{background:linear-gradient(135deg,#f472b6,#a371f7)} .av.nova{background:linear-gradient(135deg,#34d399,#06b6d4)}
+
+  /* drop zone hint on dispatch column */
+  .col.dispatch{border-color:rgba(0,224,255,.4);box-shadow:inset 0 0 0 1px rgba(0,224,255,.06)}
+  .dropzone{margin:0 10px 10px;border:1px dashed rgba(0,224,255,.4);border-radius:8px;padding:14px;text-align:center;color:var(--cyan);font-size:10px;line-height:1.5}
+  .ghost{opacity:.5;border-style:dashed!important;transform:rotate(-1deg)}
+  .working{display:inline-flex;gap:4px;align-items:center;color:var(--amber);font-size:10px}
+  .spin{width:9px;height:9px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:s .8s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+
+  .newcard{margin:10px;border:1px dashed var(--border2);border-radius:8px;padding:9px;color:var(--dim);font-size:11px;text-align:center;cursor:pointer}
+  .note{position:fixed;bottom:14px;left:196px;font-size:10px;color:var(--dim);max-width:60vw}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="top"><span>Mission Control</span></div>
+    <div class="group">Operational</div>
+    <div class="nav"><span class="ico"></span>Agent Team</div>
+    <div class="nav"><span class="ico"></span>Live Feed</div>
+    <div class="nav active"><span class="ico"></span>Task Board</div>
+    <div class="nav soon"><span class="ico"></span>Proposals<span class="soon-tag">soon</span></div>
+    <div class="sep"></div>
+    <div class="group">System</div>
+    <div class="nav soon"><span class="ico"></span>Skills<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Memory<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Dreaming<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Scheduler<span class="soon-tag">soon</span></div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <div class="title"><b>Task Board</b>
+        <span class="banner">interactive · drag a card to Dispatch to send it to an agent</span></div>
+      <button class="newbtn">+ New task</button>
+    </div>
+
+    <div class="board">
+      <!-- BACKLOG -->
+      <div class="col backlog">
+        <div class="col-h"><span class="dot"></span><span class="nm">Backlog</span><span class="ct">3</span></div>
+        <div class="cards">
+          <div class="c">
+            <div class="t">Make Skills section live</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span><span class="assign">assign ▾</span></div>
+          </div>
+          <div class="c ghost">
+            <div class="t">Add drizzle-zod validators</div>
+            <div class="foot"><span class="tag">api</span><span class="tag proj">axod-creative</span><span class="assign">→ Forge</span></div>
+          </div>
+          <div class="c">
+            <div class="t">Wire Dream/Curator cron</div>
+            <div class="foot"><span class="tag">backend</span><span class="tag proj">mission-control</span><span class="assign">assign ▾</span></div>
+          </div>
+        </div>
+        <div class="newcard">+ add a task</div>
+      </div>
+
+      <!-- DISPATCH (drop zone) -->
+      <div class="col dispatch">
+        <div class="col-h"><span class="dot"></span><span class="nm">Dispatch</span><span class="ct">0</span></div>
+        <div class="dropzone">⇣ drop a card here<br><b>→ Sage dispatches the assignee in a new session</b></div>
+      </div>
+
+      <!-- IN PROGRESS -->
+      <div class="col prog">
+        <div class="col-h"><span class="dot"></span><span class="nm">In-Progress</span><span class="ct">1</span></div>
+        <div class="cards">
+          <div class="c" style="--accent:var(--amber)">
+            <div class="t">Add a GitHub Actions CI pipeline</div>
+            <div class="foot"><span class="working"><span class="spin"></span>Forge</span><span class="tag proj">mission-control</span><span class="av forge">F</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DONE -->
+      <div class="col done">
+        <div class="col-h"><span class="dot"></span><span class="nm">Done</span><span class="ct">2</span></div>
+        <div class="cards">
+          <div class="c" style="--accent:var(--green)">
+            <div class="t">Collapsible nav rail + Agent Team view</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span></div>
+          </div>
+          <div class="c" style="--accent:var(--green)">
+            <div class="t">Login screen — vivid variant</div>
+            <div class="foot"><span class="tag">frontend</span><span class="tag proj">mission-control</span><span class="av pixel">P</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="note">You create &amp; drag cards. Assign an agent, drag to <b>Dispatch</b> → Sage spawns a session for that agent; it auto-moves to In-Progress while it works, then Done on completion. Needs a new <b>tasks</b> table + write routes + a hook into the dispatch engine.</div>
+</body>
+</html>
