@@ -28,6 +28,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Agent, Message, Session, ProjectOption } from "@/lib/mock-data";
 import NavSidebar from "@/components/nav-sidebar";
+import RosterPanel from "@/components/roster-panel";
 import { AgentIcon } from "@/components/mission-control-bits";
 import ProjectSwitcher from "@/components/project-switcher";
 import AddProjectDialog from "@/components/add-project-dialog";
@@ -758,15 +759,17 @@ export default function MissionControl({
       </header>
 
       <main className="flex-1 w-full flex overflow-hidden">
-        {/* ─── LEFT PANE: NAV SIDEBAR (Agent Team + sections) ─── */}
-        <NavSidebar
+        {/* ─── LEFT: NAV RAIL (view switcher) ─── */}
+        <NavSidebar onLogout={handleLogout} />
+
+        {/* ─── AGENT TEAM VIEW · column 1: roster ─── */}
+        <RosterPanel
           team={team}
           sage={sage}
           otherAgents={otherAgents}
           workingAgents={workingAgents}
           agentActivity={agentActivity}
           mobileActive={mobileActiveTab === "team"}
-          onLogout={handleLogout}
         />
 
         {/* ─── MIDDLE PANE: ORCHESTRATOR CHAT ─── */}
