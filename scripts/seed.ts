@@ -130,14 +130,24 @@ async function main() {
   // Projects
   await db
     .insert(schema.projects)
-    .values({
-      id: 'axod-creative',
-      name: 'AXOD CREATIVE',
-      repo_path: "c:/Users/A'KeemDrew/AXOD/landing",
-      github_url: 'https://github.com/adrew0321/axod-creative',
-      default_branch: 'dev',
-      created_at: now,
-    })
+    .values([
+      {
+        id: 'axod-creative',
+        name: 'AXOD CREATIVE',
+        repo_path: "c:/Users/A'KeemDrew/AXOD/landing",
+        github_url: 'https://github.com/adrew0321/axod-creative',
+        default_branch: 'dev',
+        created_at: now,
+      },
+      {
+        id: 'mission-control',
+        name: 'AXOD Mission Control',
+        repo_path: process.cwd(),
+        github_url: 'https://github.com/adrew0321/axod-mission-control',
+        default_branch: 'dev',
+        created_at: now,
+      },
+    ])
     .onConflictDoNothing();
 
   // Agents. Upsert so re-running the seed refreshes prompts + allowlists
