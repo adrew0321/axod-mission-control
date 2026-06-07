@@ -279,7 +279,24 @@ export default function MissionControl({
     });
   const [activeTab, setActiveTab] = useState<string>("plan");
   const [inputText, setInputText] = useState<string>("");
-  const [session] = useState<Session>(initialSession);
+  const [session, setSession] = useState<Session>(initialSession);
+  // Track the server's active session (it changes after router.refresh(), e.g. when
+  // selecting a session or dispatching a Task Board card into a new session).
+  useEffect(() => {
+    setSession(initialSession);
+  }, [initialSession]);
+
+  // A dispatched card creates a session + switches to it; once that session is the
+  // active one, run its seeded task prompt through the normal send path (sendText).
+  const [pendingDispatch, setPendingDispatch] = useState<{ sessionId: string; prompt: string } | null>(null);
+  useEffect(() => {
+    if (pendingDispatch && session.id === pendingDispatch.sessionId) {
+      const { prompt } = pendingDispatch;
+      setPendingDispatch(null);
+      void sendText(prompt);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDispatch, session.id]);
   const [isTyping, setIsTyping] = useState<boolean>(false);
   // Who the "… is typing" indicator names — the agent driving the current turn
   // (Sage, or an @-addressed specialist).
@@ -454,11 +471,24 @@ export default function MissionControl({
     }
   };
 
+  // Task Board dispatch: switch to the card's new session, then auto-run its prompt
+  // once that session becomes active (see the pendingDispatch effect above).
+  const handleTaskDispatched = async (sessionId: string, prompt: string) => {
+    setPendingDispatch({ sessionId, prompt });
+    await handleSelectSession(sessionId);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = inputText.trim();
     if (!text) return;
+    await sendText(text);
+  };
 
+  // Core send: post a user message to the ACTIVE session and stream the reply.
+  // Reused by the chat form and by Task Board dispatch (which switches to the
+  // new session first, then runs the seeded task prompt through this path).
+  const sendText = async (text: string) => {
     const { agentId: mentionId } = parseMention(text, team);
     const primary =
       (mentionId && mentionId !== "sage" && team.find((a) => a.id === mentionId)) ||
@@ -829,7 +859,7 @@ export default function MissionControl({
             board={taskBoard}
             projectId={activeProjectId}
             onSelectSession={handleSelectSession}
-            onDispatched={handleSelectSession}
+            onDispatched={handleTaskDispatched}
             onRefresh={refreshTaskBoard}
           />
         ) : activeSection === "live-feed" ? (

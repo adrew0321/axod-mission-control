@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
-import { tasks, sessions, messages, projects } from '@/db/schema';
+import { tasks, sessions, projects } from '@/db/schema';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { buildTaskPrompt, isSessionDone, type TaskColumn } from '@/lib/task-board';
 
@@ -35,8 +35,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const now = new Date();
   const nextStatus = (parsed.data.status ?? task.status) as TaskColumn;
 
-  // Dispatch trigger: moving into In-Progress with no session yet → create a
-  // session + seed a user message for Sage; the existing stream route runs it.
+  // Dispatch trigger: moving into In-Progress with no session yet → create a new
+  // session and link it to the card. The seeded prompt is RETURNED (not inserted):
+  // the client switches to this session and posts it through the normal send path,
+  // which is what actually runs Sage (a turn only runs when the client streams it).
   const shouldDispatch = nextStatus === 'in_progress' && task.status !== 'in_progress' && !task.session_id;
 
   if (shouldDispatch) {
@@ -60,19 +62,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         created_at: now,
         updated_at: now,
       });
-      await db.insert(messages).values({
-        id: `msg_${bytesToHex(randomBytes(8))}`,
-        session_id: sessionId,
-        agent_id: null,
-        role: 'user',
-        content: buildTaskPrompt(task),
-        created_at: now,
-      });
       await db
         .update(tasks)
         .set({ status: 'in_progress', session_id: sessionId, updated_at: now })
         .where(eq(tasks.id, id));
-      return Response.json({ ok: true, sessionId });
+      return Response.json({ ok: true, sessionId, prompt: buildTaskPrompt(task) });
     } catch (e) {
       return Response.json(
         { error: `Could not dispatch task: ${e instanceof Error ? e.message : String(e)}` },

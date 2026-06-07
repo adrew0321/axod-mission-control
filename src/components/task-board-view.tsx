@@ -8,7 +8,7 @@ interface TaskBoardViewProps {
   board: BoardColumns;
   projectId: string;
   onSelectSession: (sessionId: string) => Promise<void>;
-  onDispatched: (sessionId: string) => Promise<void>;
+  onDispatched: (sessionId: string, prompt: string) => Promise<void>;
   onRefresh: () => Promise<void>;
 }
 
@@ -61,9 +61,9 @@ export default function TaskBoardView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: to }),
       });
-      const data = (await res.json().catch(() => ({}))) as { sessionId?: string };
+      const data = (await res.json().catch(() => ({}))) as { sessionId?: string; prompt?: string };
       if (data.sessionId) {
-        await onDispatched(data.sessionId);
+        await onDispatched(data.sessionId, data.prompt ?? "");
         return;
       }
       await onRefresh();
