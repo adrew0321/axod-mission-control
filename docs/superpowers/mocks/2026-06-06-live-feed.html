@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Live Feed — mock</title>
+<style>
+  :root{
+    --bg:#0a0e14; --rail:#0d1117; --panel:#11161d; --card:#161c25;
+    --border:#1e2632; --border2:#2a3441; --cyan:#00e0ff; --text:#e6edf3;
+    --muted:#8b949e; --dim:#5c6470; --green:#3fb950; --amber:#f0a020; --red:#f85149;
+    --violet:#a371f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased;font-size:13px}
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* rail */
+  .rail{width:180px;background:var(--rail);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;flex-shrink:0}
+  .rail .top{height:44px;display:flex;align-items:center;padding:0 12px;
+    border-bottom:1px solid var(--border)}
+  .rail .top span{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+  .rail .group{padding:8px 6px 2px;font-size:8px;letter-spacing:.18em;
+    text-transform:uppercase;color:#3a424d}
+  .nav{display:flex;align-items:center;gap:8px;margin:1px 6px;padding:6px 8px;
+    border-radius:6px;font-size:11px;color:var(--muted);cursor:default}
+  .nav.active{background:#11233a;color:var(--cyan)}
+  .nav.soon{color:#3a424d}
+  .nav .soon-tag{margin-left:auto;font-size:8px;letter-spacing:.1em;text-transform:uppercase}
+  .nav .ico{width:14px;height:14px;display:inline-block;border:1.5px solid currentColor;
+    border-radius:3px;flex-shrink:0}
+  .sep{height:1px;background:var(--border);margin:8px 6px}
+
+  /* main */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0}
+  .head{height:44px;display:flex;align-items:center;justify-content:space-between;
+    padding:0 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+  .head .title{display:flex;align-items:center;gap:10px}
+  .head .title b{font-family:Georgia,serif;font-weight:600;font-size:14px;letter-spacing:.01em}
+  .pulse{width:7px;height:7px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 6px var(--green);animation:p 2s infinite}
+  @keyframes p{50%{opacity:.4}}
+  .filters{display:flex;gap:6px}
+  .chip{font-size:10px;color:var(--muted);border:1px solid var(--border2);
+    background:var(--card);padding:3px 9px;border-radius:999px;cursor:default}
+  .chip.on{color:var(--cyan);border-color:var(--cyan)}
+
+  .feed{flex:1;overflow-y:auto;padding:6px 0}
+  .daygroup{padding:14px 16px 4px;font-size:9px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--dim)}
+
+  .row{display:flex;gap:11px;padding:9px 16px;position:relative;
+    border-left:2px solid transparent}
+  .row:hover{background:#0f141b}
+  .row.attn{border-left-color:var(--amber);background:rgba(240,160,32,.05)}
+
+  .av{width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center;color:#000;font-size:11px;font-weight:700;
+    font-family:Georgia,serif}
+  .av.sage{background:linear-gradient(135deg,#22d3ee,#3b82f6)}
+  .av.forge{background:linear-gradient(135deg,#fb923c,#ef4444)}
+  .av.pixel{background:linear-gradient(135deg,#f472b6,#a371f7)}
+  .av.nova{background:linear-gradient(135deg,#34d399,#06b6d4)}
+  .av.scout{background:linear-gradient(135deg,#fbbf24,#f59e0b)}
+  .av.sys{background:#2a3441;color:var(--muted)}
+
+  .body{flex:1;min-width:0}
+  .line{font-size:12.5px;line-height:1.45;color:var(--text)}
+  .line .who{font-weight:600}
+  .line .verb{color:var(--muted)}
+  .line .quote{color:var(--text)}
+  .line .arrow{color:var(--cyan)}
+  .meta{margin-top:3px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    font-size:10px;color:var(--dim)}
+  .tag{padding:1px 6px;border-radius:4px;border:1px solid var(--border2);
+    background:var(--card);color:var(--muted)}
+  .tag.proj{color:#7ee787;border-color:#23371f}
+  .tag.cost{color:#79c0ff;border-color:#1f2b3a}
+  .tag.run{color:var(--dim)}
+  .ts{margin-left:auto;font-size:10px;color:var(--dim);white-space:nowrap}
+
+  .kind{font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+    padding:1px 6px;border-radius:4px}
+  .kind.dispatch{color:var(--cyan);background:rgba(0,224,255,.08)}
+  .kind.reply{color:var(--green);background:rgba(63,185,80,.08)}
+  .kind.artifact{color:var(--violet);background:rgba(163,113,247,.1)}
+  .kind.session{color:var(--muted);background:var(--card)}
+  .kind.approval{color:var(--amber);background:rgba(240,160,32,.1)}
+
+  .actions{display:flex;gap:8px;margin-top:8px}
+  .btn{font-size:10px;padding:4px 12px;border-radius:5px;cursor:default;
+    border:1px solid var(--border2);background:var(--card);color:var(--text)}
+  .btn.go{background:var(--green);border-color:var(--green);color:#06210f;font-weight:700}
+  .btn.no{color:var(--muted)}
+
+  .working{display:inline-flex;gap:4px;align-items:center;color:var(--cyan)}
+  .spin{width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;
+    border-radius:50%;animation:s .8s linear infinite}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- nav rail (Live Feed active) -->
+  <aside class="rail">
+    <div class="top"><span>Mission Control</span></div>
+    <div class="group">Operational</div>
+    <div class="nav"><span class="ico"></span>Agent Team</div>
+    <div class="nav active"><span class="ico"></span>Live Feed</div>
+    <div class="nav soon"><span class="ico"></span>Task Board<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Proposals<span class="soon-tag">soon</span></div>
+    <div class="sep"></div>
+    <div class="group">System</div>
+    <div class="nav soon"><span class="ico"></span>Skills<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Memory<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Dreaming<span class="soon-tag">soon</span></div>
+    <div class="nav soon"><span class="ico"></span>Scheduler<span class="soon-tag">soon</span></div>
+  </aside>
+
+  <!-- live feed view -->
+  <main class="main">
+    <div class="head">
+      <div class="title"><span class="pulse"></span><b>Live Feed</b>
+        <span style="color:var(--dim);font-size:11px">fleet activity · all projects</span></div>
+      <div class="filters">
+        <span class="chip on">All</span>
+        <span class="chip">Dispatches</span>
+        <span class="chip">Approvals</span>
+        <span class="chip">Artifacts</span>
+      </div>
+    </div>
+
+    <div class="feed">
+
+      <div class="daygroup">Today</div>
+
+      <!-- live: agent currently working -->
+      <div class="row">
+        <div class="av forge">F</div>
+        <div class="body">
+          <div class="line"><span class="who">Forge</span>
+            <span class="working"><span class="spin"></span>running CI workflow setup…</span></div>
+          <div class="meta">
+            <span class="kind reply">working</span>
+            <span class="tag proj">mission-control</span>
+            <span class="tag run">claude-sdk</span>
+            <span class="ts">now</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- approval, actionable -->
+      <div class="row attn">
+        <div class="av pixel">P</div>
+        <div class="body">
+          <div class="line"><span class="who">Pixel</span>
+            <span class="verb">requests permission to</span> <span class="quote">Write</span>
+            <span class="verb">→</span> <span class="quote">src/app/login/page.tsx</span></div>
+          <div class="meta">
+            <span class="kind approval">approval</span>
+            <span class="tag proj">mission-control</span>
+            <span class="ts">1m ago</span>
+          </div>
+          <div class="actions">
+            <span class="btn go">Approve</span>
+            <span class="btn no">Deny</span>
+            <span class="btn">View diff</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- dispatch -->
+      <div class="row">
+        <div class="av sage">S</div>
+        <div class="body">
+          <div class="line"><span class="who">Sage</span>
+            <span class="verb">dispatched</span> <span class="arrow">Forge</span>
+            <span class="verb">·</span> <span class="quote">"add a GitHub Actions CI pipeline"</span></div>
+          <div class="meta">
+            <span class="kind dispatch">dispatch</span>
+            <span class="tag proj">mission-control</span>
+            <span class="ts">4m ago</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- artifact -->
+      <div class="row">
+        <div class="av pixel">P</div>
+        <div class="body">
+          <div class="line"><span class="who">Pixel</span>
+            <span class="verb">created a</span> <span class="quote">mockup</span>
+            <span class="verb">·</span> <span class="quote">"login screen — vivid variant"</span></div>
+          <div class="meta">
+            <span class="kind artifact">artifact</span>
+            <span class="tag proj">mission-control</span>
+            <span class="tag cost">9.1k tok · $0.06</span>
+            <span class="ts">12m ago</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- reply -->
+      <div class="row">
+        <div class="av nova">N</div>
+        <div class="body">
+          <div class="line"><span class="who">Nova</span>
+            <span class="verb">replied to Sage</span> <span class="verb">·</span>
+            <span class="quote">"Found 3 candidate libs; recommends drizzle-zod."</span></div>
+          <div class="meta">
+            <span class="kind reply">reply</span>
+            <span class="tag proj">axod-creative</span>
+            <span class="tag cost">21.4k tok · $0.14</span>
+            <span class="tag run">claude-sdk</span>
+            <span class="ts">31m ago</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- session lifecycle -->
+      <div class="row">
+        <div class="av sys">◷</div>
+        <div class="body">
+          <div class="line"><span class="verb">Session</span>
+            <span class="quote">"nav refactor"</span> <span class="verb">→</span>
+            <span style="color:var(--green)">done</span></div>
+          <div class="meta">
+            <span class="kind session">session</span>
+            <span class="tag proj">mission-control</span>
+            <span class="ts">1h ago</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="daygroup">Earlier</div>
+
+      <div class="row">
+        <div class="av scout">B</div>
+        <div class="body">
+          <div class="line"><span class="who">Scout</span>
+            <span class="verb">replied to Sage</span> <span class="verb">·</span>
+            <span class="quote">"Reproduced the scroll-snap bug; root cause in auto-scroll."</span></div>
+          <div class="meta">
+            <span class="kind reply">reply</span>
+            <span class="tag proj">mission-control</span>
+            <span class="tag cost">7.7k tok · $0.05</span>
+            <span class="ts">Yesterday 6:14pm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="av sage">S</div>
+        <div class="body">
+          <div class="line"><span class="who">Sage</span>
+            <span class="verb">dispatched</span> <span class="arrow">Scout</span>
+            <span class="verb">·</span> <span class="quote">"investigate the chat snapping to top on reload"</span></div>
+          <div class="meta">
+            <span class="kind dispatch">dispatch</span>
+            <span class="tag proj">mission-control</span>
+            <span class="ts">Yesterday 6:02pm</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

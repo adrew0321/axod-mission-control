@@ -15,7 +15,7 @@ export interface NavSection {
 
 export const NAV_SECTIONS: NavSection[] = [
   { id: "agent-team", label: "Agent Team", icon: "Users", group: "operational", status: "live" },
-  { id: "live-feed", label: "Live Feed", icon: "Radio", group: "operational", status: "soon" },
+  { id: "live-feed", label: "Live Feed", icon: "Radio", group: "operational", status: "live" },
   { id: "task-board", label: "Task Board", icon: "LayoutGrid", group: "operational", status: "soon" },
   { id: "proposals", label: "Proposals", icon: "Inbox", group: "operational", status: "soon" },
   { id: "skills", label: "Skills", icon: "Sparkles", group: "system", status: "soon" },

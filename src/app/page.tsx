@@ -7,6 +7,7 @@ import { type Agent, type Message, type Session } from "@/lib/mock-data";
 import { dispatchAttribution } from "@/lib/dispatch-presentation";
 import { resolveActiveProject, ACTIVE_PROJECT_COOKIE } from "@/lib/projects";
 import { getOrCreateActiveSession } from "@/lib/active-project";
+import { getLiveFeed } from "@/lib/live-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -178,6 +179,8 @@ export default async function HomePage() {
 
   void sageRow;
 
+  const liveFeedEvents = await getLiveFeed();
+
   return (
     <MissionControl
       team={team}
@@ -185,6 +188,7 @@ export default async function HomePage() {
       initialMessages={messagesForUi}
       projects={projectRows.map((p) => ({ id: p.id, name: p.name }))}
       activeProjectId={project.id}
+      initialLiveFeedEvents={liveFeedEvents}
     />
   );
 }

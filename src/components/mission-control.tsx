@@ -41,6 +41,8 @@ import PlanView from "@/components/plan-view";
 import FileExplorer from "@/components/file-explorer";
 import { toPlanSnapshot, type PlanSnapshot } from "@/lib/plan-events";
 import { dispatchFlavor } from "@/lib/dispatch-presentation";
+import { type LiveFeedEvent } from "@/lib/live-feed";
+import LiveFeedView from "@/components/live-feed-view";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -48,6 +50,7 @@ export interface MissionControlProps {
   initialMessages: Message[];
   projects: ProjectOption[];
   activeProjectId: string;
+  initialLiveFeedEvents: LiveFeedEvent[];
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -237,11 +240,19 @@ export default function MissionControl({
   initialMessages,
   projects,
   activeProjectId,
+  initialLiveFeedEvents,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [activeSection, setActiveSection] = useState<string>("agent-team");
+  const [liveFeedEvents, setLiveFeedEvents] = useState<LiveFeedEvent[]>(initialLiveFeedEvents);
+
+  useEffect(() => {
+    setLiveFeedEvents(initialLiveFeedEvents);
+  }, [initialLiveFeedEvents]);
+
   // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const toggleReply = (id: string) =>
@@ -385,14 +396,45 @@ export default function MissionControl({
           : msg,
       ),
     );
+    setLiveFeedEvents((prev) =>
+      prev.map((e) =>
+        e.id === `approval-${id}`
+          ? {
+              ...e,
+              meta: { ...e.meta, status: displayStatus },
+              label: `${e.agentName} was ${displayStatus} for ${e.meta?.toolName}`,
+            }
+          : e
+      )
+    );
     try {
       await fetch(`/api/approvals/${id}/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision }),
       });
+      startTransition(() => {
+        router.refresh();
+      });
     } catch {
       setSendError("Failed to send decision");
+    }
+  };
+
+  const handleSelectSession = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/active`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Failed to activate session");
+      }
+      setActiveSection("agent-team");
+      startTransition(() => {
+        router.refresh();
+      });
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Error selecting session");
     }
   };
 
@@ -760,9 +802,24 @@ export default function MissionControl({
 
       <main className="flex-1 w-full flex overflow-hidden">
         {/* ─── LEFT: NAV RAIL (view switcher) ─── */}
-        <NavSidebar onLogout={handleLogout} />
+        <NavSidebar
+          activeSectionId={activeSection}
+          onSectionChange={setActiveSection}
+          onLogout={handleLogout}
+        />
 
-        {/* ─── AGENT TEAM VIEW · column 1: roster ─── */}
+        {activeSection === "live-feed" ? (
+          <LiveFeedView
+            events={liveFeedEvents}
+            team={team}
+            workingAgents={workingAgents}
+            agentActivity={agentActivity}
+            onSelectSession={handleSelectSession}
+            onApprovalDecision={handleApproval}
+          />
+        ) : (
+          <>
+            {/* ─── AGENT TEAM VIEW · column 1: roster ─── */}
         <RosterPanel
           team={team}
           sage={sage}
@@ -1333,6 +1390,8 @@ export default function MissionControl({
             {activeTab === "files" && <FileExplorer projectId={activeProjectId} />}
           </div>
         </section>
+          </>
+        )}
       </main>
 
       {/* Sleek Mobile Tab Bar */}

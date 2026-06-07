@@ -11,7 +11,15 @@ const COLLAPSE_KEY = "mc_nav_collapsed";
 // (the roster + session logs + workspace), the rest are placeholders for the
 // OpenClaw operational views + Hermes pillars. Collapses to an icon rail.
 // Desktop-only — on mobile the bottom tab bar handles team/chat/workspace.
-export default function NavSidebar({ onLogout }: { onLogout: () => void }) {
+export default function NavSidebar({
+  activeSectionId,
+  onSectionChange,
+  onLogout,
+}: {
+  activeSectionId: string;
+  onSectionChange: (id: string) => void;
+  onLogout: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
@@ -39,12 +47,15 @@ export default function NavSidebar({ onLogout }: { onLogout: () => void }) {
       <button
         key={s.id}
         disabled={!live}
+        onClick={() => {
+          if (live) onSectionChange(s.id);
+        }}
         title={collapsed ? `${s.label}${live ? "" : " · coming soon"}` : live ? undefined : "Coming soon"}
         className={`w-full flex items-center ${collapsed ? "justify-center" : "gap-2"} px-2 py-1.5 rounded-md text-[11px] font-mono transition-colors ${
-          s.id === "agent-team"
+          s.id === activeSectionId
             ? "bg-[#11233a] text-[#00e0ff]"
             : live
-              ? "text-[#8b949e] hover:bg-[#1c2330]"
+              ? "text-[#8b949e] hover:bg-[#1c2330] cursor-pointer"
               : "text-[#3a424d] cursor-default"
         }`}
       >

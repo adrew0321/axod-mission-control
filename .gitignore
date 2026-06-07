@@ -74,3 +74,4 @@ coverage/
 # misc local
 /scratch/
 TODO.local.md
+.superpowers/
