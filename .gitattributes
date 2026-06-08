@@ -1,0 +1,7 @@
+# Deploy/runtime files must keep LF endings so they run on the Linux VPS,
+# regardless of the contributor's OS (CRLF in a shell script breaks the shebang).
+*.sh            text eol=lf
+deploy/Caddyfile          text eol=lf
+deploy/*.service          text eol=lf
+deploy/*.timer            text eol=lf
+.env.example    text eol=lf

@@ -63,8 +63,11 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **Navbar** ✅ | Collapsible nav rail + Agent Team view | Left rail switches views (collapsible icon↔labels, persisted); **Agent Team** is the live view = roster + session logs + workspace, each agent tagged `claude-sdk`. Forward-looking "soon" sections seed the OpenClaw operational views + Hermes pillars (Skills/Memory/Dreaming/Scheduler). |
 | **Navbar** ✅ | Live Feed view | Fleet-wide activity ticker across all projects (dispatches · replies · approvals · artifacts · session lifecycle); pending approvals are actionable inline. |
 | **Navbar** ✅ | Task Board view | Hybrid Kanban: operator-created cards (new `tasks` table) you drag To-Do→In-Progress to **dispatch through Sage** (creates a session + runs it via the normal send path), confirm into Done after reviewing. Read-only session-level "auto" cards mirror live agent work. Next: make remaining sections live + Hermes runtime/Dream-Curator. |
-| **v1.5** | Discord via OpenClaw gateway | Chat with agents from anywhere |
+| **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (released, tagged `v1.5.0`) | The nav-views milestone — see the three Navbar rows above |
+| **v1.6** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
+
+**Deploying:** Mission Control runs on a Hetzner VPS (host Node + Caddy + systemd, Claude Pro auth). See [docs/runbook-deploy.md](docs/runbook-deploy.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md).
 
 <a name="growing-the-team"></a>
 ### Growing the team (how a new agent gets added)

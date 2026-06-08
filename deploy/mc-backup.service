@@ -1,0 +1,9 @@
+[Unit]
+Description=Mission Control nightly SQLite backup
+
+[Service]
+Type=oneshot
+User=mc
+Group=mc
+EnvironmentFile=/srv/mission-control/.env
+ExecStart=/srv/mission-control/deploy/mc-backup.sh

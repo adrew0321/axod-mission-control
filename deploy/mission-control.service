@@ -1,0 +1,18 @@
+[Unit]
+Description=AXOD Mission Control (Next.js server)
+After=network.target
+
+[Service]
+Type=simple
+User=mc
+Group=mc
+WorkingDirectory=/srv/mission-control
+EnvironmentFile=/srv/mission-control/.env
+# `next start` (equivalent to `pnpm start`). Confirm node path with `which node`.
+ExecStart=/usr/bin/node /srv/mission-control/node_modules/next/dist/bin/next start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
