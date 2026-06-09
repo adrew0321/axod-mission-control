@@ -9,6 +9,7 @@ import { resolveActiveProject, ACTIVE_PROJECT_COOKIE } from "@/lib/projects";
 import { getOrCreateActiveSession } from "@/lib/active-project";
 import { getLiveFeed } from "@/lib/live-feed";
 import { getTaskBoard } from "@/lib/task-board-data";
+import { getProposals } from "@/lib/proposals-data";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +183,7 @@ export default async function HomePage() {
 
   const liveFeedEvents = await getLiveFeed();
   const initialTaskBoard = await getTaskBoard(project.id);
+  const initialProposals = await getProposals();
 
   return (
     <MissionControl
@@ -192,6 +194,7 @@ export default async function HomePage() {
       activeProjectId={project.id}
       initialLiveFeedEvents={liveFeedEvents}
       initialTaskBoard={initialTaskBoard}
+      initialProposals={initialProposals}
     />
   );
 }

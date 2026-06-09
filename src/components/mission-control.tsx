@@ -45,6 +45,8 @@ import { type LiveFeedEvent } from "@/lib/live-feed";
 import LiveFeedView from "@/components/live-feed-view";
 import TaskBoardView from "@/components/task-board-view";
 import type { BoardColumns } from "@/lib/task-board";
+import ProposalsView from "@/components/proposals-view";
+import type { Proposal } from "@/lib/proposals";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -54,6 +56,7 @@ export interface MissionControlProps {
   activeProjectId: string;
   initialLiveFeedEvents: LiveFeedEvent[];
   initialTaskBoard: BoardColumns;
+  initialProposals: Proposal[];
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -245,6 +248,7 @@ export default function MissionControl({
   activeProjectId,
   initialLiveFeedEvents,
   initialTaskBoard,
+  initialProposals,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
@@ -267,6 +271,17 @@ export default function MissionControl({
   const refreshTaskBoard = async () => {
     const res = await fetch(`/api/tasks?project_id=${encodeURIComponent(activeProjectId)}`);
     if (res.ok) setTaskBoard((await res.json()) as BoardColumns);
+  };
+
+  const [proposals, setProposals] = useState<Proposal[]>(initialProposals);
+  useEffect(() => {
+    setProposals(initialProposals);
+  }, [initialProposals]);
+
+  // Re-fetch the proposals inbox after a merge/discard.
+  const refreshProposals = async () => {
+    const res = await fetch(`/api/proposals`);
+    if (res.ok) setProposals((await res.json()) as Proposal[]);
   };
 
   // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
@@ -854,7 +869,13 @@ export default function MissionControl({
           onLogout={handleLogout}
         />
 
-        {activeSection === "task-board" ? (
+        {activeSection === "proposals" ? (
+          <ProposalsView
+            proposals={proposals}
+            onSelectSession={handleSelectSession}
+            onRefresh={refreshProposals}
+          />
+        ) : activeSection === "task-board" ? (
           <TaskBoardView
             board={taskBoard}
             projectId={activeProjectId}
