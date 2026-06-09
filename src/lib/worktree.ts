@@ -189,3 +189,49 @@ export async function listWorktrees(repoPath: string): Promise<string[]> {
     .filter((l) => l.startsWith('worktree '))
     .map((l) => l.slice('worktree '.length).trim());
 }
+
+export type MergeResult = { ok: true } | { ok: false; conflict: true; message: string };
+
+/**
+ * Apply a session's work to the project's base branch. Commits any loose edits on
+ * mc/<sessionId>, then merges that branch into baseBranch in the project repo.
+ * On a merge conflict: aborts (no partial state) and returns { conflict }.
+ * On success: removes the worktree + deletes the branch, returns { ok:true }.
+ * A non-merge failure (e.g. dirty base) throws — the caller maps it to a 500.
+ */
+export async function mergeWorktree(
+  sessionId: string,
+  repoPath: string,
+  baseBranch: string,
+): Promise<MergeResult> {
+  const wtPath = sessionWorktreePath(sessionId);
+  const branch = sessionBranch(sessionId);
+
+  // 1. Commit any uncommitted edits in the worktree so the branch carries them.
+  const { stdout: status } = await exec('git', ['-C', wtPath, 'status', '--porcelain']);
+  if (status.trim()) {
+    await exec('git', ['-C', wtPath, 'add', '-A']);
+    await exec('git', ['-C', wtPath, 'commit', '-m', `mission-control: ${branch}`]);
+  }
+
+  // 2. Merge the branch into the base in the project repo.
+  await exec('git', ['-C', repoPath, 'checkout', baseBranch]);
+  try {
+    await exec('git', ['-C', repoPath, 'merge', '--no-ff', '-m', `Merge ${branch}`, branch]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await exec('git', ['-C', repoPath, 'merge', '--abort']).catch(() => {});
+    return { ok: false, conflict: true, message };
+  }
+
+  // 3. Cleanup: remove the worktree (detaches the branch) then delete the branch.
+  await removeWorktree(sessionId, repoPath);
+  await exec('git', ['-C', repoPath, 'branch', '-D', branch]).catch(() => {});
+  return { ok: true };
+}
+
+/** Throw away a session's work: remove the worktree and delete the branch. */
+export async function discardWorktree(sessionId: string, repoPath: string): Promise<void> {
+  await removeWorktree(sessionId, repoPath);
+  await exec('git', ['-C', repoPath, 'branch', '-D', sessionBranch(sessionId)]).catch(() => {});
+}
