@@ -1,5 +1,7 @@
 # Proposals view Implementation Plan
 
+> **STATUS: ✅ Shipped 2026-06-09** on `feature/proposals` (build clean, 87/87). See the spec's "What actually happened" for the merge-isolation fix, the WAL/DATABASE_PATH incident, and the added notifications.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add a **Proposals** nav view — a fleet-wide inbox of sessions whose agent left changes, with Approve→merge (into the base branch) / Discard actions.
