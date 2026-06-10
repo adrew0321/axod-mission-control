@@ -3,7 +3,13 @@
 > **Not a bite-sized implementation plan.** This is a resume-later roadmap for the
 > remaining nav sections + system work, captured 2026-06-07 right after the Task Board
 > shipped (v1.5.0). Each item gets its own brainstorm → spec → plan when picked up.
-> Live views today: **Agent Team · Live Feed · Task Board**. The rest are `soon`.
+>
+> **Progress:** Live views today (on `dev`): **Agent Team · Live Feed · Task Board ·
+> Proposals ✅ · Skills ✅**. Done since this doc was written: **Proposals** (reframed as a
+> review-and-merge inbox — see `specs/2026-06-08-proposals-design.md`) and **Skills**
+> (read-only capability map + agent bios — `specs/2026-06-09-skills-design.md`).
+> **Next up: Memory** (item #3 below). Then the server-runner-gated Scheduler/Dreaming.
+> (Not yet released to `main`; batching the next release before the VPS deploy session.)
 
 ## Context / patterns to reuse
 
