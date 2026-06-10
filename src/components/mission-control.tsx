@@ -49,6 +49,7 @@ import ProposalsView from "@/components/proposals-view";
 import type { Proposal } from "@/lib/proposals";
 import SkillsView from "@/components/skills-view";
 import type { AgentSkills } from "@/lib/skills";
+import MemoryView from "@/components/memory-view";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -893,7 +894,14 @@ export default function MissionControl({
           counts={{ proposals: proposals.length }}
         />
 
-        {activeSection === "skills" ? (
+        {activeSection === "memory" ? (
+          <MemoryView
+            messages={messages}
+            sessionTitle={session.title}
+            clearedAt={session.clearedAt ?? null}
+            onClear={handleClearLog}
+          />
+        ) : activeSection === "skills" ? (
           <SkillsView skills={initialSkills} />
         ) : activeSection === "proposals" ? (
           <ProposalsView
