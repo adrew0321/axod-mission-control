@@ -15,8 +15,19 @@ export interface AgentSkills {
   role: string;
   model: string;
   color: string;
+  bio: string;
   skills: AgentSkill[];
 }
+
+/** Short first-person blurb per agent, shown as a quote on its Skills card. */
+export const AGENT_BIOS: Record<string, string> = {
+  sage: "I hold the helm and chart the course. Tell me what you want built and I'll break it down and put the right specialist on it.",
+  atlas: "I'm the one who actually writes the code. Point me at a change and I'll implement it, run it, and make sure it works.",
+  echo: "I read every change with a red pen. I don't write code — I tell you what's wrong before it ships.",
+  nova: "I dig through the web and the repo so you don't have to. You'll get a sourced brief, not a guess.",
+  forge: "I handle the unglamorous plumbing — builds, tests, CI, and releases. If it touches infra or git, it's mine.",
+  pixel: "I mock up interfaces in real code you can preview. Give me a vibe and I'll turn it into HTML, CSS, and SVG.",
+};
 
 /** Known tools → friendly metadata. */
 export const TOOL_CATALOG: Record<string, { label: string; description: string; kind: SkillKind }> = {

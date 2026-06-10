@@ -20,15 +20,22 @@ export default function SkillsView({ skills }: { skills: AgentSkills[] }) {
       <div className="flex-1 min-h-0 overflow-y-auto p-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3 content-start">
         {skills.map((a) => (
           <div key={a.id} className="rounded-lg border border-[#1e2632] bg-[#11161d] p-3">
-            <div className="flex items-center gap-2.5 pb-2 border-b border-[#1e2632]">
-              <div className={`w-8 h-8 rounded-md bg-gradient-to-br ${a.color} flex items-center justify-center text-black shrink-0`}>
-                <AgentIcon id={a.id} className="w-4 h-4" />
+            <div className="pb-2 border-b border-[#1e2632]">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-md bg-gradient-to-br ${a.color} flex items-center justify-center text-black shrink-0`}>
+                  <AgentIcon id={a.id} className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-[#e6edf3] font-heading truncate">{a.name}</div>
+                  <div className="text-[10px] font-mono text-[#8b949e]">{a.role} · {a.model}</div>
+                </div>
+                <span className="ml-auto text-[8.5px] font-mono text-[#5c6470] shrink-0">claude-sdk</span>
               </div>
-              <div className="min-w-0">
-                <div className="text-xs text-[#e6edf3] font-heading truncate">{a.name}</div>
-                <div className="text-[10px] font-mono text-[#8b949e]">{a.role} · {a.model}</div>
-              </div>
-              <span className="ml-auto text-[8.5px] font-mono text-[#5c6470] shrink-0">claude-sdk</span>
+              {a.bio && (
+                <p className="mt-2 pl-2 border-l-2 border-[#2a3441] text-[10px] leading-relaxed text-[#8b949e] italic">
+                  {a.bio}
+                </p>
+              )}
             </div>
 
             <div className="mt-2 flex flex-col gap-1.5">

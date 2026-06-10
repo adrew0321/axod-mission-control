@@ -1,7 +1,7 @@
 import 'server-only';
 import { db } from '@/db/client';
 import { agents } from '@/db/schema';
-import { buildSkills, type AgentSkills } from './skills';
+import { buildSkills, AGENT_BIOS, type AgentSkills } from './skills';
 
 // Agents with an empty allowlist fall back to a minimal read-only set (defensive —
 // every seeded agent currently has an explicit list).
@@ -20,6 +20,7 @@ export async function getSkills(): Promise<AgentSkills[]> {
       role: a.role,
       model: a.model,
       color: a.color ?? 'from-slate-400 to-slate-600',
+      bio: AGENT_BIOS[a.id] ?? '',
       skills: buildSkills(tools),
     };
   });
