@@ -1,3 +1,5 @@
+[//]: # (AXOD Mission Control — internal project docs. Not for public distribution until v1 release.)
+
 # AXOD Mission Control
 
 > Personal command center for orchestrating AI agent teams to do development work.
