@@ -4,12 +4,13 @@
 > remaining nav sections + system work, captured 2026-06-07 right after the Task Board
 > shipped (v1.5.0). Each item gets its own brainstorm → spec → plan when picked up.
 >
-> **Progress:** Live views today (on `dev`): **Agent Team · Live Feed · Task Board ·
-> Proposals ✅ · Skills ✅**. Done since this doc was written: **Proposals** (reframed as a
-> review-and-merge inbox — see `specs/2026-06-08-proposals-design.md`) and **Skills**
-> (read-only capability map + agent bios — `specs/2026-06-09-skills-design.md`).
-> **Next up: Memory** (item #3 below). Then the server-runner-gated Scheduler/Dreaming.
-> (Not yet released to `main`; batching the next release before the VPS deploy session.)
+> **Progress:** Live views: **Agent Team · Live Feed · Task Board · Proposals ✅ · Skills ✅ ·
+> Memory ✅** — all released to `main` as **v1.6.0** (2026-06-10). Done since this doc was
+> written: **Proposals** (`specs/2026-06-08-proposals-design.md`), **Skills**
+> (`specs/2026-06-09-skills-design.md`), **Memory** (`specs/2026-06-09-memory-design.md`).
+> **Next up: the server-side turn runner** (item #4's prereq) — it unblocks **Scheduler** and
+> **Dreaming**, which cannot run on a cron without it (see [[turns-require-client-sse]]).
+> Proposals/Skills/Memory are the last view-only sections; the rest are runtime work.
 
 ## Context / patterns to reuse
 

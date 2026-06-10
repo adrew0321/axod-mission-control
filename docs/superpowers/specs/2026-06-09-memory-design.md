@@ -109,3 +109,10 @@ No new route or query. In `mission-control.tsx`, the `memory` branch renders:
 
 Cross-session memory / a knowledge graph (v2) · a session picker · editing or pinning memory ·
 the raw-prompt copy view · accurate tokenizer counts (the `~/4` heuristic is enough for a gauge).
+
+## What actually happened (2026-06-10)
+
+Shipped per spec on `feature/memory` (inline execution). Build clean, `pnpm test` **95/95**
+(91 + 4 `summarizeMemory`). No deviations — it reused `mission-control`'s existing `messages`
+state, `session`, and `handleClearLog`; the only backend change was adding `clearedAt` to the
+session prop. Released to `main` as part of **v1.6.0** (with Proposals + Skills).

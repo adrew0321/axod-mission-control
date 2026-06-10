@@ -62,9 +62,13 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **Workspace** ✅ | Remove project + resizable Files | Remove a project from the switcher (unregister only; files kept) + drag-resize the Files tree/viewer split (persisted). |
 | **Navbar** ✅ | Collapsible nav rail + Agent Team view | Left rail switches views (collapsible icon↔labels, persisted); **Agent Team** is the live view = roster + session logs + workspace, each agent tagged `claude-sdk`. Forward-looking "soon" sections seed the OpenClaw operational views + Hermes pillars (Skills/Memory/Dreaming/Scheduler). |
 | **Navbar** ✅ | Live Feed view | Fleet-wide activity ticker across all projects (dispatches · replies · approvals · artifacts · session lifecycle); pending approvals are actionable inline. |
-| **Navbar** ✅ | Task Board view | Hybrid Kanban: operator-created cards (new `tasks` table) you drag To-Do→In-Progress to **dispatch through Sage** (creates a session + runs it via the normal send path), confirm into Done after reviewing. Read-only session-level "auto" cards mirror live agent work. Next: make remaining sections live + Hermes runtime/Dream-Curator. |
-| **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (released, tagged `v1.5.0`) | The nav-views milestone — see the three Navbar rows above |
-| **v1.6** | Discord via OpenClaw gateway | Chat with agents from anywhere |
+| **Navbar** ✅ | Task Board view | Hybrid Kanban: operator-created cards (new `tasks` table) you drag To-Do→In-Progress to **dispatch through Sage** (creates a session + runs it via the normal send path), confirm into Done after reviewing. Read-only session-level "auto" cards mirror live agent work. |
+| **Navbar** ✅ | Proposals view | Review-and-merge inbox: sessions whose agent left worktree changes, with **Approve → merge** (into the base branch, in an isolated worktree) / Discard. Badge + tab-title + toast notify when one's waiting. |
+| **Navbar** ✅ | Skills view | Read-only capability map — per agent, its tools with friendly descriptions + a read/edit/run tag (the allowlist *is* the v1 safety model) + a first-person bio. |
+| **Navbar** ✅ | Memory view | Active-session context inspector: the attributed transcript Sage receives + size readout (msgs · ~tokens) + the Clear control. |
+| **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (`v1.5.0`); VPS deploy tooling (`v1.5.1`) | The nav-views milestone + the deploy runbook |
+| **v1.6** ✅ | Proposals + Skills + Memory nav views | Operator inbox, capability map, and context inspector — released `v1.6.0` |
+| **v1.7** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
 
 **Deploying:** Mission Control runs on a Hetzner VPS (host Node + Caddy + systemd, Claude Pro auth). See [docs/runbook-deploy.md](docs/runbook-deploy.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md).
