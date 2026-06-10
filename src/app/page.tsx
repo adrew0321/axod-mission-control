@@ -9,6 +9,8 @@ import { resolveActiveProject, ACTIVE_PROJECT_COOKIE } from "@/lib/projects";
 import { getOrCreateActiveSession } from "@/lib/active-project";
 import { getLiveFeed } from "@/lib/live-feed";
 import { getTaskBoard } from "@/lib/task-board-data";
+import { getProposals } from "@/lib/proposals-data";
+import { getSkills } from "@/lib/skills-data";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +142,7 @@ export default async function HomePage() {
     tokensIn: Number(totals?.tokensIn ?? 0),
     tokensOut: Number(totals?.tokensOut ?? 0),
     createdAt: currentSessionRow.created_at.toISOString(),
+    clearedAt: currentSessionRow.cleared_at ? currentSessionRow.cleared_at.toISOString() : null,
   };
 
   const pendingApproval = approvalRows.find((a) => a.status === "pending");
@@ -182,6 +185,8 @@ export default async function HomePage() {
 
   const liveFeedEvents = await getLiveFeed();
   const initialTaskBoard = await getTaskBoard(project.id);
+  const initialProposals = await getProposals();
+  const initialSkills = await getSkills();
 
   return (
     <MissionControl
@@ -192,6 +197,8 @@ export default async function HomePage() {
       activeProjectId={project.id}
       initialLiveFeedEvents={liveFeedEvents}
       initialTaskBoard={initialTaskBoard}
+      initialProposals={initialProposals}
+      initialSkills={initialSkills}
     />
   );
 }

@@ -33,6 +33,7 @@ export interface Session {
   tokensIn: number;
   tokensOut: number;
   createdAt: string;
+  clearedAt?: string | null;
 }
 
 export interface Message {

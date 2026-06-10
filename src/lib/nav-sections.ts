@@ -18,9 +18,9 @@ export const NAV_SECTIONS: NavSection[] = [
   { id: "agent-team", label: "Agent Team", icon: "Users", group: "operational", status: "live" },
   { id: "live-feed", label: "Live Feed", icon: "Radio", group: "operational", status: "live" },
   { id: "task-board", label: "Task Board", icon: "LayoutGrid", group: "operational", status: "live" },
-  { id: "proposals", label: "Proposals", icon: "Inbox", group: "operational", status: "soon" },
-  { id: "skills", label: "Skills", icon: "Sparkles", group: "system", status: "soon" },
-  { id: "memory", label: "Memory", icon: "Brain", group: "system", status: "soon" },
+  { id: "proposals", label: "Proposals", icon: "Inbox", group: "operational", status: "live" },
+  { id: "skills", label: "Skills", icon: "Sparkles", group: "system", status: "live" },
+  { id: "memory", label: "Memory", icon: "Brain", group: "system", status: "live" },
   { id: "dreaming", label: "Dreaming", icon: "Moon", group: "system", status: "soon" },
   { id: "scheduler", label: "Scheduler", icon: "CalendarClock", group: "system", status: "soon" },
 ];
