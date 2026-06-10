@@ -47,6 +47,8 @@ import TaskBoardView from "@/components/task-board-view";
 import type { BoardColumns } from "@/lib/task-board";
 import ProposalsView from "@/components/proposals-view";
 import type { Proposal } from "@/lib/proposals";
+import SkillsView from "@/components/skills-view";
+import type { AgentSkills } from "@/lib/skills";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -57,6 +59,7 @@ export interface MissionControlProps {
   initialLiveFeedEvents: LiveFeedEvent[];
   initialTaskBoard: BoardColumns;
   initialProposals: Proposal[];
+  initialSkills: AgentSkills[];
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -249,6 +252,7 @@ export default function MissionControl({
   initialLiveFeedEvents,
   initialTaskBoard,
   initialProposals,
+  initialSkills,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
@@ -889,7 +893,9 @@ export default function MissionControl({
           counts={{ proposals: proposals.length }}
         />
 
-        {activeSection === "proposals" ? (
+        {activeSection === "skills" ? (
+          <SkillsView skills={initialSkills} />
+        ) : activeSection === "proposals" ? (
           <ProposalsView
             proposals={proposals}
             onSelectSession={handleSelectSession}

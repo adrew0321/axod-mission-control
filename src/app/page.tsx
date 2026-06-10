@@ -10,6 +10,7 @@ import { getOrCreateActiveSession } from "@/lib/active-project";
 import { getLiveFeed } from "@/lib/live-feed";
 import { getTaskBoard } from "@/lib/task-board-data";
 import { getProposals } from "@/lib/proposals-data";
+import { getSkills } from "@/lib/skills-data";
 
 export const dynamic = "force-dynamic";
 
@@ -184,6 +185,7 @@ export default async function HomePage() {
   const liveFeedEvents = await getLiveFeed();
   const initialTaskBoard = await getTaskBoard(project.id);
   const initialProposals = await getProposals();
+  const initialSkills = await getSkills();
 
   return (
     <MissionControl
@@ -195,6 +197,7 @@ export default async function HomePage() {
       initialLiveFeedEvents={liveFeedEvents}
       initialTaskBoard={initialTaskBoard}
       initialProposals={initialProposals}
+      initialSkills={initialSkills}
     />
   );
 }
