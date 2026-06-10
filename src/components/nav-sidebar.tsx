@@ -15,10 +15,13 @@ export default function NavSidebar({
   activeSectionId,
   onSectionChange,
   onLogout,
+  counts = {},
 }: {
   activeSectionId: string;
   onSectionChange: (id: string) => void;
   onLogout: () => void;
+  // Attention counts per section id (e.g. pending proposals) → amber badge/dot.
+  counts?: Record<string, number>;
 }) {
   const [collapsed, setCollapsed] = useState(false);
 
@@ -43,6 +46,7 @@ export default function NavSidebar({
   function sectionRow(s: NavSection) {
     const Icon = lucide(s.icon);
     const live = s.status === "live";
+    const count = counts[s.id] ?? 0;
     return (
       <button
         key={s.id}
@@ -50,8 +54,8 @@ export default function NavSidebar({
         onClick={() => {
           if (live) onSectionChange(s.id);
         }}
-        title={collapsed ? `${s.label}${live ? "" : " · coming soon"}` : live ? undefined : "Coming soon"}
-        className={`w-full flex items-center ${collapsed ? "justify-center" : "gap-2"} px-2 py-1.5 rounded-md text-[11px] font-mono transition-colors ${
+        title={collapsed ? `${s.label}${count > 0 ? ` · ${count} waiting` : ""}${live ? "" : " · coming soon"}` : live ? undefined : "Coming soon"}
+        className={`relative w-full flex items-center ${collapsed ? "justify-center" : "gap-2"} px-2 py-1.5 rounded-md text-[11px] font-mono transition-colors ${
           s.id === activeSectionId
             ? "bg-[#11233a] text-[#00e0ff]"
             : live
@@ -59,8 +63,18 @@ export default function NavSidebar({
               : "text-[#3a424d] cursor-default"
         }`}
       >
-        <Icon className="w-4 h-4 shrink-0" />
+        <span className="relative shrink-0">
+          <Icon className="w-4 h-4" />
+          {collapsed && count > 0 && (
+            <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#f0a020] shadow-[0_0_4px_#f0a020]" />
+          )}
+        </span>
         {!collapsed && <span className="flex-1 text-left truncate">{s.label}</span>}
+        {!collapsed && count > 0 && (
+          <span className="shrink-0 text-[9px] font-mono text-black bg-[#f0a020] rounded-full px-1.5 min-w-[16px] text-center leading-[15px]">
+            {count}
+          </span>
+        )}
         {!collapsed && !live && <span className="text-[8px] uppercase tracking-wider">soon</span>}
       </button>
     );

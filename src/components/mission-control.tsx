@@ -284,6 +284,25 @@ export default function MissionControl({
     if (res.ok) setProposals((await res.json()) as Proposal[]);
   };
 
+  // Proposal notifications: a tab-title count + a toast when a NEW proposal arrives.
+  const prevProposalCount = useRef(initialProposals.length);
+  const [proposalToast, setProposalToast] = useState(false);
+  useEffect(() => {
+    const n = proposals.length;
+    document.title = n > 0 ? `(${n}) AXOD Mission Control` : "AXOD Mission Control";
+    if (activeSection === "proposals") {
+      setProposalToast(false); // already looking — no need to nudge
+    } else if (n > prevProposalCount.current) {
+      setProposalToast(true); // count went up while elsewhere → a new proposal landed
+    }
+    prevProposalCount.current = n;
+  }, [proposals.length, activeSection]);
+  useEffect(() => {
+    if (!proposalToast) return;
+    const t = setTimeout(() => setProposalToast(false), 6000);
+    return () => clearTimeout(t);
+  }, [proposalToast]);
+
   // Dispatched-via-Sage replies render collapsed; this tracks which the operator expanded.
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const toggleReply = (id: string) =>
@@ -867,6 +886,7 @@ export default function MissionControl({
           activeSectionId={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
+          counts={{ proposals: proposals.length }}
         />
 
         {activeSection === "proposals" ? (
@@ -1540,6 +1560,34 @@ export default function MissionControl({
         </div>
       </footer>
       <AddProjectDialog open={addProjectOpen} onClose={() => setAddProjectOpen(false)} />
+
+      {proposalToast && (
+        <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 bg-[#161c25] border border-[#f0a020]/40 rounded-lg px-4 py-3 shadow-lg shadow-black/50 animate-in">
+          <span className="text-[#f0a020] text-base leading-none">⚑</span>
+          <div className="min-w-0">
+            <div className="text-xs text-[#e6edf3] font-heading">Changes awaiting review</div>
+            <div className="text-[10px] font-mono text-[#8b949e]">
+              {proposals.length} proposal{proposals.length === 1 ? "" : "s"} ready
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              setActiveSection("proposals");
+              setProposalToast(false);
+            }}
+            className="shrink-0 text-[10px] font-mono px-2 py-1 rounded bg-[#f0a020] text-black font-bold"
+          >
+            Review →
+          </button>
+          <button
+            onClick={() => setProposalToast(false)}
+            title="Dismiss"
+            className="shrink-0 text-[#5c6470] hover:text-[#e6edf3] text-sm leading-none"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }
