@@ -137,3 +137,26 @@ Discard = `removeWorktree` + `git branch -D mc/<session>` (no merge).
 
 Push-for-PR · per-file/partial merge · in-app conflict resolution · re-running a session
 after a conflict · the dormant tool-approvals gate · auto-merge policies.
+
+## What actually happened (2026-06-08/09)
+
+Shipped on `feature/proposals` (subagent-driven for the core, inline for wiring/fixes). Build
+clean, `pnpm test` **87/87** (84 + 3 `summarizeDiff`). Implemented per spec, plus three things
+the smoke test forced:
+
+- **Merge must not hijack the operator's working tree.** The first cut did `git checkout dev`
+  in the project repo — fatal for the self-hosted "mission-control manages its own repo" case,
+  where that repo IS this app's live working directory. Approving a proposal yanked the running
+  app off `feature/proposals` onto `dev`. Fixed: `mergeWorktree` now merges in an **isolated
+  temp worktree** (or wherever the base is already checked out) and **never `git checkout`s** in
+  the project repo. Recorded in memory `self-hosted-repo-is-live-dir`.
+- **A stale, uncheckpointed WAL caused blanket session 404s.** `data/mission-control.db` (main
+  file) was old while every recent session lived in a 2.8 MB `-wal`; a connection that didn't map
+  the WAL read only the stale main file → "session not found" on every route. Fixed by
+  checkpointing the WAL into the main DB and pinning `DATABASE_PATH` to an **absolute** path
+  (which the deploy spec already mandates for prod). Not a code change — an environment fix.
+- **Notifications added** (operator request, options 1–3): an amber count **badge** on the
+  Proposals nav item (dot when collapsed), a **`(N)` tab-title** count, and a bottom-right
+  **toast** when a new proposal arrives while you're elsewhere. Event-driven off the existing
+  `proposals` state (no polling); suppressed on the Proposals view and on initial load. The
+  `NavSidebar` gained a generic `counts: Record<string, number>` prop for future reuse.

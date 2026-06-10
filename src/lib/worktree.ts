@@ -189,3 +189,90 @@ export async function listWorktrees(repoPath: string): Promise<string[]> {
     .filter((l) => l.startsWith('worktree '))
     .map((l) => l.slice('worktree '.length).trim());
 }
+
+export type MergeResult = { ok: true } | { ok: false; conflict: true; message: string };
+
+/**
+ * Find the worktree path where `branch` is currently checked out, or null.
+ * Parses `git worktree list --porcelain` (blocks of `worktree`/`HEAD`/`branch` lines).
+ */
+async function worktreeForBranch(repoPath: string, branch: string): Promise<string | null> {
+  const { stdout } = await exec('git', ['-C', repoPath, 'worktree', 'list', '--porcelain']);
+  let current: string | null = null;
+  for (const line of stdout.split('\n')) {
+    if (line.startsWith('worktree ')) current = line.slice('worktree '.length).trim();
+    else if (line.startsWith('branch ') && current) {
+      if (line.slice('branch '.length).trim() === `refs/heads/${branch}`) return current;
+    }
+  }
+  return null;
+}
+
+/**
+ * Apply a session's work to the project's base branch. Commits any loose edits on
+ * mc/<sessionId>, then merges that branch into baseBranch.
+ *
+ * Critically, this NEVER `git checkout`s in the project repo: for the self-hosted
+ * case the project repo IS this app's own live working directory, and switching its
+ * branch would yank the running app onto another branch. Instead it merges wherever
+ * the base branch is already checked out, or in a throwaway worktree it cleans up.
+ *
+ * On a merge conflict: aborts (no partial state) and returns { conflict }.
+ * On success: removes the session worktree + deletes the branch, returns { ok:true }.
+ * A non-merge failure throws — the caller maps it to a 500.
+ */
+export async function mergeWorktree(
+  sessionId: string,
+  repoPath: string,
+  baseBranch: string,
+): Promise<MergeResult> {
+  const wtPath = sessionWorktreePath(sessionId);
+  const branch = sessionBranch(sessionId);
+
+  // 1. Commit any uncommitted edits in the worktree so the branch carries them.
+  const { stdout: status } = await exec('git', ['-C', wtPath, 'status', '--porcelain']);
+  if (status.trim()) {
+    await exec('git', ['-C', wtPath, 'add', '-A']);
+    await exec('git', ['-C', wtPath, 'commit', '-m', `mission-control: ${branch}`]);
+  }
+
+  // 2. Merge into the base WITHOUT disturbing the operator's working tree. If the base
+  //    is already checked out somewhere, merge there; otherwise spin up a temp worktree.
+  const existingBaseDir = await worktreeForBranch(repoPath, baseBranch);
+  let tmpDir: string | null = null;
+  let mergeDir: string;
+  if (existingBaseDir) {
+    mergeDir = existingBaseDir;
+  } else {
+    tmpDir = path.join(worktreeRoot(), `_merge_${sessionId}`);
+    await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', tmpDir]).catch(() => {});
+    await exec('git', ['-C', repoPath, 'worktree', 'add', tmpDir, baseBranch]);
+    mergeDir = tmpDir;
+  }
+
+  const cleanupTmp = async () => {
+    if (tmpDir) await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', tmpDir]).catch(() => {});
+  };
+
+  try {
+    await exec('git', ['-C', mergeDir, 'merge', '--no-ff', '-m', `Merge ${branch}`, branch]);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await exec('git', ['-C', mergeDir, 'merge', '--abort']).catch(() => {});
+    await cleanupTmp();
+    return { ok: false, conflict: true, message };
+  }
+
+  await cleanupTmp();
+
+  // 3. Cleanup: remove the session worktree (detaches the branch) then delete the branch.
+  await removeWorktree(sessionId, repoPath);
+  await exec('git', ['-C', repoPath, 'branch', '-D', branch]).catch(() => {});
+  return { ok: true };
+}
+
+/** Throw away a session's work: remove the worktree and delete the branch. */
+export async function discardWorktree(sessionId: string, repoPath: string): Promise<void> {
+  await removeWorktree(sessionId, repoPath);
+  await exec('git', ['-C', repoPath, 'branch', '-D', sessionBranch(sessionId)]).catch(() => {});
+}
