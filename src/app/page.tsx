@@ -142,6 +142,7 @@ export default async function HomePage() {
     tokensIn: Number(totals?.tokensIn ?? 0),
     tokensOut: Number(totals?.tokensOut ?? 0),
     createdAt: currentSessionRow.created_at.toISOString(),
+    clearedAt: currentSessionRow.cleared_at ? currentSessionRow.cleared_at.toISOString() : null,
   };
 
   const pendingApproval = approvalRows.find((a) => a.status === "pending");
