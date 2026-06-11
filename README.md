@@ -68,10 +68,11 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **Navbar** ✅ | Memory view | Active-session context inspector: the attributed transcript Sage receives + size readout (msgs · ~tokens) + the Clear control. |
 | **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (`v1.5.0`); VPS deploy tooling (`v1.5.1`) | The nav-views milestone + the deploy runbook |
 | **v1.6** ✅ | Proposals + Skills + Memory nav views | Operator inbox, capability map, and context inspector — released `v1.6.0` |
+| **v1.6.1** ✅ | Oracle Always-Free deploy tooling | Retarget deploy to a free Oracle A1 VM at `bridge.axodcreative.com` (cloud = source of truth, Object Storage offsite backups) — see [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md) |
 | **v1.7** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
 
-**Deploying:** Mission Control runs on a Hetzner VPS (host Node + Caddy + systemd, Claude Pro auth). See [docs/runbook-deploy.md](docs/runbook-deploy.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md).
+**Deploying:** Mission Control runs on an Oracle Cloud Always-Free A1 VM (host Node + Caddy + systemd, Claude Pro auth) at `bridge.axodcreative.com`. See [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md). (The earlier Hetzner runbook, [docs/runbook-deploy.md](docs/runbook-deploy.md), is retained for reference.)
 
 <a name="growing-the-team"></a>
 ### Growing the team (how a new agent gets added)
