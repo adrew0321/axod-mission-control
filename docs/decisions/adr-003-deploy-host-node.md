@@ -28,3 +28,21 @@ for one-line auto-HTTPS.
 - Throughput is bounded by Claude Pro usage limits rather than a dollar amount.
 - Revisit if: multi-node is needed, hard per-project isolation is needed, or we run multiple
   instances on one box.
+
+---
+
+### Amendment 2026-06-10 — deploy target is Oracle Always-Free (arm64)
+
+The host/Caddy/systemd/Pro-auth **decision is unchanged**; only the target host moves.
+v1 now deploys to an **Oracle Cloud Always-Free `VM.Standard.A1.Flex`** (ARM Ampere,
+2 vCPU / 12 GB, Ubuntu 24.04) at `https://bridge.axodcreative.com`, replacing the planned
+Hetzner CX22. Rationale: free-forever with no passport requirement and far more RAM than the
+x86 free micro (1 GB), which would struggle with `pnpm build` and concurrent `claude`
+subprocesses. arm64 is transparent — Node 22, pnpm, the `claude` CLI, and `better-sqlite3`
+(built from source under this repo's `ignore-scripts` setup) all support it.
+
+Consequences specific to Oracle: a **two-layer firewall** (VCN Security List ingress *and* the
+host's `ufw`/iptables — both must allow 80/443); a **reserved (static) public IP** so DNS
+survives stop/start; and **offsite backups to Oracle Object Storage** via a scoped write-only
+Pre-Authenticated Request. Cloud is the source of truth; local data is migrated once at setup.
+See `docs/runbook-deploy-oracle.md` and `docs/superpowers/specs/2026-06-10-oracle-deploy-design.md`.
