@@ -1,0 +1,11 @@
+[Unit]
+Description=Mission Control nightly offsite backup (Object Storage)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=mc
+Group=mc
+EnvironmentFile=/srv/mission-control/.env
+ExecStart=/srv/mission-control/deploy/mc-backup-offsite.sh
