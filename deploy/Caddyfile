@@ -1,6 +1,6 @@
 # Caddy reverse proxy for Mission Control. Automatic HTTPS via Let's Encrypt —
 # Caddy provisions + renews the cert once this name's DNS resolves to the box.
-mc-dev.axodcreative.com {
+bridge.axodcreative.com {
 	encode gzip
 	reverse_proxy localhost:3000
 }
