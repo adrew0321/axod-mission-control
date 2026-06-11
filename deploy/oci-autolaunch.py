@@ -45,6 +45,8 @@ def main():
     ocpus = float(env("OCPUS", "2"))
     mem_gb = float(env("MEM_GB", "12"))
     retry_seconds = int(env("RETRY_SECONDS", "60"))
+    per_attempt_seconds = int(env("PER_ATTEMPT_SECONDS", "30"))
+    ratelimit_backoff = int(env("RATELIMIT_BACKOFF", "180"))
     max_attempts = int(env("MAX_ATTEMPTS", "0"))
     image_id = env("IMAGE_OCID", "")
     ads_env = env("ADS", "")
@@ -136,19 +138,27 @@ def main():
                 print(f"  public IP:     {public_ip or '<none assigned>'}")
                 return
             except oci.exceptions.ServiceError as exc:
-                blob = f"{exc.status} {exc.code} {exc.message}".lower()
+                code = (exc.code or "")
+                blob = f"{exc.status} {code} {exc.message}".lower()
                 is_capacity = (
                     "capacity" in blob
-                    or (exc.status == 500 and (exc.code or "").lower() == "internalerror")
+                    or (exc.status == 500 and code.lower() == "internalerror")
                 )
+                is_ratelimited = exc.status == 429 or code.lower() == "toomanyrequests"
                 if is_capacity:
                     print(f"   …no capacity in {ad}.", flush=True)
+                elif is_ratelimited:
+                    # Transient: OCI throttled us. Back off, then keep going.
+                    print(f"   rate-limited (429); backing off {ratelimit_backoff}s...", flush=True)
+                    time.sleep(ratelimit_backoff)
                 else:
                     print(f"   launch failed (NON-capacity): "
-                          f"{exc.status} {exc.code} — {exc.message}", file=sys.stderr)
+                          f"{exc.status} {code} — {exc.message}", file=sys.stderr)
                     sys.exit("Stopping — this is a config/auth/quota error, not capacity.")
             if max_attempts and attempt >= max_attempts:
                 sys.exit(f"Hit MAX_ATTEMPTS={max_attempts} without capacity.")
+            # Space out attempts so we don't trip OCI's per-user request limit.
+            time.sleep(per_attempt_seconds)
         print(f"   cycled all ADs; sleeping {retry_seconds}s...", flush=True)
         time.sleep(retry_seconds)
 
