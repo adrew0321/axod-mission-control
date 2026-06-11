@@ -5,8 +5,35 @@ often returns **"Out of host capacity."** This runbook configures the OCI CLI on
 then runs `deploy/oci-autolaunch.sh`, which retries the launch across all your
 availability domains until one frees up — hands-off.
 
-Run all of this **on your local machine** (Git Bash). You only need to launch the
+Run all of this **on your local machine**. You only need to launch the
 instance this way; the rest of the deploy is the normal `docs/runbook-deploy-oracle.md`.
+
+> ## ⚠️ Windows without admin: skip the CLI, use the Python SDK
+> The `oci-cli` installer **fails on Windows without admin rights** — it ships help-text
+> files whose paths exceed the 260-char limit, and enabling Long Paths needs an HKLM
+> registry write (admin). Path-shortening doesn't help (the worst file is ~245 chars alone).
+>
+> **Use `deploy/oci-autolaunch.py` instead** — it calls the `oci` **Python SDK** directly
+> (no CLI, none of those giant files). Setup:
+> 1. The official installer still bootstraps Python even though the CLI step fails — or install
+>    Python yourself. Then make a venv with just the SDK (short path avoids any doubt):
+>    ```powershell
+>    & "C:\Users\<you>\Python\python.exe" -m venv C:\Users\Public\o
+>    & "C:\Users\Public\o\Scripts\python.exe" -m pip install oci
+>    ```
+> 2. Do the auth setup below (§2) — **generate the key pair in the console and DOWNLOAD the
+>    private key** (the most reliable path); point `~/.oci/config`'s `key_file` at it.
+>    On Git Bash, openssl chokes on paths with an apostrophe in the username — `cd ~/.oci`
+>    and use relative filenames when computing the fingerprint.
+> 3. Validate, then launch:
+>    ```powershell
+>    $env:COMPARTMENT_OCID="<tenancy ocid>"; $env:SUBNET_OCID="<public subnet ocid>"
+>    $env:CHECK="1"; & "C:\Users\Public\o\Scripts\python.exe" "<repo>\deploy\oci-autolaunch.py"  # validate
+>    $env:CHECK="";  & "C:\Users\Public\o\Scripts\python.exe" "<repo>\deploy\oci-autolaunch.py"  # launch loop
+>    ```
+> The Python launcher takes the **same env vars** as the bash one (below) and behaves
+> identically. The CLI route below is fine on Linux (e.g. the deploy box) where `oci-cli`
+> installs cleanly.
 
 ## 1. Install the OCI CLI
 **Windows (PowerShell, as your user):**
