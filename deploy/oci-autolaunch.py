@@ -36,6 +36,21 @@ def env(name, default=None, required=False):
     return val
 
 
+def alert(title, text):
+    """Best-effort attention grab on Windows (sound + modal popup). No-ops elsewhere."""
+    try:
+        import winsound
+        for _ in range(3):
+            winsound.Beep(880, 250)
+    except Exception:
+        pass
+    try:
+        import ctypes  # MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST
+        ctypes.windll.user32.MessageBoxW(0, text, title, 0x40 | 0x10000 | 0x40000)
+    except Exception:
+        pass
+
+
 def main():
     config = oci.config.from_file()  # ~/.oci/config [DEFAULT]
     compartment = env("COMPARTMENT_OCID", config.get("tenancy"))
@@ -136,6 +151,8 @@ def main():
                 print(f"SUCCESS — instance is RUNNING in {ad}.")
                 print(f"  instance OCID: {running.id}")
                 print(f"  public IP:     {public_ip or '<none assigned>'}")
+                alert("Oracle A1 launched!",
+                      f"mc-bridge is RUNNING in {ad}.\nPublic IP: {public_ip or '<none>'}")
                 return
             except oci.exceptions.ServiceError as exc:
                 code = (exc.code or "")
@@ -154,6 +171,8 @@ def main():
                 else:
                     print(f"   launch failed (NON-capacity): "
                           f"{exc.status} {code} — {exc.message}", file=sys.stderr)
+                    alert("Oracle A1 launcher stopped",
+                          f"Non-capacity error — needs attention:\n{exc.status} {code} — {exc.message}")
                     sys.exit("Stopping — this is a config/auth/quota error, not capacity.")
             if max_attempts and attempt >= max_attempts:
                 sys.exit(f"Hit MAX_ATTEMPTS={max_attempts} without capacity.")
