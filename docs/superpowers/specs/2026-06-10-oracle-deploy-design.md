@@ -35,6 +35,12 @@ deltas** and the two new choices (hostname, real admin).
    connect/firewall/IP steps differ enough that a clean Oracle-only file beats inline branching).
 6. **OS firewall = `ufw`, flushing Oracle's restrictive default iptables**, so the OS layer
    matches the existing runbook's `ufw` step rather than maintaining Oracle's stock iptables.
+7. **Cloud is the source of truth.** Local desktop work is migrated **once** during setup; from
+   then on the box is canonical. No recurring local → cloud push (that direction invites
+   conflicts and isn't needed once the box is always-on).
+8. **Offsite backups = Oracle Object Storage** (Always Free, 20 GB, same cloud, independent of
+   the desktop). A nightly on-box cron pushes the SQLite backup to a bucket using a **scoped,
+   write-only** credential. Chosen over pull-to-local because the desktop isn't always on.
 
 ## Oracle-specific deltas (the only new content vs. the Hetzner runbook)
 
@@ -89,6 +95,45 @@ Steps 1–12 of the existing runbook apply as-is on Ubuntu 24.04, with `mc-dev.a
 
 `scripts/deploy.sh` (pull → install → build → migrate → restart) is reused unchanged for updates.
 
+## Data — migration & backups (cloud = source of truth)
+
+The data that matters is small and splits cleanly. Of the local AXOD tree (~2.3 GB on disk),
+**almost all bytes are regenerable** (`node_modules`, `.next`, and `data/worktrees/` — 381 MB of
+throwaway per-session agent workspaces). None of that is transferred. What actually moves:
+
+### A. One-time migration (during setup)
+
+1. **The SQLite DB (~270 KB) — the only irreplaceable artifact.** Holds the admin login,
+   sessions, memory, tasks, proposals, skills, agent roster. Migration: **stop the local app →
+   checkpoint the WAL** (`PRAGMA wal_checkpoint(TRUNCATE)`, so `-wal`/`-shm` fold into the main
+   file) → `scp data/mission-control.db ubuntu@<ip>:` over the SSH key → move into place as the
+   `mc` user at `DATABASE_PATH` **before** first service start (so `db:migrate` runs against the
+   real data). Encrypted in transit; consistent snapshot.
+2. **Project repos with GitHub remotes** → **git is the transfer**, not file copy. Commit + push
+   any uncommitted local work first (so nothing is lost), then `git clone` onto the box under
+   `/srv/projects/`, and register each in the in-app project switcher pointing at that path:
+   - `axod-chat` → `github.com/adrew0321/axod-chat` (clean).
+   - `landing` → `github.com/adrew0321/AXODCREATIVE` (commit/push `Pricing.astro` first).
+   - `research-agent` → `github.com/adrew0321/axod-research-agent` (commit/push `package.json`
+     change + `plans/` first).
+3. **`test-browser`** → **skipped** (no git repo; reads as a throwaway). Not migrated.
+
+### B. Ongoing backups (cloud → offsite, automated on the box)
+
+- **Local on-box snapshots (already in the existing design):** nightly `sqlite3 .backup` into
+  `/srv/backups`, keep last 7. Protects against app-level corruption.
+- **Offsite to Oracle Object Storage (new):** a nightly cron/timer on the box uploads the latest
+  snapshot to an Always-Free Object Storage bucket. Survives total loss of the VM.
+
+### Security model (the "safely & securely" part)
+
+- All migration transfer is **SSH/`scp` over the instance keypair** — key-based, encrypted, no
+  passwords.
+- The backup job runs **on the box** — nothing needs inbound access to the desktop.
+- Object Storage upload uses a **scoped, write-only credential** (a pre-authenticated request to
+  the single backup bucket), stored in the `mc`-owned `.env` (mode `600`), **never committed** to
+  git. Least privilege: it can only write backups to that one bucket. Encrypted at rest by Oracle.
+
 ## Topology
 
 ```
@@ -108,7 +153,11 @@ Internet
 - **`deploy/Caddyfile`** — change site to `bridge.axodcreative.com { reverse_proxy
   localhost:3000 }`. (Single hostname; the existing Hetzner host is retired, not run in parallel.)
 - **`docs/runbook-deploy-oracle.md`** — new operator runbook: D1 (provision) → D2 (both
-  firewalls) → D3 (reserve IP) → carried-over steps → D4 (DNS) → verify.
+  firewalls) → D3 (reserve IP) → **DB migration (A1) + repo migration (A2)** → carried-over
+  steps → **Object Storage backup setup (B)** → D4 (DNS) → verify.
+- **`deploy/mc-backup-offsite.sh`** + **`deploy/mc-backup-offsite.{service,timer}`** — nightly
+  upload of the latest `/srv/backups` snapshot to the Object Storage bucket via the scoped
+  write-only credential. (Runs after the existing local `mc-backup` job.)
 - **`docs/decisions/adr-003-deploy-host-node.md`** — small amendment noting the deploy target
   is now an **Oracle Always-Free A1 (arm64)** rather than Hetzner CX22; the host/Caddy/systemd
   **decision itself is unchanged** (this is a target-host note, not a re-decision).
@@ -135,6 +184,8 @@ turn and confirm it streams over the SSE connection.
 
 ## Out of scope (later)
 
-GitHub Actions push-to-deploy · offsite backups · uptime monitoring · login rate-limiting ·
-server-side turn runner (for cron/Scheduler) · bumping the A1 to 4 vCPU / 24 GB · running the
-old Hetzner host in parallel.
+GitHub Actions push-to-deploy · uptime monitoring · login rate-limiting · **server-side turn
+runner** (agents executing turns with no browser open — needed for cron/Scheduler, explicitly
+distinct from the file backups above, which are in scope) · bumping the A1 to 4 vCPU / 24 GB ·
+running the old Hetzner host in parallel · migrating `test-browser` · recurring local → cloud
+push (cloud is canonical).
