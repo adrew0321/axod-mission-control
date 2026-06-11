@@ -108,8 +108,14 @@ def main():
     # ---- launch retry loop -------------------------------------------------
     print(f"Launching {SHAPE} ({ocpus:g} OCPU / {mem_gb:g}GB) named '{display_name}'.")
     print("Retrying across ADs until capacity appears. Ctrl-C to stop.")
+    # --- Phase 1: create the instance (retry across ADs until capacity) -----
+    # Only `launch_instance` lives in this retry loop. Once it returns an
+    # instance id we leave immediately, so a later network blip can never
+    # trigger a SECOND launch (duplicate instance).
     attempt = 0
-    while True:
+    instance_id = None
+    won_ad = None
+    while instance_id is None:
         for ad in ads:
             attempt += 1
             stamp = time.strftime("%H:%M:%S")
@@ -129,31 +135,10 @@ def main():
                 metadata={"ssh_authorized_keys": ssh_pub},
             )
             try:
-                resp = compute.launch_instance(details)
-                instance_id = resp.data.id
-                print(f"   launched ({instance_id}); waiting for RUNNING...", flush=True)
-                running = oci.wait_until(
-                    compute,
-                    compute.get_instance(instance_id),
-                    "lifecycle_state",
-                    "RUNNING",
-                    max_wait_seconds=900,
-                ).data
-                public_ip = None
-                for att in compute.list_vnic_attachments(
-                    compartment, instance_id=instance_id
-                ).data:
-                    vnic = network.get_vnic(att.vnic_id).data
-                    if vnic.public_ip:
-                        public_ip = vnic.public_ip
-                        break
-                print("")
-                print(f"SUCCESS — instance is RUNNING in {ad}.")
-                print(f"  instance OCID: {running.id}")
-                print(f"  public IP:     {public_ip or '<none assigned>'}")
-                alert("Oracle A1 launched!",
-                      f"mc-bridge is RUNNING in {ad}.\nPublic IP: {public_ip or '<none>'}")
-                return
+                instance_id = compute.launch_instance(details).data.id
+                won_ad = ad
+                print(f"   launched ({instance_id}).", flush=True)
+                break
             except oci.exceptions.ServiceError as exc:
                 code = (exc.code or "")
                 blob = f"{exc.status} {code} {exc.message}".lower()
@@ -174,12 +159,47 @@ def main():
                     alert("Oracle A1 launcher stopped",
                           f"Non-capacity error — needs attention:\n{exc.status} {code} — {exc.message}")
                     sys.exit("Stopping — this is a config/auth/quota error, not capacity.")
+            except oci.exceptions.RequestException as exc:
+                # Transient network blip (e.g. RemoteDisconnected) — not a real
+                # failure; just retry the next attempt.
+                print(f"   transient network error; retrying... ({exc})", file=sys.stderr)
             if max_attempts and attempt >= max_attempts:
                 sys.exit(f"Hit MAX_ATTEMPTS={max_attempts} without capacity.")
             # Space out attempts so we don't trip OCI's per-user request limit.
             time.sleep(per_attempt_seconds)
-        print(f"   cycled all ADs; sleeping {retry_seconds}s...", flush=True)
-        time.sleep(retry_seconds)
+        if instance_id is None:
+            print(f"   cycled all ADs; sleeping {retry_seconds}s...", flush=True)
+            time.sleep(retry_seconds)
+
+    # --- Phase 2: wait for RUNNING + fetch public IP (no re-launch on error) -
+    print(f"   waiting for RUNNING in {won_ad}...", flush=True)
+    for _ in range(6):
+        try:
+            oci.wait_until(
+                compute, compute.get_instance(instance_id),
+                "lifecycle_state", "RUNNING", max_wait_seconds=900,
+            )
+            break
+        except oci.exceptions.RequestException as exc:
+            print(f"   network blip while waiting; retrying... ({exc})", file=sys.stderr)
+            time.sleep(15)
+
+    public_ip = None
+    try:
+        for att in compute.list_vnic_attachments(compartment, instance_id=instance_id).data:
+            vnic = network.get_vnic(att.vnic_id).data
+            if vnic.public_ip:
+                public_ip = vnic.public_ip
+                break
+    except oci.exceptions.RequestException:
+        pass
+
+    print("")
+    print(f"SUCCESS — instance launched in {won_ad}.")
+    print(f"  instance OCID: {instance_id}")
+    print(f"  public IP:     {public_ip or '<not fetched — see console>'}")
+    alert("Oracle A1 launched!",
+          f"mc-bridge launched in {won_ad}.\nPublic IP: {public_ip or '<see console>'}")
 
 
 if __name__ == "__main__":
