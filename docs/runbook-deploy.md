@@ -35,6 +35,7 @@ claude --version
 ## 4. App user + directories
 ```bash
 id mc >/dev/null 2>&1 || adduser --system --group --home /srv/mission-control mc
+usermod -s /bin/bash mc   # `--system` users default to nologin; step 9's `sudo -iu mc` needs a real shell
 mkdir -p /srv/mission-control /srv/projects /srv/backups
 chown -R mc:mc /srv/mission-control /srv/projects /srv/backups
 ```
@@ -63,8 +64,19 @@ sudo -u mc grep -E 'DATABASE_PATH|WORKTREE_ROOT|NODE_ENV|PORT' .env
 ```bash
 cd /srv/mission-control
 sudo -u mc pnpm install --frozen-lockfile
-# If better-sqlite3 fails to load later (e.g. "invalid ELF header"), rebuild from source:
-#   sudo -u mc pnpm rebuild better-sqlite3
+# pnpm will warn about "ignored build scripts" — that's the intended hardening; do NOT run
+# `pnpm approve-builds` (the onlyBuiltDependencies allowlist is the real control).
+# Create the data dirs BEFORE building: the Next build instantiates the DB layer, so a
+# missing data/ dir makes `pnpm build` fail with "cannot open database ... directory does not exist".
+sudo -u mc mkdir -p /srv/mission-control/data/worktrees
+# Verify better-sqlite3's native binding loads (build/Release/better_sqlite3.node):
+sudo -u mc node -e "new (require('better-sqlite3'))(':memory:'); console.log('sqlite ok')"
+# If that throws ("could not locate the bindings file" / "invalid ELF header"), the prebuilt
+# binary was missing or mismatched. `pnpm rebuild better-sqlite3` often silently no-ops when
+# prebuild-install can't download; compile it directly with npm's bundled node-gyp instead:
+#   cd /srv/mission-control/node_modules/better-sqlite3
+#   sudo -u mc node /usr/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild
+#   cd /srv/mission-control   # then re-run the sqlite check above
 sudo -u mc pnpm build
 ```
 

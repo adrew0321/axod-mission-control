@@ -22,6 +22,17 @@ Cloud = source of truth; local data migrated once.
 
 ## Phase 1 — Install Ubuntu on the Mac Mini
 You need a **monitor (HDMI)**, a **USB keyboard**, and an **Ethernet cable** to the router.
+
+> **Networking reality on the 2011 A1347.** Its built-in Wi-Fi is a **Broadcom BCM4331** whose
+> Linux driver is proprietary and **not on the offline Server installer** — you cannot join any
+> Wi-Fi (not even a phone hotspot) during install. Use **wired** networking. If you have no
+> Ethernet cable handy, the no-cable fallback is **USB tethering** (not Wi-Fi tethering): plug a
+> phone in by USB cable and enable USB tethering — Linux sees a plain wired interface, no drivers
+> needed. iPhone tethering works (interface `enx…`, DHCP `172.20.10.x`) and gets you online for
+> the whole deploy; just note its IP is NAT'd behind the phone so the LAN can't SSH in (you work
+> at the Mini's keyboard until Ethernet is connected). On Ubuntu 24.04 there's no `dhclient` — if
+> an interface comes up without an IP, point netplan at it (`/etc/netplan/99-iface.yaml`,
+> `dhcp4: true`, `chmod 600`, `netplan apply`).
 1. Plug in the USB stick, monitor, keyboard, Ethernet.
 2. Power on while **holding the Option/Alt (⌥) key** → the Mac boot picker appears.
 3. Select **"EFI Boot"** (the USB) → Enter.
@@ -69,7 +80,18 @@ Then finish the app steps:
 
 ## Phase 3 — Cloudflare Tunnel (the ingress)
 All on the Mac Mini (as root unless noted).
-1. **Install `cloudflared`:**
+
+> **Prerequisite:** the named tunnel needs `axodcreative.com` to be a **zone in your Cloudflare
+> account** (so `cloudflared tunnel login` lists it and `route dns` can write the record). If the
+> domain isn't registered yet, the cleanest path is to **register it via Cloudflare Registrar** —
+> it's added as a zone automatically, no nameserver changes. To **smoke-test before you own the
+> domain**, run a throwaway quick tunnel (no login, no DNS): `cloudflared tunnel --url
+> http://127.0.0.1:3000` prints an ephemeral `https://<random>.trycloudflare.com` you can open
+> from your phone. It runs in the foreground and dies on Ctrl+C/reboot — it's for verification
+> only; do the steps below for the permanent boot service.
+
+1. **Install `cloudflared`:** (apt repo below, or simpler on a fresh box: download the `.deb` —
+   `curl -L -o /tmp/cf.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && apt install /tmp/cf.deb`)
    ```bash
    mkdir -p --mode=0755 /usr/share/keyrings
    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null
@@ -93,9 +115,12 @@ All on the Mac Mini (as root unless noted).
    credentials-file: /root/.cloudflared/<TUNNEL_ID>.json
    ingress:
      - hostname: bridge.axodcreative.com
-       service: http://localhost:3000
+       service: http://127.0.0.1:3000   # use 127.0.0.1, NOT localhost — see note below
      - service: http_status:404
    ```
+   > **Use `127.0.0.1`, not `localhost`.** `next start` listens on IPv4 only, but `localhost`
+   > frequently resolves to IPv6 `::1` first, so `cloudflared` gets **"unable to reach the origin
+   > service"** (502 Bad Gateway) even though `curl localhost:3000` works (curl falls back to IPv4).
 5. **Create the DNS record** (auto — no manual Cloudflare DNS edit needed):
    ```bash
    cloudflared tunnel route dns mc-bridge bridge.axodcreative.com
