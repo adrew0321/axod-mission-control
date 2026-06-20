@@ -82,9 +82,11 @@ there are no collisions.
    ```
    The stream route supplies it with `sessionId` bound. In `dispatch.ts`'s
    `dispatch_activity` branch, compute the snapshot with the **pure**
-   `toPlanSnapshot` (no DB import in `dispatch.ts`) and call
-   `await ctx.savePlanSnapshot?.(snap)`. This keeps DB access behind the
-   context callback, exactly like `persistMessage`.
+   `toPlanSnapshot` and call `await ctx.savePlanSnapshot?.(snap)`. This keeps the
+   plan **write** behind the context callback, exactly like `persistMessage` —
+   `dispatch.ts` adds no new DB access and does not import `@/lib/plans`. (It
+   keeps its pre-existing `@/db/client` import, which it uses only to load the
+   specialist agent — unrelated to plan persistence.)
 
 ### Restore path (hydration)
 
