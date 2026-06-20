@@ -114,25 +114,32 @@ a single internal helper that does the try/catch — at both call sites.)
 
 ## Testing
 
-- **Parser** (`plan-events.ts`) — already covered by `plan-events.test.ts`;
-  untouched.
-- **`src/lib/plans.test.ts`** (new; `node:test` via `tsx`, a temp/in-memory
-  SQLite DB seeded with the schema):
-  - round-trip: `savePlanSnapshot` then `getLatestPlanForSession` returns the
-    same snapshot;
-  - **upsert, not append**: save snapshot A, then snapshot B for the same
-    session → latest is B and exactly **one** `type='plan'` row exists for that
-    session;
-  - empty: `getLatestPlanForSession` on a session with no plan returns `null`.
-- **Manual:** start a planning task (e.g. "Plan a footer, then build it");
-  reload mid-turn and after the turn — the checklist persists under the right
-  owner; a new turn's `TodoWrite` overwrites it; dispatched specialist plans
-  also persist (latest writer wins).
+This repo deliberately splits **pure logic (unit-tested)** from **DB access
+(not unit-tested)**: every DB module imports `'server-only'`, which throws when
+imported from a `node:test` run, so no test touches the database (e.g.
+`proposals.test.ts` covers the pure `proposals.ts`, never the server-only
+`proposals-data.ts`). `plans.ts` is a DB module (imports `@/db/client`), so it
+follows that precedent — no `plans.test.ts`. (Originally the spec proposed a
+temp-SQLite round-trip test for `plans.ts`; that is dropped to match the
+codebase pattern rather than introduce a DI refactor nothing else uses.)
+
+- **Parser** (`plan-events.ts`) — the only pure logic here — is already covered
+  by `plan-events.test.ts`; untouched. The full `pnpm test` suite must stay
+  green.
+- **Manual verification** (the upsert + restore behavior):
+  - start a planning task (e.g. "Plan a footer, then build it"); the checklist
+    fills in live under the right owner;
+  - reload mid-turn and after the turn — the plan persists (not "No plan yet");
+  - a new turn's `TodoWrite` overwrites it (latest writer wins); a dispatched
+    specialist's plan also persists;
+  - confirm **upsert, not append**: after several `TodoWrite`s, exactly one
+    `type='plan'` row exists for the session — verify with a one-off query
+    (`SELECT count(*) FROM artifacts WHERE session_id=? AND type='plan'` → 1).
 
 ## Files touched
 
-- `src/lib/plans.ts` — finish + trim (upsert + getter; drop history helper).
-- `src/lib/plans.test.ts` — new unit tests.
+- `src/lib/plans.ts` — finish + trim (upsert + getter; drop the unused
+  `getAllPlans` history helper).
 - `src/app/api/sessions/[id]/stream/route.ts` — primary-agent save + wire the
   dispatch `savePlanSnapshot` callback.
 - `src/lib/dispatch.ts` — add `savePlanSnapshot?` to `DispatchContext`; call it
