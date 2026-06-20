@@ -4,6 +4,10 @@
 **Branch:** `feature/week-4-workspace-tabs`
 **Status:** Approved design, ready for implementation plan.
 
+> **Update (2026-06-19):** the Plan tab's "ephemeral, gone on reload" behavior
+> described here is now superseded — the latest snapshot is persisted and
+> rehydrated on load. See `docs/superpowers/specs/2026-06-19-plan-persistence-design.md`.
+
 ## Goal
 
 Replace the static mock "Dynamic Plan" markdown in the Plan tab with a live

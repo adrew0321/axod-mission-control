@@ -6,6 +6,7 @@ import { db } from '@/db/client';
 import { agents } from '@/db/schema';
 import { runClaudeAgent } from './agent-runner-sdk';
 import { toTerminalEvent } from './terminal-events';
+import { toPlanSnapshot, type PlanSnapshot } from './plan-events';
 
 /**
  * In-process MCP server name. The dispatch tool is therefore exposed to Sage as
@@ -44,6 +45,8 @@ export interface DispatchContext {
    * → specialist → Sage-post, instead of one Sage message saved after the specialist.
    */
   onBeforeDispatch?: () => Promise<void>;
+  /** Best-effort: persist a dispatched specialist's latest plan snapshot. */
+  savePlanSnapshot?: (snapshot: PlanSnapshot) => Promise<void>;
 }
 
 function buildTaskPrompt(task: string, context?: string): string {
@@ -126,6 +129,10 @@ export function createDispatchServer(ctx: DispatchContext) {
           ctx.emit({ type: 'dispatch_token', agent_id: agent.id, content: event.content });
         } else if (event.type === 'tool') {
           ctx.emit({ type: 'dispatch_activity', agent_id: agent.id, tool: event.name, input: event.input });
+          // Persist the specialist's latest plan. The callback is best-effort —
+          // the caller (route) swallows DB errors so they can't abort the turn.
+          const planSnap = toPlanSnapshot(event.name, event.input, agent.id);
+          if (planSnap) await ctx.savePlanSnapshot?.(planSnap);
         } else if (event.type === 'done') {
           usage.costUsd = event.costUsd;
           usage.tokensIn = event.tokensIn;

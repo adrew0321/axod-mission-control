@@ -11,6 +11,8 @@ import { createDispatchServer, DISPATCH_SERVER_NAME, DISPATCH_TOOL_NAME } from '
 import { toTerminalEvent } from '@/lib/terminal-events';
 import { buildOrchestratorPrompt, type TranscriptMessage } from '@/lib/conversation';
 import { parseMention } from '@/lib/mention';
+import { savePlanSnapshot } from '@/lib/plans';
+import { toPlanSnapshot, type PlanSnapshot } from '@/lib/plan-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -143,6 +145,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
           }
         }
 
+        // Best-effort plan persistence: never let a DB hiccup break the turn.
+        const persistPlan = async (snapshot: PlanSnapshot) => {
+          try {
+            await savePlanSnapshot(sessionId, snapshot);
+          } catch (err) {
+            console.error('plan persist failed:', err instanceof Error ? err.message : err);
+          }
+        };
+
         // Sage can hand concrete coding tasks to a specialist (Atlas) via the
         // in-process `dispatch_agent` MCP tool. The dispatched agent runs in the
         // SAME worktree, streams to the operator through these closures, and its
@@ -169,6 +180,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             });
           },
           onBeforeDispatch: () => flushPrimary(),
+          savePlanSnapshot: persistPlan,
         });
 
         // Interactive approval gates aren't achievable on this SDK (see the
@@ -201,6 +213,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
             controller.enqueue(
               sseEncode({ type: 'activity', agent_id: primaryId, tool: event.name, input: event.input }),
             );
+            const planSnap = toPlanSnapshot(event.name, event.input, primaryId);
+            if (planSnap) await persistPlan(planSnap);
           } else if (event.type === 'done') {
             costUsd = event.costUsd;
             tokensIn = event.tokensIn;
