@@ -14,6 +14,11 @@ function planRowId(sessionId: string): string {
  * Persist the latest plan snapshot for a session. Upserts a single
  * `type='plan'` artifacts row (id `plan_${sessionId}`) so each new snapshot
  * overwrites the previous one rather than appending history.
+ *
+ * Note: `artifacts.agent_id` is a NOT NULL FK to `agents.id`. `snapshot.agentId`
+ * is always a seeded agent in practice; an unknown id would raise a FK error,
+ * which callers swallow (persistence is best-effort), so the plan just wouldn't
+ * be saved — it never breaks the turn.
  */
 export async function savePlanSnapshot(sessionId: string, snapshot: PlanSnapshot): Promise<void> {
   const id = planRowId(sessionId);
