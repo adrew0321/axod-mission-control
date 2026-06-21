@@ -169,7 +169,7 @@ src/
       health/route.ts                     # uptime-robot endpoint (unauthenticated)
       approvals/[id]/decision/route.ts    # approve / deny / always (dormant gate infra)
       sessions/[id]/messages/route.ts     # POST a user message
-      sessions/[id]/stream/route.ts       # GET SSE stream of the agent turn (Sage + dispatch)
+      sessions/[id]/stream/route.ts       # GET SSE stream — thin: auth + delegates to runSessionTurn
       sessions/[id]/diff/route.ts         # worktree diff for the Code tab
       sessions/[id]/preview/route.ts      # build-and-serve the worktree site for the Preview tab
     login/                                # /login page + form
@@ -189,6 +189,8 @@ src/
     auth.ts, auth-edge.ts, password.ts    # session/cookie + scrypt helpers
     rate-limit.ts                         # in-memory IP bucket
     agent-runner-sdk.ts                   # run a Claude Agent SDK query, yield token/tool/done events
+    run-turn.ts                           # runSessionTurn — one turn end-to-end, sink-agnostic (SSE or CLI), lease-guarded
+    turn-lease.ts                         # pure lease-staleness + turn-input helpers (unit-tested)
     dispatch.ts                           # Sage's in-process `dispatch_agent` MCP tool
     worktree.ts                           # per-session git worktree create/cleanup
     preview.ts                            # build + serve the worktree site
@@ -201,6 +203,7 @@ src/
 scripts/
   seed.ts                                 # demo project + Sage/Atlas + demo session
   seed-admin.ts                           # interactive operator account creator
+  run-turn.ts                             # headless `pnpm run:turn <sessionId> ["instruction"]` — server-initiated turn, no browser
 drizzle/                                  # generated migration SQL + journal
 docs/
   specs/v1-mvp-spec.md
