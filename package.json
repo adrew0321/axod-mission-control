@@ -17,7 +17,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.ts",
-    "seed:admin": "tsx scripts/seed-admin.ts"
+    "seed:admin": "tsx scripts/seed-admin.ts",
+    "run:turn": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/run-turn.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.153",
