@@ -97,6 +97,26 @@ export const tasks = sqliteTable('tasks', {
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const schedules = sqliteTable('schedules', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
+  title: text('title').notNull(),
+  instruction: text('instruction').notNull(),
+  // Cadence (friendly presets). cadence_kind: 'every_hours' | 'daily' | 'weekly'.
+  cadence_kind: text('cadence_kind').notNull(),
+  interval_hours: integer('interval_hours'), // every_hours
+  time_of_day: text('time_of_day'), // 'HH:MM' (daily/weekly), server-local
+  day_of_week: integer('day_of_week'), // 0=Sun..6=Sat (weekly)
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  // The column the ticker queries: when this schedule next becomes due.
+  next_run_at: integer('next_run_at', { mode: 'timestamp' }).notNull(),
+  last_run_at: integer('last_run_at', { mode: 'timestamp' }),
+  last_status: text('last_status'), // 'ok' | 'error' | 'skipped'
+  last_session_id: text('last_session_id').references(() => sessions.id),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
 export const auth_users = sqliteTable('auth_users', {
   id: text('id').primaryKey(),
   email: text('email').unique().notNull(),
