@@ -180,10 +180,11 @@ src/
     diff-viewer.tsx                       # Monaco side-by-side diff + collapsible file list
     terminal-view.tsx                     # live streamed command output (lightweight, no xterm)
     plan-view.tsx                         # live TodoWrite checklist
+    scheduler-view.tsx                    # Scheduler create/list/toggle UI
     markdown.tsx                          # chat markdown rendering
     ui/                                   # shadcn primitives
   db/
-    schema.ts                             # Drizzle SQLite schema (9 tables)
+    schema.ts                             # Drizzle SQLite schema (11 tables)
     client.ts                             # better-sqlite3 + drizzle wiring
   lib/
     auth.ts, auth-edge.ts, password.ts    # session/cookie + scrypt helpers
@@ -191,6 +192,9 @@ src/
     agent-runner-sdk.ts                   # run a Claude Agent SDK query, yield token/tool/done events
     run-turn.ts                           # runSessionTurn — one turn end-to-end, sink-agnostic (SSE or CLI), lease-guarded
     turn-lease.ts                         # pure lease-staleness + turn-input helpers (unit-tested)
+    schedule.ts                           # pure cadence math (next-run, summary) — unit-tested
+    scheduler.ts                          # in-process ticker: poll due schedules → runSessionTurn
+    schedules-data.ts                     # getSchedules server fetch for the Scheduler view
     dispatch.ts                           # Sage's in-process `dispatch_agent` MCP tool
     worktree.ts                           # per-session git worktree create/cleanup
     preview.ts                            # build + serve the worktree site
@@ -199,6 +203,7 @@ src/
     plan-events.ts                        # TodoWrite events → plan snapshot
     message-segments.ts                   # paragraph-split agent chat bubbles
     mock-data.ts                          # shared TYPES only (Agent/Message/Session/Artifact)
+  instrumentation.ts                      # Next boot hook → startScheduler()
   proxy.ts                                # Next 16 proxy (renamed from middleware)
 scripts/
   seed.ts                                 # demo project + Sage/Atlas + demo session

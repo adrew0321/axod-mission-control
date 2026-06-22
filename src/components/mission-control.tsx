@@ -49,6 +49,8 @@ import ProposalsView from "@/components/proposals-view";
 import type { Proposal } from "@/lib/proposals";
 import SkillsView from "@/components/skills-view";
 import type { AgentSkills } from "@/lib/skills";
+import SchedulerView from "@/components/scheduler-view";
+import type { ScheduleRow } from "@/lib/schedules-data";
 import MemoryView from "@/components/memory-view";
 
 export interface MissionControlProps {
@@ -61,6 +63,7 @@ export interface MissionControlProps {
   initialTaskBoard: BoardColumns;
   initialProposals: Proposal[];
   initialSkills: AgentSkills[];
+  initialSchedules: ScheduleRow[];
   initialPlan: PlanSnapshot | null;
 }
 
@@ -255,6 +258,7 @@ export default function MissionControl({
   initialTaskBoard,
   initialProposals,
   initialSkills,
+  initialSchedules,
   initialPlan,
 }: MissionControlProps) {
   const router = useRouter();
@@ -906,6 +910,8 @@ export default function MissionControl({
           />
         ) : activeSection === "skills" ? (
           <SkillsView skills={initialSkills} />
+        ) : activeSection === "scheduler" ? (
+          <SchedulerView schedules={initialSchedules} projects={projects} />
         ) : activeSection === "proposals" ? (
           <ProposalsView
             proposals={proposals}

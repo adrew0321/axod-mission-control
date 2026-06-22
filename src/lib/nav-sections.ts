@@ -22,5 +22,5 @@ export const NAV_SECTIONS: NavSection[] = [
   { id: "skills", label: "Skills", icon: "Sparkles", group: "system", status: "live" },
   { id: "memory", label: "Memory", icon: "Brain", group: "system", status: "live" },
   { id: "dreaming", label: "Dreaming", icon: "Moon", group: "system", status: "soon" },
-  { id: "scheduler", label: "Scheduler", icon: "CalendarClock", group: "system", status: "soon" },
+  { id: "scheduler", label: "Scheduler", icon: "CalendarClock", group: "system", status: "live" },
 ];
