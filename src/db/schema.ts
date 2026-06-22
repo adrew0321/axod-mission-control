@@ -117,6 +117,26 @@ export const schedules = sqliteTable('schedules', {
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const dreams = sqliteTable('dreams', {
+  id: text('id').primaryKey(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  // Window start this dream reflected on: previous dream's created_at, or now-7d.
+  covers_since: integer('covers_since', { mode: 'timestamp' }).notNull(),
+  status: text('status').notNull(), // 'ok' | 'empty' | 'error'
+  insight_count: integer('insight_count').notNull().default(0),
+  error: text('error'),
+});
+
+export const dream_insights = sqliteTable('dream_insights', {
+  id: text('id').primaryKey(),
+  dream_id: text('dream_id').references(() => dreams.id).notNull(),
+  category: text('category').notNull(), // 'pattern' | 'risk' | 'suggestion' | 'praise'
+  title: text('title').notNull(),
+  detail: text('detail').notNull(),
+  status: text('status').notNull().default('new'), // 'new' | 'starred' | 'dismissed'
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 export const auth_users = sqliteTable('auth_users', {
   id: text('id').primaryKey(),
   email: text('email').unique().notNull(),

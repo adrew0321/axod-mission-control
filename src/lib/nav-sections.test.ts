@@ -16,5 +16,5 @@ test('agent-team is live and every soon section stays soon', () => {
   const live = NAV_SECTIONS.filter((s) => s.status === 'live').map((s) => s.id);
   assert.ok(live.includes('agent-team'), 'agent-team is live');
   // Live sections are the ones with a real view wired up.
-  assert.deepEqual(live, ['agent-team', 'live-feed', 'task-board', 'proposals', 'skills', 'memory', 'scheduler']);
+  assert.deepEqual(live, ['agent-team', 'live-feed', 'task-board', 'proposals', 'skills', 'memory', 'dreaming', 'scheduler']);
 });

@@ -181,10 +181,11 @@ src/
     terminal-view.tsx                     # live streamed command output (lightweight, no xterm)
     plan-view.tsx                         # live TodoWrite checklist
     scheduler-view.tsx                    # Scheduler create/list/toggle UI
+    dreaming-view.tsx                     # Dreaming feed: dreams + insight cards (star/dismiss)
     markdown.tsx                          # chat markdown rendering
     ui/                                   # shadcn primitives
   db/
-    schema.ts                             # Drizzle SQLite schema (11 tables)
+    schema.ts                             # Drizzle SQLite schema (13 tables)
     client.ts                             # better-sqlite3 + drizzle wiring
   lib/
     auth.ts, auth-edge.ts, password.ts    # session/cookie + scrypt helpers
@@ -195,6 +196,10 @@ src/
     schedule.ts                           # pure cadence math (next-run, summary) — unit-tested
     scheduler.ts                          # in-process ticker: poll due schedules → runSessionTurn
     schedules-data.ts                     # getSchedules server fetch for the Scheduler view
+    dream.ts                              # Curator: gather conversations → runClaudeAgent → insights (+ nightly ticker)
+    dream-insights.ts                     # pure parser: Curator output → structured insights (unit-tested)
+    dream-due.ts                          # pure nightly due-gate (unit-tested)
+    dreams-data.ts                        # getDreams server fetch for the Dreaming view
     dispatch.ts                           # Sage's in-process `dispatch_agent` MCP tool
     worktree.ts                           # per-session git worktree create/cleanup
     preview.ts                            # build + serve the worktree site
