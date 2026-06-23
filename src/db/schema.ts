@@ -137,6 +137,13 @@ export const dream_insights = sqliteTable('dream_insights', {
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const discord_bindings = sqliteTable('discord_bindings', {
+  // Discord channel snowflake — one bound channel per row.
+  channel_id: text('channel_id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
 export const auth_users = sqliteTable('auth_users', {
   id: text('id').primaryKey(),
   email: text('email').unique().notNull(),
