@@ -29,6 +29,27 @@
       "when": 1780840592476,
       "tag": "0003_material_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782012673886,
+      "tag": "0004_youthful_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782067232521,
+      "tag": "0005_sour_screwball",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782139973149,
+      "tag": "0006_gorgeous_mac_gargan",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,9 @@ import { getLiveFeed } from "@/lib/live-feed";
 import { getTaskBoard } from "@/lib/task-board-data";
 import { getProposals } from "@/lib/proposals-data";
 import { getSkills } from "@/lib/skills-data";
+import { getSchedules } from "@/lib/schedules-data";
+import { getDreams } from "@/lib/dreams-data";
+import { getLatestPlanForSession } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
@@ -187,6 +190,9 @@ export default async function HomePage() {
   const initialTaskBoard = await getTaskBoard(project.id);
   const initialProposals = await getProposals();
   const initialSkills = await getSkills();
+  const initialSchedules = await getSchedules();
+  const initialDreams = await getDreams();
+  const initialPlan = await getLatestPlanForSession(currentSessionRow.id);
 
   return (
     <MissionControl
@@ -199,6 +205,9 @@ export default async function HomePage() {
       initialTaskBoard={initialTaskBoard}
       initialProposals={initialProposals}
       initialSkills={initialSkills}
+      initialSchedules={initialSchedules}
+      initialDreams={initialDreams}
+      initialPlan={initialPlan}
     />
   );
 }

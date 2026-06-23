@@ -2,7 +2,7 @@
 
 > Personal command center for orchestrating AI agent teams to do development work.
 
-**Status:** Weeks 1–4 released to `main` · **v1.1** — Echo (QA agent), session memory, `@`-mention direct addressing, roster depth/motion polish · **v1.2** — Nova (researcher) · **v1.3** — Forge (devops) + Pixel (designer) — **full 6-agent roster complete** (on `dev`) · Week 5 (VPS deploy) next · v1 ≈ 90%
+**Status:** Weeks 1–4 + the full 6-agent roster released to `main` through **v1.6.1** · **v1.7** (on `dev`) adds the automation layer — headless turn runner, **Scheduler** (recurring agent tasks), **Dreaming/Curator** (nightly insight pass), and Plan-tab persistence · the one remaining v1 item is the permanent home-lab deploy · v1 ≈ 95%
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
 **License:** MIT (applied on first public release)
 
@@ -12,7 +12,7 @@ Open Mission Control. Type a prompt. Say *"I want to build this today."* A team 
 
 ## Architecture (one paragraph)
 
-A **3-pane web app**: agent-team roster on the left, orchestrator chat in the middle, live workspace tabs (Preview / Plan / Code / Terminal) on the right. Powered by the **Claude Agent SDK** — Sage runs as the orchestrator and dispatches specialists (Atlas the developer, Echo the QA critic) via an in-process `dispatch_agent` MCP tool, with the full session conversation as memory; each specialist runs through the SDK in the session's **isolated git worktree**. Operators can also **`@`-address a specialist directly** (`@Atlas …`) to bypass Sage for tight iteration. **SQLite** (WAL, via Drizzle) for state. **Server-Sent Events** for streaming. Below `md` the layout collapses to a tab-switched mobile view. Next up: a bare-VM deploy to a Hetzner VPS behind Caddy + Let's Encrypt. Future: **OpenClaw** gateway for Discord so you can chat with agents from anywhere.
+A **3-pane web app**: agent-team roster on the left, orchestrator chat in the middle, live workspace tabs (Preview / Plan / Code / Terminal) on the right. Powered by the **Claude Agent SDK** — Sage runs as the orchestrator and dispatches specialists (Atlas the developer, Echo the QA critic) via an in-process `dispatch_agent` MCP tool, with the full session conversation as memory; each specialist runs through the SDK in the session's **isolated git worktree**. Operators can also **`@`-address a specialist directly** (`@Atlas …`) to bypass Sage for tight iteration. **SQLite** (WAL, via Drizzle) for state. **Server-Sent Events** for streaming. Below `md` the layout collapses to a tab-switched mobile view. A headless turn runner, an in-process **Scheduler**, and a nightly **Dreaming/Curator** pass round out the automation layer. Next up: finishing the permanent self-hosted deploy (home Mac Mini behind a Cloudflare Tunnel). Future: **OpenClaw** gateway for Discord so you can chat with agents from anywhere.
 
 ## The team
 
@@ -69,7 +69,8 @@ Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, 
 | **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (`v1.5.0`); VPS deploy tooling (`v1.5.1`) | The nav-views milestone + the deploy runbook |
 | **v1.6** ✅ | Proposals + Skills + Memory nav views | Operator inbox, capability map, and context inspector — released `v1.6.0` |
 | **v1.6.1** ✅ | Oracle Always-Free deploy tooling | Retarget deploy to a free Oracle A1 VM at `bridge.axodcreative.com` (cloud = source of truth, Object Storage offsite backups) — see [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md) |
-| **v1.7** | Discord via OpenClaw gateway | Chat with agents from anywhere |
+| **v1.7** ✅ | Automation layer — headless turn runner + **Scheduler** + **Dreaming/Curator** + Plan persistence | The Hermes pillars go live: `runSessionTurn` runs turns headlessly (lease-guarded) so work no longer needs a client SSE connection; the **Scheduler** polls due schedules and dispatches recurring agent tasks via an in-process ticker; **Dreaming** runs a nightly Curator pass over recent sessions → starrable/dismissable insights; the Plan tab persists its latest snapshot per session. On `dev` |
+| **v1.8** | Discord via OpenClaw gateway | Chat with agents from anywhere |
 | **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
 
 **Deploying:** Mission Control runs on an Oracle Cloud Always-Free A1 VM (host Node + Caddy + systemd, Claude Pro auth) at `bridge.axodcreative.com`. See [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md). (The earlier Hetzner runbook, [docs/runbook-deploy.md](docs/runbook-deploy.md), is retained for reference.)
@@ -169,7 +170,7 @@ src/
       health/route.ts                     # uptime-robot endpoint (unauthenticated)
       approvals/[id]/decision/route.ts    # approve / deny / always (dormant gate infra)
       sessions/[id]/messages/route.ts     # POST a user message
-      sessions/[id]/stream/route.ts       # GET SSE stream of the agent turn (Sage + dispatch)
+      sessions/[id]/stream/route.ts       # GET SSE stream — thin: auth + delegates to runSessionTurn
       sessions/[id]/diff/route.ts         # worktree diff for the Code tab
       sessions/[id]/preview/route.ts      # build-and-serve the worktree site for the Preview tab
     login/                                # /login page + form
@@ -180,15 +181,26 @@ src/
     diff-viewer.tsx                       # Monaco side-by-side diff + collapsible file list
     terminal-view.tsx                     # live streamed command output (lightweight, no xterm)
     plan-view.tsx                         # live TodoWrite checklist
+    scheduler-view.tsx                    # Scheduler create/list/toggle UI
+    dreaming-view.tsx                     # Dreaming feed: dreams + insight cards (star/dismiss)
     markdown.tsx                          # chat markdown rendering
     ui/                                   # shadcn primitives
   db/
-    schema.ts                             # Drizzle SQLite schema (9 tables)
+    schema.ts                             # Drizzle SQLite schema (13 tables)
     client.ts                             # better-sqlite3 + drizzle wiring
   lib/
     auth.ts, auth-edge.ts, password.ts    # session/cookie + scrypt helpers
     rate-limit.ts                         # in-memory IP bucket
     agent-runner-sdk.ts                   # run a Claude Agent SDK query, yield token/tool/done events
+    run-turn.ts                           # runSessionTurn — one turn end-to-end, sink-agnostic (SSE or CLI), lease-guarded
+    turn-lease.ts                         # pure lease-staleness + turn-input helpers (unit-tested)
+    schedule.ts                           # pure cadence math (next-run, summary) — unit-tested
+    scheduler.ts                          # in-process ticker: poll due schedules → runSessionTurn
+    schedules-data.ts                     # getSchedules server fetch for the Scheduler view
+    dream.ts                              # Curator: gather conversations → runClaudeAgent → insights (+ nightly ticker)
+    dream-insights.ts                     # pure parser: Curator output → structured insights (unit-tested)
+    dream-due.ts                          # pure nightly due-gate (unit-tested)
+    dreams-data.ts                        # getDreams server fetch for the Dreaming view
     dispatch.ts                           # Sage's in-process `dispatch_agent` MCP tool
     worktree.ts                           # per-session git worktree create/cleanup
     preview.ts                            # build + serve the worktree site
@@ -197,10 +209,12 @@ src/
     plan-events.ts                        # TodoWrite events → plan snapshot
     message-segments.ts                   # paragraph-split agent chat bubbles
     mock-data.ts                          # shared TYPES only (Agent/Message/Session/Artifact)
+  instrumentation.ts                      # Next boot hook → startScheduler() + startDreaming()
   proxy.ts                                # Next 16 proxy (renamed from middleware)
 scripts/
   seed.ts                                 # demo project + Sage/Atlas + demo session
   seed-admin.ts                           # interactive operator account creator
+  run-turn.ts                             # headless `pnpm run:turn <sessionId> ["instruction"]` — server-initiated turn, no browser
 drizzle/                                  # generated migration SQL + journal
 docs/
   specs/v1-mvp-spec.md

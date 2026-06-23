@@ -33,6 +33,9 @@ export const sessions = sqliteTable('sessions', {
   cleared_at: integer('cleared_at', { mode: 'timestamp' }),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
+  // Concurrency lease: set while a turn runs (browser or CLI), null when idle.
+  // A stale value (older than a turn's max duration + grace) is reclaimable.
+  running_since: integer('running_since', { mode: 'timestamp' }),
 });
 
 export const messages = sqliteTable('messages', {
@@ -92,6 +95,46 @@ export const tasks = sqliteTable('tasks', {
   session_id: text('session_id').references(() => sessions.id),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const schedules = sqliteTable('schedules', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
+  title: text('title').notNull(),
+  instruction: text('instruction').notNull(),
+  // Cadence (friendly presets). cadence_kind: 'every_hours' | 'daily' | 'weekly'.
+  cadence_kind: text('cadence_kind').notNull(),
+  interval_hours: integer('interval_hours'), // every_hours
+  time_of_day: text('time_of_day'), // 'HH:MM' (daily/weekly), server-local
+  day_of_week: integer('day_of_week'), // 0=Sun..6=Sat (weekly)
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  // The column the ticker queries: when this schedule next becomes due.
+  next_run_at: integer('next_run_at', { mode: 'timestamp' }).notNull(),
+  last_run_at: integer('last_run_at', { mode: 'timestamp' }),
+  last_status: text('last_status'), // 'ok' | 'error' | 'skipped'
+  last_session_id: text('last_session_id').references(() => sessions.id),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const dreams = sqliteTable('dreams', {
+  id: text('id').primaryKey(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  // Window start this dream reflected on: previous dream's created_at, or now-7d.
+  covers_since: integer('covers_since', { mode: 'timestamp' }).notNull(),
+  status: text('status').notNull(), // 'ok' | 'empty' | 'error'
+  insight_count: integer('insight_count').notNull().default(0),
+  error: text('error'),
+});
+
+export const dream_insights = sqliteTable('dream_insights', {
+  id: text('id').primaryKey(),
+  dream_id: text('dream_id').references(() => dreams.id).notNull(),
+  category: text('category').notNull(), // 'pattern' | 'risk' | 'suggestion' | 'praise'
+  title: text('title').notNull(),
+  detail: text('detail').notNull(),
+  status: text('status').notNull().default('new'), // 'new' | 'starred' | 'dismissed'
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
 export const auth_users = sqliteTable('auth_users', {

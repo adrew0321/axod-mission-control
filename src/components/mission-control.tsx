@@ -49,6 +49,10 @@ import ProposalsView from "@/components/proposals-view";
 import type { Proposal } from "@/lib/proposals";
 import SkillsView from "@/components/skills-view";
 import type { AgentSkills } from "@/lib/skills";
+import SchedulerView from "@/components/scheduler-view";
+import type { ScheduleRow } from "@/lib/schedules-data";
+import DreamingView from "@/components/dreaming-view";
+import type { DreamView } from "@/lib/dreams-data";
 import MemoryView from "@/components/memory-view";
 
 export interface MissionControlProps {
@@ -61,6 +65,9 @@ export interface MissionControlProps {
   initialTaskBoard: BoardColumns;
   initialProposals: Proposal[];
   initialSkills: AgentSkills[];
+  initialSchedules: ScheduleRow[];
+  initialDreams: DreamView[];
+  initialPlan: PlanSnapshot | null;
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -254,6 +261,9 @@ export default function MissionControl({
   initialTaskBoard,
   initialProposals,
   initialSkills,
+  initialSchedules,
+  initialDreams,
+  initialPlan,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
@@ -385,9 +395,10 @@ export default function MissionControl({
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
   const lineIdRef = useRef<number>(0);
 
-  // Live Plan tab: the most recent TodoWrite snapshot (latest writer wins).
-  // Ephemeral — gone on full reload, persists across turns, not cleared on Stop.
-  const [plan, setPlan] = useState<PlanSnapshot | null>(null);
+  // Plan tab: the most recent TodoWrite snapshot (latest writer wins). Seeded
+  // from the persisted plan on load, then overwritten live via SSE. Survives
+  // reloads; not cleared on Stop or on "Clear session log".
+  const [plan, setPlan] = useState<PlanSnapshot | null>(initialPlan ?? null);
 
   // Live agent state for the left pane: which agents are actively working, and
   // a one-line "what they're doing right now" string per agent. Driven by SSE.
@@ -903,6 +914,10 @@ export default function MissionControl({
           />
         ) : activeSection === "skills" ? (
           <SkillsView skills={initialSkills} />
+        ) : activeSection === "scheduler" ? (
+          <SchedulerView schedules={initialSchedules} projects={projects} />
+        ) : activeSection === "dreaming" ? (
+          <DreamingView dreams={initialDreams} />
         ) : activeSection === "proposals" ? (
           <ProposalsView
             proposals={proposals}
