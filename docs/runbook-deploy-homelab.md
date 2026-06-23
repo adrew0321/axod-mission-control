@@ -61,10 +61,21 @@ system packages · Node 22 + pnpm · `claude` CLI · `mc` user + `/srv/{mission-
 · clone repo (`main`) · `.env` (SESSION_SECRET, paths, `NODE_ENV=production`, `PORT=3000`) ·
 `pnpm install` + `pnpm build`.
 
+> **Gotchas hit during the actual Mac Mini run** (patch these into the base runbook too):
+> - **Give `mc` a login shell.** Step 4's `adduser --system mc` creates the user with **no shell**, but
+>   step 9 / Claude auth need `sudo -iu mc`. Run `usermod -s /bin/bash mc` first or the login silently fails.
+> - **better-sqlite3 has no prebuilt binding here** → `pnpm install` leaves it unbuilt (allowlist is
+>   intentional — do **not** `pnpm approve-builds`). Compile it from source with npm's bundled node-gyp:
+>   `cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3 && node /usr/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild`.
+> - **Create the data dirs before `pnpm build`/`db:migrate`** — the build instantiates the DB:
+>   `mkdir -p /srv/mission-control/data/worktrees`.
+
 **Then migrate your data BEFORE first start** — same as the Oracle runbook's §A:
-- **DB:** on this Windows PC, stop the local app, `sqlite3 ... "PRAGMA wal_checkpoint(TRUNCATE);"`,
-  then `scp data/mission-control.db akeem@<MAC_MINI_IP>:mission-control.db`; on the Mini,
-  `install -o mc -g mc -m 600 /home/akeem/mission-control.db /srv/mission-control/data/mission-control.db`.
+- **DB:** on this Windows PC, stop the local app, then checkpoint the WAL into the main `.db`.
+  **There is no `sqlite3` CLI on Windows** — run a throwaway node script instead:
+  `node -e "const D=require('better-sqlite3');new D('data/mission-control.db').pragma('wal_checkpoint(TRUNCATE)')"`.
+  Then `scp data/mission-control.db akeem@<MAC_MINI_IP>:mission-control.db`; on the Mini, clear any stale
+  `-wal`/`-shm` and `install -o mc -g mc -m 600 /home/akeem/mission-control.db /srv/mission-control/data/mission-control.db`.
 - **Repos:** commit/push any uncommitted work, then on the Mini
   `sudo -u mc git clone` `axod-chat`, `AXODCREATIVE` (landing), `axod-research-agent` into
   `/srv/projects/`. (Skip `test-browser`.)
