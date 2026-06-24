@@ -2,6 +2,14 @@ import type { NextConfig } from 'next';
 import path from 'node:path';
 
 const nextConfig: NextConfig = {
+  // ── Server external packages ────────────────────────────────────────────────
+  //
+  // discord.js is a Node-only server library with an optional zlib-sync native
+  // dependency (gateway compression). Marking it as serverExternal prevents
+  // Turbopack from bundling it and pulling in zlib-sync, which is not needed
+  // at runtime and fails the build.
+  serverExternalPackages: ['discord.js'],
+
   // ── NFT tracing hardening ────────────────────────────────────────────────
   //
   // Anchor Node File Tracing to the repo root so paths are stable and the
