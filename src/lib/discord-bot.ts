@@ -70,6 +70,7 @@ export function startDiscordBot(): void {
     console.log(`[discord] logged in as ${c.user.tag}`);
     try {
       if (appId) await registerCommands(appId, token, guildId);
+      else console.warn('[discord] DISCORD_APP_ID not set — skipping slash-command registration');
     } catch (err) {
       console.error('[discord] command registration failed:', err instanceof Error ? err.message : err);
     }
