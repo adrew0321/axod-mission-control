@@ -304,6 +304,8 @@ Trigger one agent turn for the `mission-control` project that runs `pnpm build` 
 - If it COMPLETES → use the test+build instruction in Step 2 as written.
 - If it FAILS on env/data (e.g. unset `DATABASE_PATH`, missing `data/` dir) → decide with the operator: either (a) provision `.env` into worktrees (a small follow-up paralleling the `node_modules` link in `worktree.ts`), or (b) drop `pnpm build` from the instruction and ship test-only for v1. Record the decision in this plan file before continuing.
 
+**OUTCOME (2026-06-25): SHIPPED TEST-ONLY.** The spike failed, but not on env/data — Next 16's **Turbopack rejects the linked `node_modules`**: `TurbopackInternalError: Symlink [project]/node_modules is invalid, it points out of the filesystem root`. The junction (which makes `pnpm test` work) points outside the worktree root, and Turbopack refuses it. So `build`-in-worktree is incompatible with the link approach; option (a) doesn't help (not an env issue). Per option (b), the schedule was created with a **test-only** instruction. FOLLOW-UP to enable build later: build jobs need a real (copied) `node_modules` inside the worktree, not a junction — a separate, larger piece.
+
 - [ ] **Step 2: Create the schedule**
 
 Create it via the Scheduler UI (the "new schedule" form) OR the authenticated `POST /api/schedules` endpoint, with:
