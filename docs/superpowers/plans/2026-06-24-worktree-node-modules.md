@@ -234,7 +234,7 @@ Expected: FAIL — the link test and idempotent test fail because `ensureWorktre
 
 - [ ] **Step 3: Add `linkNodeModules` and call it in `ensureWorktree`**
 
-In `src/lib/worktree.ts`, add this helper (place it just above `ensureWorktree`):
+In `src/lib/worktree.ts`, add this helper (place it just above `ensureWorktree`). It is **self-contained best-effort**: it swallows and warns on any failure internally, so call sites stay clean one-liners and never need their own `.catch`:
 
 ```ts
 /**
@@ -247,31 +247,31 @@ In `src/lib/worktree.ts`, add this helper (place it just above `ensureWorktree`)
 async function linkNodeModules(worktreePath: string, repoPath: string): Promise<void> {
   const target = path.resolve(repoPath, 'node_modules'); // absolute: required for junctions
   const link = path.join(worktreePath, 'node_modules');
-  if (!existsSync(target)) return; // non-Node project / deps not installed
-  if (existsSync(link)) return; // already linked or present — idempotent
-  await symlink(target, link, 'junction');
+  try {
+    if (!existsSync(target)) return; // non-Node project / deps not installed
+    if (existsSync(link)) return; // already linked or present — idempotent
+    await symlink(target, link, 'junction');
+  } catch (err) {
+    console.warn('[worktree] node_modules link failed:', err instanceof Error ? err.message : err);
+  }
 }
 ```
 
-Modify the end of `ensureWorktree` so it links after the worktree exists. Replace the final `return { path: wtPath, branch };` with a best-effort link call:
+Modify the end of `ensureWorktree` so it links after the worktree exists. Replace the final `return { path: wtPath, branch };` with:
 
 ```ts
   } else {
     await exec('git', ['-C', repoPath, 'worktree', 'add', '-b', branch, wtPath, baseBranch]);
   }
-  await linkNodeModules(wtPath, repoPath).catch((err) =>
-    console.warn('[worktree] node_modules link failed:', err instanceof Error ? err.message : err),
-  );
+  await linkNodeModules(wtPath, repoPath);
   return { path: wtPath, branch };
 ```
 
-Also handle the early-return path: `ensureWorktree` returns early when the worktree already exists (`if (existsSync(wtPath)) return { path: wtPath, branch };`). Add a link attempt there too, so a worktree created before this feature gets linked on next use:
+Also handle the early-return path: `ensureWorktree` returns early when the worktree already exists. Add a link attempt there too, so a worktree created before this feature gets linked on next use:
 
 ```ts
   if (existsSync(wtPath)) {
-    await linkNodeModules(wtPath, repoPath).catch((err) =>
-      console.warn('[worktree] node_modules link failed:', err instanceof Error ? err.message : err),
-    );
+    await linkNodeModules(wtPath, repoPath);
     return { path: wtPath, branch };
   }
 ```
