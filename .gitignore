@@ -37,6 +37,9 @@ data/
 *.db-shm
 *.db-wal
 
+# dev worktrees (subagent-driven development scratch)
+.worktrees/
+
 # drizzle
 /drizzle/meta/_journal.json.bak
 
