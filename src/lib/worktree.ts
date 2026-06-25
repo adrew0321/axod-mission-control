@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat, symlink, unlink } from 'node:fs/promises';
 
 const exec = promisify(execFile);
 
@@ -65,11 +65,28 @@ export async function ensureWorktree(
 }
 
 /**
+ * Remove the `node_modules` junction/symlink from a worktree, if present. MUST run
+ * before `git worktree remove` so the recursive delete can never traverse the link
+ * into the project's real (live) node_modules. Removes the LINK only, never the target.
+ */
+async function unlinkNodeModulesLink(worktreePath: string): Promise<void> {
+  const link = path.join(worktreePath, 'node_modules');
+  try {
+    const st = await lstat(link); // does not follow the link
+    // Node reports a Windows junction as a symbolic link here; unlink removes the link.
+    if (st.isSymbolicLink()) await unlink(link);
+  } catch {
+    /* no link present — nothing to do */
+  }
+}
+
+/**
  * Remove a session's worktree. Leaves the branch intact (it may hold unpushed
  * work). Idempotent: no-op if the worktree is already gone.
  */
 export async function removeWorktree(sessionId: string, repoPath: string): Promise<void> {
   const wtPath = sessionWorktreePath(sessionId);
+  await unlinkNodeModulesLink(wtPath); // safety: never let git recurse into live node_modules
   if (!existsSync(wtPath)) {
     await exec('git', ['-C', repoPath, 'worktree', 'prune']).catch(() => {});
     return;
