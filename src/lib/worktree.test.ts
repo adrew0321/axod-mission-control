@@ -42,10 +42,8 @@ test('removeWorktree unlinks the node_modules junction without deleting the sour
     await mkdir(path.join(repo, 'node_modules'), { recursive: true });
     await writeFile(path.join(repo, 'node_modules', 'marker.txt'), 'keep-me');
 
-    // Create the worktree, then manually link node_modules into it (Task 2 will
-    // make ensureWorktree do this automatically; here we set up the hazard by hand).
+    // Create the worktree — ensureWorktree now links node_modules automatically.
     const wt = await ensureWorktree(sessionId, repo, 'dev');
-    await symlink(path.resolve(repo, 'node_modules'), path.join(wt.path, 'node_modules'), 'junction');
     assert.equal(existsSync(path.join(wt.path, 'node_modules', 'marker.txt')), true);
 
     await removeWorktree(sessionId, repo);
@@ -58,6 +56,53 @@ test('removeWorktree unlinks the node_modules junction without deleting the sour
       'teardown must NOT follow the junction into the source node_modules',
     );
   } finally {
+    await cleanup(repo, root);
+  }
+});
+
+test('ensureWorktree links node_modules so the source is readable through the worktree', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  try {
+    await mkdir(path.join(repo, 'node_modules', 'left-pad'), { recursive: true });
+    await writeFile(path.join(repo, 'node_modules', 'left-pad', 'index.js'), 'module.exports=1;');
+
+    const wt = await ensureWorktree('sess_link', repo, 'dev');
+
+    const linked = await readFile(path.join(wt.path, 'node_modules', 'left-pad', 'index.js'), 'utf8');
+    assert.equal(linked, 'module.exports=1;');
+  } finally {
+    await removeWorktree('sess_link', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('ensureWorktree is idempotent: a second call leaves a valid node_modules link', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  try {
+    await mkdir(path.join(repo, 'node_modules'), { recursive: true });
+    await writeFile(path.join(repo, 'node_modules', 'marker.txt'), 'm');
+
+    await ensureWorktree('sess_idem', repo, 'dev');
+    await ensureWorktree('sess_idem', repo, 'dev'); // must not throw
+
+    assert.equal(existsSync(path.join(root, 'sess_idem', 'node_modules', 'marker.txt')), true);
+  } finally {
+    await removeWorktree('sess_idem', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('ensureWorktree is a no-op for linking when the repo has no node_modules', async () => {
+  const repo = await makeRepo(); // no node_modules created
+  const root = await freshWorktreeRoot();
+  try {
+    const wt = await ensureWorktree('sess_none', repo, 'dev');
+    assert.equal(existsSync(wt.path), true, 'worktree still created');
+    assert.equal(existsSync(path.join(wt.path, 'node_modules')), false, 'no link created');
+  } finally {
+    await removeWorktree('sess_none', repo).catch(() => {});
     await cleanup(repo, root);
   }
 });
