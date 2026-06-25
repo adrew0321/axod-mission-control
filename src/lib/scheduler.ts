@@ -1,5 +1,5 @@
 import 'server-only';
-import { and, desc, eq, lte } from 'drizzle-orm';
+import { and, desc, eq, lte, sql } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { schedules, sessions, projects, messages } from '@/db/schema';
@@ -15,7 +15,7 @@ async function getFinalAgentMessage(sessionId: string): Promise<string | null> {
     .select({ content: messages.content })
     .from(messages)
     .where(and(eq(messages.session_id, sessionId), eq(messages.role, 'agent')))
-    .orderBy(desc(messages.created_at))
+    .orderBy(desc(messages.created_at), desc(sql`rowid`))
     .limit(1)
     .then((r) => r[0]);
   return row?.content ?? null;
