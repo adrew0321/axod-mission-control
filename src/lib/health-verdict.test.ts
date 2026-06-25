@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseHealthVerdict } from './health-verdict';
+import { parseHealthVerdict, healthStatus } from './health-verdict';
 
 test('PASS token → pass', () => {
   assert.equal(parseHealthVerdict('all checks green\nHEALTH: PASS'), 'pass');
@@ -34,4 +34,22 @@ test('bare HEALTH: with no PASS/FAIL does not false-positive', () => {
 
 test('empty / undefined-ish input → null', () => {
   assert.equal(parseHealthVerdict(''), null);
+});
+
+test('completed + FAIL verdict → fail', () => {
+  assert.equal(healthStatus({ status: 'completed' }, 'oops\nHEALTH: FAIL'), 'fail');
+});
+
+test('completed + PASS verdict → ok', () => {
+  assert.equal(healthStatus({ status: 'completed' }, 'HEALTH: PASS'), 'ok');
+});
+
+test('completed + no verdict → ok (non-health jobs unaffected)', () => {
+  assert.equal(healthStatus({ status: 'completed' }, 'here is your digest'), 'ok');
+  assert.equal(healthStatus({ status: 'completed' }, null), 'ok');
+});
+
+test('skipped → skipped, error → error (verdict ignored)', () => {
+  assert.equal(healthStatus({ status: 'skipped' }, 'HEALTH: PASS'), 'skipped');
+  assert.equal(healthStatus({ status: 'error' }, 'HEALTH: PASS'), 'error');
 });
