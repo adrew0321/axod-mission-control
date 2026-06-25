@@ -1,12 +1,25 @@
 import 'server-only';
-import { and, eq, lte } from 'drizzle-orm';
+import { and, desc, eq, lte, sql } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
-import { schedules, sessions, projects } from '@/db/schema';
+import { schedules, sessions, projects, messages } from '@/db/schema';
 import { runSessionTurn } from '@/lib/run-turn';
 import { computeNextRun, parseCadence } from '@/lib/schedule';
+import { healthStatus } from '@/lib/health-verdict';
 
 const TICK_MS = 60_000;
+
+/** The most recent agent-authored message in a session, or null. */
+async function getFinalAgentMessage(sessionId: string): Promise<string | null> {
+  const row = await db
+    .select({ content: messages.content })
+    .from(messages)
+    .where(and(eq(messages.session_id, sessionId), eq(messages.role, 'agent')))
+    .orderBy(desc(messages.created_at), desc(sql`rowid`))
+    .limit(1)
+    .then((r) => r[0]);
+  return row?.content ?? null;
+}
 
 /**
  * Start the in-process scheduler. Idempotent: a globalThis flag survives Next's
@@ -70,8 +83,9 @@ export async function tick(): Promise<void> {
       });
 
       const result = await runSessionTurn(sessionId, { instruction: s.instruction });
-      const last_status =
-        result.status === 'completed' ? 'ok' : result.status === 'skipped' ? 'skipped' : 'error';
+      const finalMessage =
+        result.status === 'completed' ? await getFinalAgentMessage(sessionId) : null;
+      const last_status = healthStatus(result, finalMessage);
       await db
         .update(schedules)
         .set({ last_run_at: new Date(), last_session_id: sessionId, last_status, updated_at: new Date() })

@@ -111,7 +111,7 @@ export const schedules = sqliteTable('schedules', {
   // The column the ticker queries: when this schedule next becomes due.
   next_run_at: integer('next_run_at', { mode: 'timestamp' }).notNull(),
   last_run_at: integer('last_run_at', { mode: 'timestamp' }),
-  last_status: text('last_status'), // 'ok' | 'error' | 'skipped'
+  last_status: text('last_status'), // 'ok' | 'fail' | 'error' | 'skipped'
   last_session_id: text('last_session_id').references(() => sessions.id),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
