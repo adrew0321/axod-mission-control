@@ -1,5 +1,7 @@
 # Oracle A1 auto-launch — beating the "out of host capacity" wall
 
+> ⚠️ **Superseded — historical reference.** The Oracle path was abandoned (capacity + account issues); the live deploy is the home Mac Mini — see **[runbook-deploy-homelab.md](runbook-deploy-homelab.md)**.
+
 Oracle's Always-Free ARM (A1) capacity is heavily oversubscribed, so the console
 often returns **"Out of host capacity."** This runbook configures the OCI CLI once,
 then runs `deploy/oci-autolaunch.sh`, which retries the launch across all your

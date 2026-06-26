@@ -1,7 +1,9 @@
 ## ADR-003: v1 deploys as host Node + Caddy + systemd (addendum to ADR-002)
 
-> **Status:** Accepted
+> **Status:** Accepted — core decision live; host/proxy evolved (see update)
 > **Date:** 2026-06-07
+>
+> **Update (2026-06-26):** the host-Node + systemd + Claude-Pro-CLI-auth core decision stands and is in production. Two specifics changed since: the **host** moved Hetzner → Oracle → **home Mac Mini**, and **Caddy was replaced by a Cloudflare named tunnel** (no public IP, no open ports, so no reverse proxy/TLS to manage). Current deploy: [runbook-deploy-homelab.md](../runbook-deploy-homelab.md).
 > **Deciders:** [@adrew0321](https://github.com/adrew0321) (operator)
 > **Supersedes:** the "Docker Compose" / "Nginx" specifics in [ADR-002](adr-002-v1-platform-locks.md) #3 and #6, and the deployment-target table in the v1 spec.
 

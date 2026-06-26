@@ -1,5 +1,7 @@
 # Mission Control — VPS deploy runbook
 
+> ⚠️ **Superseded — historical reference.** The live deploy is the home Mac Mini behind a Cloudflare Tunnel (`https://bridge.axodcreative.com`) — see **[runbook-deploy-homelab.md](runbook-deploy-homelab.md)**. This Hetzner runbook is kept for reference only.
+
 **Target:** Ubuntu 24.04, Hetzner CX22. **Result:** `https://mc-dev.axodcreative.com`.
 Run as **root** unless noted. **Idempotent** — every step checks before acting, safe to re-run.
 Replace `<BOX_IP>` with the server's public IP.
