@@ -73,7 +73,11 @@ export default function SchedulerView({ schedules, projects }: Props) {
 
   const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : "—");
   const statusColor = (s: string | null) =>
-    s === "ok" ? "text-emerald-400" : s === "error" ? "text-red-400" : "text-amber-400";
+    s === "ok"
+      ? "text-emerald-400"
+      : s === "error" || s === "fail"
+        ? "text-red-400"
+        : "text-amber-400";
 
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-[#060810] text-[#e2e8f0]">

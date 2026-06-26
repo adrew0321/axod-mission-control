@@ -1,6 +1,6 @@
 {
   "name": "axod-mission-control",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "engines": {
     "node": ">=22",
@@ -28,6 +28,7 @@
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "discord.js": "^14.26.4",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.23",
     "jose": "^6.2.3",

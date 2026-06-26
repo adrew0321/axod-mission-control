@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat, symlink, unlink } from 'node:fs/promises';
 
 const exec = promisify(execFile);
 
@@ -41,6 +41,25 @@ async function branchExists(repoPath: string, branch: string): Promise<boolean> 
 }
 
 /**
+ * Link the worktree's node_modules to the project's main checkout so build/test jobs
+ * have working dependencies (incl. already-compiled native modules). Best-effort:
+ * never throws — a failure just leaves the worktree without deps (read-only jobs still
+ * work). Idempotent. No-op when the project has no node_modules. The teardown in
+ * removeWorktree removes this link before deleting the worktree.
+ */
+async function linkNodeModules(worktreePath: string, repoPath: string): Promise<void> {
+  const target = path.resolve(repoPath, 'node_modules'); // absolute: required for junctions
+  const link = path.join(worktreePath, 'node_modules');
+  try {
+    if (!existsSync(target)) return; // non-Node project / deps not installed
+    if (existsSync(link)) return; // already linked or present — idempotent
+    await symlink(target, link, 'junction');
+  } catch (err) {
+    console.warn('[worktree] node_modules link failed:', err instanceof Error ? err.message : err);
+  }
+}
+
+/**
  * Ensure a worktree exists for this session, checked out to a session-scoped
  * branch (`mc/<sessionId>`) forked from `baseBranch`. Idempotent: returns the
  * existing worktree if already present.
@@ -53,7 +72,10 @@ export async function ensureWorktree(
   const wtPath = sessionWorktreePath(sessionId);
   const branch = sessionBranch(sessionId);
 
-  if (existsSync(wtPath)) return { path: wtPath, branch };
+  if (existsSync(wtPath)) {
+    await linkNodeModules(wtPath, repoPath);
+    return { path: wtPath, branch };
+  }
 
   if (await branchExists(repoPath, branch)) {
     // Branch left over from a prior session — attach the worktree to it.
@@ -61,7 +83,24 @@ export async function ensureWorktree(
   } else {
     await exec('git', ['-C', repoPath, 'worktree', 'add', '-b', branch, wtPath, baseBranch]);
   }
+  await linkNodeModules(wtPath, repoPath);
   return { path: wtPath, branch };
+}
+
+/**
+ * Remove the `node_modules` junction/symlink from a worktree, if present. MUST run
+ * before `git worktree remove` so the recursive delete can never traverse the link
+ * into the project's real (live) node_modules. Removes the LINK only, never the target.
+ */
+async function unlinkNodeModulesLink(worktreePath: string): Promise<void> {
+  const link = path.join(worktreePath, 'node_modules');
+  try {
+    const st = await lstat(link); // does not follow the link
+    // Node reports a Windows junction as a symbolic link here; unlink removes the link.
+    if (st.isSymbolicLink()) await unlink(link);
+  } catch {
+    /* no link present — nothing to do */
+  }
 }
 
 /**
@@ -70,6 +109,7 @@ export async function ensureWorktree(
  */
 export async function removeWorktree(sessionId: string, repoPath: string): Promise<void> {
   const wtPath = sessionWorktreePath(sessionId);
+  await unlinkNodeModulesLink(wtPath); // safety: never let git recurse into live node_modules
   if (!existsSync(wtPath)) {
     await exec('git', ['-C', repoPath, 'worktree', 'prune']).catch(() => {});
     return;

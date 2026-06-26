@@ -111,7 +111,7 @@ export const schedules = sqliteTable('schedules', {
   // The column the ticker queries: when this schedule next becomes due.
   next_run_at: integer('next_run_at', { mode: 'timestamp' }).notNull(),
   last_run_at: integer('last_run_at', { mode: 'timestamp' }),
-  last_status: text('last_status'), // 'ok' | 'error' | 'skipped'
+  last_status: text('last_status'), // 'ok' | 'fail' | 'error' | 'skipped'
   last_session_id: text('last_session_id').references(() => sessions.id),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
   updated_at: integer('updated_at', { mode: 'timestamp' }).notNull(),
@@ -134,6 +134,13 @@ export const dream_insights = sqliteTable('dream_insights', {
   title: text('title').notNull(),
   detail: text('detail').notNull(),
   status: text('status').notNull().default('new'), // 'new' | 'starred' | 'dismissed'
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const discord_bindings = sqliteTable('discord_bindings', {
+  // Discord channel snowflake — one bound channel per row.
+  channel_id: text('channel_id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
