@@ -1,231 +1,86 @@
 # AXOD Mission Control
 
-> Personal command center for orchestrating AI agent teams to do development work.
+> A self-hosted command center for running a team of AI agents that do real development work — from a web app or from Discord.
 
-**Status:** Weeks 1–4 + the full 6-agent roster released to `main` through **v1.6.1** · **v1.7** (on `dev`) adds the automation layer — headless turn runner, **Scheduler** (recurring agent tasks), **Dreaming/Curator** (nightly insight pass), and Plan-tab persistence · the one remaining v1 item is the permanent home-lab deploy · v1 ≈ 95%
-**Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE)
-**License:** MIT (applied on first public release)
+**Status:** 🟢 **Live** — running 24/7 at **https://bridge.axodcreative.com** (`v1.8.0`), self-hosted on a home Mac Mini behind a Cloudflare Tunnel.
+**Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE) · **License:** MIT
 
-## Vision
+## What it is
 
-Open Mission Control. Type a prompt. Say *"I want to build this today."* A team of named agents — coordinated by Sage the orchestrator — starts working. Watch artifacts materialize in the workspace. Never open Claude Code or Antigravity directly.
+Mission Control turns "I want to build this" into actual code changes, done by a team of named AI agents you direct in plain language. **Sage**, the orchestrator, takes your request and either answers directly or dispatches a specialist (Atlas to write code, Echo to review it, etc.). Each agent works in an **isolated git worktree**, so its changes are sandboxed until you review and merge them. It's built on the **Claude Agent SDK** and runs against your own repositories.
 
-## Architecture (one paragraph)
+You drive it two ways:
+- **Web app** — a 3-pane cockpit: the agent roster, a chat with Sage, and a live workspace (Code diff · Preview · Terminal · Plan).
+- **Discord** — one channel per project. Message Sage from your phone; the turn runs on the server. The bot also posts **proactive notifications** (a scheduled job finished, a nightly insight landed, a change is ready to merge).
 
-A **3-pane web app**: agent-team roster on the left, orchestrator chat in the middle, live workspace tabs (Preview / Plan / Code / Terminal) on the right. Powered by the **Claude Agent SDK** — Sage runs as the orchestrator and dispatches specialists (Atlas the developer, Echo the QA critic) via an in-process `dispatch_agent` MCP tool, with the full session conversation as memory; each specialist runs through the SDK in the session's **isolated git worktree**. Operators can also **`@`-address a specialist directly** (`@Atlas …`) to bypass Sage for tight iteration. **SQLite** (WAL, via Drizzle) for state. **Server-Sent Events** for streaming. Below `md` the layout collapses to a tab-switched mobile view. A headless turn runner, an in-process **Scheduler**, and a nightly **Dreaming/Curator** pass round out the automation layer. Next up: finishing the permanent self-hosted deploy (home Mac Mini behind a Cloudflare Tunnel). Future: **OpenClaw** gateway for Discord so you can chat with agents from anywhere.
+It also works while you're away: a **Scheduler** runs recurring agent tasks (e.g. a nightly build/test health-check), and a nightly **Dreaming** pass reflects over recent activity into starrable insights.
+
+## How it works
+
+A **Next.js 16** app. Sage runs as the orchestrator and dispatches specialists through an in-process `dispatch_agent` MCP tool, with the full session transcript as memory; each specialist runs via the Agent SDK in the session's isolated git worktree. You can also **`@`-address a specialist** (`@Atlas …`) to skip Sage for tight iteration. State lives in **SQLite** (WAL, via Drizzle); the UI streams over **Server-Sent Events**. Background work (Scheduler, Dreaming, the Discord gateway bot) starts in-process at boot. Self-hosted with host Node + systemd + Claude Pro CLI auth; a cloudflared named tunnel provides public ingress with no open ports.
 
 ## The team
 
-The roster is **DB-driven** — each agent is a row in the `agents` table (id, role, model, system prompt, tool allowlist, color). The UI already renders icons + accent colors for all six; the gate on *dispatching* a new specialist is the `DISPATCHABLE` allowlist + any new tool types it needs (see [Growing the team](#growing-the-team)).
+The roster is **DB-driven** — each agent is a row (id, role, model, system prompt, tool allowlist, color).
 
-| Avatar | Name | Role | Default model | Status |
-|---|---|---|---|---|
-| 🜂 | **Sage** | Orchestrator | Claude Opus 4.7 | ✅ shipped |
-| ⚒ | **Atlas** | Lead Developer | Claude Sonnet 4.6 | ✅ shipped |
-| ⛬ | **Echo** | QA Critic | Sonnet 4.6 | ✅ shipped (on `dev`) |
-| ⌕ | **Nova** | Researcher | Sonnet 4.6 + web tools | ✅ shipped (on `dev`) |
-| ⛁ | **Forge** | DevOps / CI / Deploy | Sonnet 4.6 | ✅ shipped (on `dev`) |
-| ◊ | **Pixel** | Designer / Mockups | Sonnet 4.6 | ✅ shipped (on `dev`) |
+| | Agent | Role | What it does |
+|---|---|---|---|
+| 🜂 | **Sage** | Orchestrator | Talks to you, plans, routes work to specialists |
+| ⚒ | **Atlas** | Lead Developer | Writes and edits code in the worktree |
+| ⛬ | **Echo** | QA Critic | Reviews Atlas's diffs (read-only) and returns a verdict |
+| ⌕ | **Nova** | Researcher | Web search/fetch for docs and references |
+| ⛁ | **Forge** | DevOps | Infra/CI/deploy config changes |
+| ◊ | **Pixel** | Designer | Code mockups (HTML/CSS/Tailwind/SVG) rendered in the Preview tab |
 
-> **The full 6-agent roster is shipped** (on `dev`) — Echo, Nova, Forge, and Pixel all needed **zero new tool plumbing**. Echo (`read_file` + `run_command`) closes the quality loop on Atlas's diffs; Nova's `WebSearch`/`WebFetch` were SDK built-ins; Forge reuses Atlas's edit/run/git tools for devops; and Pixel turned out the same — a *code-mockup* designer (HTML/CSS/Tailwind/SVG) that renders in the existing Preview tab, so the roadmap's assumed `image_generate` tooling was never needed (it stays a possible future Pixel power). See [where we're going](#where-were-going).
+## What's shipped
 
-## Build phases (5 weeks to v1)
+- **Agent team + orchestration** — Sage routes work; specialists run in isolated worktrees; `@`-mention direct addressing; live per-agent state.
+- **Workspace** — Monaco code-diff, build-and-serve Preview, live Terminal output, live `TodoWrite` Plan, file explorer; mobile-responsive.
+- **Review & merge** — a Proposals inbox: approve→merge a session's worktree changes (or discard).
+- **Automation** — headless turn runner; **Scheduler** (recurring tasks; a nightly health-check that runs the test suite and reports pass/fail); **Dreaming/Curator** (nightly insights).
+- **Discord** — channel-per-project chat with Sage + proactive notifications (scheduled-task / dream / proposal embeds).
+- **Self-hosted & live** — home Mac Mini on Ubuntu, systemd services, Cloudflare named tunnel → `bridge.axodcreative.com`, nightly local DB backups.
 
-1. **Week 1 — Walking Skeleton** ✅ — text input → spawn `claude` subprocess → stream stdout to page
-2. **Week 2 — Single agent end-to-end** ✅ — Claude Agent SDK + SQLite + tool allowlist + worktrees + stop/abort
-3. **Week 3 — Sage + team-of-agents** ✅ — `dispatch_agent` orchestration, Atlas as first specialist, live per-agent roster state, live worktree diff
-4. **Week 4 — Workspace tabs** ✅ — Preview (build-and-serve), Code (Monaco diff, collapsible file list), Plan (live `TodoWrite` checklist), Terminal (live streamed output) · **mobile-responsive** layout
-5. **Week 5 — VPS deploy + dogfood ship** ⏳ — bare-VM (systemd + Caddy) on Hetzner + HTTPS, ship one real AXOD CREATIVE change end-to-end (plan written; revises the ADR-002 Docker lock)
+## What's next
 
-### v1 finish line (what's left)
+- Discord **action buttons** (Approve & Merge / Discard from a notification) + `/mc new-session`.
+- R2 offsite backups (local nightly snapshots already run).
+- More specialists as needs arise (the team grows by adding a DB row — see below).
 
-Of the 10 v1 success criteria, only **two** remain (see [v1 spec](docs/specs/v1-mvp-spec.md)):
+## Quickstart (local dev)
 
-- **#8** — running on the VPS with HTTPS
-- **#10** — ship at least one real AXOD CREATIVE change through the UI (the dogfood loop)
-
-Everything else — Sage→Atlas auto-routing, diff review, worktree isolation, session resume, cost/token meter, and mobile-responsiveness — is done and released.
-
-## Where we're going
-
-**Strategy: finish v1 before expanding the team.** The team-of-agents pattern is already proven with Atlas, so adding agents is low-risk and can happen anytime; deploy is the thing gated by a definition of done, so it goes first.
-
-| Version | Adds | Notes |
-|---|---|---|
-| **v1 (now)** | VPS deploy + HTTPS + one dogfood ship | Closes v1's definition of done |
-| **v1.1** ✅ | **Echo** (QA critic) + session memory + `@`-mention addressing + roster polish | First post-v1 agent (no new tools — proved the "3rd agent" path); Sage now keeps full session context; `@Atlas`/`@Echo` route straight to a specialist; roster cards got depth + active-state motion. |
-| **v1.2** ✅ | **Nova** (researcher) | No new plumbing — `WebSearch`/`WebFetch` are SDK built-ins already passed through by the runner, so Nova was as cheap as Echo |
-| **v1.3** ✅ | **Forge** (devops) + **Pixel** (designer) | Forge: full doer like Atlas — reuses existing edit/run/git tooling; Sonnet 4.6 over the roadmap's Haiku 4.5 since it edits infra config (Dockerfile/Caddyfile/CI) where mistakes are costly. Pixel: a *code-mockup* designer (HTML/CSS/Tailwind/SVG → Preview tab), so the assumed `image_generate` plumbing was never needed. Roster complete |
-| **v1.4** ✅ | Multi-project switcher | Switch the active repo (cookie-persisted) + add projects in-app (validates a local git repo); Mission Control seeded as a 2nd project. Mission Control itself + client repos |
-| **Workspace** ✅ | File Explorer tab | Browse the active project's repo — themed lazy tree (file-type icons + colors) + read-only Monaco viewer (Vivid syntax theme, also applied to Code Diff). Epic A of 3 |
-| **Workspace** ✅ | Add-project repo picker | Browse the machine's folders to pick an existing local git repo, or create a new one (mkdir + `git init`), from the Add-project modal. Epic B of 3 |
-| **Workspace** ✅ | Remove project + resizable Files | Remove a project from the switcher (unregister only; files kept) + drag-resize the Files tree/viewer split (persisted). |
-| **Navbar** ✅ | Collapsible nav rail + Agent Team view | Left rail switches views (collapsible icon↔labels, persisted); **Agent Team** is the live view = roster + session logs + workspace, each agent tagged `claude-sdk`. Forward-looking "soon" sections seed the OpenClaw operational views + Hermes pillars (Skills/Memory/Dreaming/Scheduler). |
-| **Navbar** ✅ | Live Feed view | Fleet-wide activity ticker across all projects (dispatches · replies · approvals · artifacts · session lifecycle); pending approvals are actionable inline. |
-| **Navbar** ✅ | Task Board view | Hybrid Kanban: operator-created cards (new `tasks` table) you drag To-Do→In-Progress to **dispatch through Sage** (creates a session + runs it via the normal send path), confirm into Done after reviewing. Read-only session-level "auto" cards mirror live agent work. |
-| **Navbar** ✅ | Proposals view | Review-and-merge inbox: sessions whose agent left worktree changes, with **Approve → merge** (into the base branch, in an isolated worktree) / Discard. Badge + tab-title + toast notify when one's waiting. |
-| **Navbar** ✅ | Skills view | Read-only capability map — per agent, its tools with friendly descriptions + a read/edit/run tag (the allowlist *is* the v1 safety model) + a first-person bio. |
-| **Navbar** ✅ | Memory view | Active-session context inspector: the attributed transcript Sage receives + size readout (msgs · ~tokens) + the Clear control. |
-| **v1.5** ✅ | Multi-project switcher + Live Feed + Task Board (`v1.5.0`); VPS deploy tooling (`v1.5.1`) | The nav-views milestone + the deploy runbook |
-| **v1.6** ✅ | Proposals + Skills + Memory nav views | Operator inbox, capability map, and context inspector — released `v1.6.0` |
-| **v1.6.1** ✅ | Oracle Always-Free deploy tooling | Retarget deploy to a free Oracle A1 VM at `bridge.axodcreative.com` (cloud = source of truth, Object Storage offsite backups) — see [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md) |
-| **v1.7** ✅ | Automation layer — headless turn runner + **Scheduler** + **Dreaming/Curator** + Plan persistence | The Hermes pillars go live: `runSessionTurn` runs turns headlessly (lease-guarded) so work no longer needs a client SSE connection; the **Scheduler** polls due schedules and dispatches recurring agent tasks via an in-process ticker; **Dreaming** runs a nightly Curator pass over recent sessions → starrable/dismissable insights; the Plan tab persists its latest snapshot per session. On `dev` |
-| **v1.8** | Discord via OpenClaw gateway | Chat with agents from anywhere |
-| **v2.0+** | Multi-runtime · RBAC · memory knowledge graph · recurring scheduler · marketplace | See [v1 spec deferred roadmap](docs/specs/v1-mvp-spec.md) |
-
-**Deploying:** Mission Control runs on an Oracle Cloud Always-Free A1 VM (host Node + Caddy + systemd, Claude Pro auth) at `bridge.axodcreative.com`. See [docs/runbook-deploy-oracle.md](docs/runbook-deploy-oracle.md); rationale in [ADR-003](docs/decisions/adr-003-deploy-host-node.md). (The earlier Hetzner runbook, [docs/runbook-deploy.md](docs/runbook-deploy.md), is retained for reference.)
-
-<a name="growing-the-team"></a>
-### Growing the team (how a new agent gets added)
-
-Adding a specialist that uses **existing** tools (read / edit / run_command / git) is cheap:
-
-1. **Seed the row** in the `agents` table — id, name, role, model, system prompt, tool allowlist, color.
-2. **Add the id to `DISPATCHABLE`** in [`src/lib/dispatch.ts`](src/lib/dispatch.ts) so Sage may dispatch it (the enum prevents Sage inventing agents).
-3. **Update Sage's system prompt** so it knows the new member exists and when to route to them.
-4. Seed a `tool_permissions` policy (`always` / `ask` / `deny`) per (agent, project, tool).
-
-No UI changes needed — the roster, icons, and accent colors for all six agents are already wired in `mission-control.tsx`. Agents needing **new tool types** (e.g. a future raster `image_generate`) would additionally require wiring those tools into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
-
-## Documents
-
-- **[v1 MVP Spec](docs/specs/v1-mvp-spec.md)** — full scope, architecture, data model, success criteria, deferred roadmap
-- **[Team-of-Agents Architecture](docs/architecture/team-of-agents.md)** — how Sage routes work, how agents are isolated, how the team grows
-- **Week plans** (each with post-hoc "what actually happened" notes):
-  [Week 1 — Walking Skeleton](docs/plans/week-1-walking-skeleton.md) ·
-  [Week 2 — Single-agent SDK](docs/plans/week-2-single-agent-sdk.md) ·
-  [Week 3 — Team of agents](docs/plans/week-3-team-of-agents.md) ·
-  [Week 4 — Workspace tabs](docs/plans/week-4-workspace-tabs.md)
-- **Design specs** — [`docs/superpowers/specs/`](docs/superpowers/specs/) (per-feature design docs: terminal tab, live Plan, mobile layout, collapsible diff, …)
-- **ADRs** — [ADR-001: Next.js vs Astro](docs/decisions/adr-001-nextjs-vs-astro.md) · [ADR-002: v1 platform locks](docs/decisions/adr-002-v1-platform-locks.md)
-
-## Out of scope for v1
-
-Discord integration · skills hub · MCP audit · trust scoring · RBAC / multi-user · multi-runtime (OpenClaw + CrewAI + LangGraph simultaneously) · memory knowledge graph · recurring scheduler · marketplace / public templates · 32-panel ops dashboard.
-
-These are valuable but premature. See the [v1 spec](docs/specs/v1-mvp-spec.md) for the full deferred roadmap.
-
-## Quickstart
-
-**Requirements:**
-- Node 22+ (see `.nvmrc`)
-- pnpm 11+ (`corepack enable && corepack prepare pnpm@latest --activate`)
-- The `claude` CLI on `PATH` (`npm i -g @anthropic-ai/claude-code`)
-- An Anthropic API key (or a `claude` install already logged in)
+**Requirements:** Node 22+ · pnpm 11+ · the `claude` CLI on `PATH` (logged in, or an `ANTHROPIC_API_KEY`).
 
 ```bash
-# clone + install
 git clone https://github.com/adrew0321/axod-mission-control.git
-cd axod-mission-control
-pnpm install
+cd axod-mission-control && pnpm install
 
-# database
 mkdir -p data
 node node_modules/drizzle-kit/bin.cjs migrate
-pnpm seed                 # demo project + Sage/Atlas agents + demo session
+pnpm seed                      # demo project + agents + session
 
-# env
-cp .env.example .env
-# set ANTHROPIC_API_KEY (only needed if `claude` isn't already authed)
-# SESSION_SECRET is auto-generated; rotate with:
-#   node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+cp .env.example .env           # SESSION_SECRET auto-generates; set DISCORD_* only if using the bot
+pnpm seed:admin                # create your operator login (interactive)
 
-# create an operator account (interactive prompt)
-pnpm seed:admin
-
-# start the dev server
-pnpm dev
-# → http://127.0.0.1:3000
-# → you'll be redirected to /login; sign in with the account you just seeded
-# → type a prompt; Sage responds and dispatches Atlas for real code changes
+pnpm dev                       # → http://127.0.0.1:3000  (redirects to /login)
 ```
 
-**Verify the install:**
+**Native build note:** `.npmrc` ships `ignore-scripts=true` (supply-chain hardening), so `better-sqlite3` needs its binding compiled once after install:
 ```bash
-curl http://localhost:3000/api/health
-# → { "status": "ok", "db": "ok", ... }
+cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3 && npx --no prebuild-install
 ```
 
-**Tests:**
-```bash
-pnpm test                 # node:test via tsx over the pure lib modules
-```
+**Tests:** `pnpm test` (node:test via tsx over the pure lib modules).
+**Discord bot (optional):** set `DISCORD_BOT_TOKEN` / `DISCORD_APP_ID` / `DISCORD_ALLOWED_USER_IDS` / `DISCORD_GUILD_ID`, enable the **Message Content** privileged intent on the bot, then `/mc bind` a channel to a project.
 
-**Native build note:** the project's `.npmrc` ships with `ignore-scripts=true` (npm-supply-chain hardening). `better-sqlite3` needs a native binding compiled on first install; do this once:
+## Deploying
 
-```bash
-cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3
-npx --no prebuild-install
-```
+Runs on a home Mac Mini (Ubuntu, host Node + systemd + Claude Pro CLI auth) behind a Cloudflare named tunnel at `bridge.axodcreative.com` — no public IP, no port-forwarding. The box pulls `main` from GitHub. See **[docs/runbook-deploy-homelab.md](docs/runbook-deploy-homelab.md)** for the full runbook (deploy procedure, security posture, and hard-won gotchas).
 
-This is captured in [`pnpm-workspace.yaml`'s `onlyBuiltDependencies`](pnpm-workspace.yaml), but the `.npmrc` setting overrides it for safety. Re-run after any `pnpm install` that re-extracts the package.
+## Growing the team
 
-## Project layout
-
-```
-src/
-  app/
-    api/
-      auth/{login,logout}/route.ts        # scrypt password verify → JWT cookie
-      health/route.ts                     # uptime-robot endpoint (unauthenticated)
-      approvals/[id]/decision/route.ts    # approve / deny / always (dormant gate infra)
-      sessions/[id]/messages/route.ts     # POST a user message
-      sessions/[id]/stream/route.ts       # GET SSE stream — thin: auth + delegates to runSessionTurn
-      sessions/[id]/diff/route.ts         # worktree diff for the Code tab
-      sessions/[id]/preview/route.ts      # build-and-serve the worktree site for the Preview tab
-    login/                                # /login page + form
-    page.tsx                              # Server Component: reads DB → MissionControl
-    layout.tsx                            # fonts + dark theme
-  components/
-    mission-control.tsx                   # the 3-pane interactive UI (Client Component)
-    diff-viewer.tsx                       # Monaco side-by-side diff + collapsible file list
-    terminal-view.tsx                     # live streamed command output (lightweight, no xterm)
-    plan-view.tsx                         # live TodoWrite checklist
-    scheduler-view.tsx                    # Scheduler create/list/toggle UI
-    dreaming-view.tsx                     # Dreaming feed: dreams + insight cards (star/dismiss)
-    markdown.tsx                          # chat markdown rendering
-    ui/                                   # shadcn primitives
-  db/
-    schema.ts                             # Drizzle SQLite schema (13 tables)
-    client.ts                             # better-sqlite3 + drizzle wiring
-  lib/
-    auth.ts, auth-edge.ts, password.ts    # session/cookie + scrypt helpers
-    rate-limit.ts                         # in-memory IP bucket
-    agent-runner-sdk.ts                   # run a Claude Agent SDK query, yield token/tool/done events
-    run-turn.ts                           # runSessionTurn — one turn end-to-end, sink-agnostic (SSE or CLI), lease-guarded
-    turn-lease.ts                         # pure lease-staleness + turn-input helpers (unit-tested)
-    schedule.ts                           # pure cadence math (next-run, summary) — unit-tested
-    scheduler.ts                          # in-process ticker: poll due schedules → runSessionTurn
-    schedules-data.ts                     # getSchedules server fetch for the Scheduler view
-    dream.ts                              # Curator: gather conversations → runClaudeAgent → insights (+ nightly ticker)
-    dream-insights.ts                     # pure parser: Curator output → structured insights (unit-tested)
-    dream-due.ts                          # pure nightly due-gate (unit-tested)
-    dreams-data.ts                        # getDreams server fetch for the Dreaming view
-    dispatch.ts                           # Sage's in-process `dispatch_agent` MCP tool
-    worktree.ts                           # per-session git worktree create/cleanup
-    preview.ts                            # build + serve the worktree site
-    permissions.ts                        # tool allowlist / policy lookups
-    terminal-events.ts, ansi.ts           # Bash tool events → terminal lines (+ SGR parsing)
-    plan-events.ts                        # TodoWrite events → plan snapshot
-    message-segments.ts                   # paragraph-split agent chat bubbles
-    mock-data.ts                          # shared TYPES only (Agent/Message/Session/Artifact)
-  instrumentation.ts                      # Next boot hook → startScheduler() + startDreaming()
-  proxy.ts                                # Next 16 proxy (renamed from middleware)
-scripts/
-  seed.ts                                 # demo project + Sage/Atlas + demo session
-  seed-admin.ts                           # interactive operator account creator
-  run-turn.ts                             # headless `pnpm run:turn <sessionId> ["instruction"]` — server-initiated turn, no browser
-drizzle/                                  # generated migration SQL + journal
-docs/
-  specs/v1-mvp-spec.md
-  plans/week-{1,2,3,4}-*.md
-  architecture/team-of-agents.md
-  decisions/                              # ADRs
-  superpowers/specs/                      # per-feature design docs
-```
+Adding a specialist that uses existing tools (read / edit / run_command / git) is cheap: (1) seed the row in `agents`; (2) add its id to `DISPATCHABLE` in [`src/lib/dispatch.ts`](src/lib/dispatch.ts); (3) mention it in Sage's system prompt; (4) seed its `tool_permissions`. No UI changes needed. Agents needing brand-new tool types require wiring those into the runner first. See [Team-of-Agents Architecture](docs/architecture/team-of-agents.md).
 
 ## Relationship to AXOD CREATIVE
 
-Mission Control is a **separate project** from the [AXOD CREATIVE landing page](https://github.com/adrew0321/AXODCREATIVE). They're built by the same person, theme-aligned (same fonts, blue palette), but completely independent codebases. Mission Control is *for* AXOD (and eventually clients); AXOD CREATIVE *showcases* AXOD.
-
-The landing page is the **first repo Mission Control dispatches agents against** (closing the dogfood loop).
+Mission Control is a **separate project** from the [AXOD CREATIVE landing page](https://github.com/adrew0321/AXODCREATIVE) — same author, theme-aligned, independent codebases. Mission Control is the tool; AXOD CREATIVE is one of the repos it works on.
