@@ -10,5 +10,7 @@ export async function register() {
     startDreaming();
     const { startDiscordBot } = await import('@/lib/discord-bot');
     startDiscordBot();
+    const { startDiscordNotify } = await import('@/lib/discord-notify');
+    startDiscordNotify();
   }
 }

@@ -11,6 +11,11 @@ import {
   type Message,
 } from 'discord.js';
 import { parseAllowedIds, isAllowed } from './discord-allow';
+
+let readyClient: Client | null = null;
+export function getReadyClient(): Client | null {
+  return readyClient;
+}
 import {
   getBinding,
   setBinding,
@@ -67,6 +72,7 @@ export function startDiscordBot(): void {
   });
 
   client.once(Events.ClientReady, async (c) => {
+    readyClient = c;
     console.log(`[discord] logged in as ${c.user.tag}`);
     try {
       if (appId) await registerCommands(appId, token, guildId);
