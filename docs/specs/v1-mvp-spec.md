@@ -1,6 +1,6 @@
 # v1 MVP Spec — AXOD Mission Control
 
-> **Status:** Build in progress · Weeks 1–4 complete & released to `main` · Week 5 (deploy) in progress (as of 2026-06-01)
+> **Status:** ✅ v1 shipped — now at **v1.8.0**, live at `https://bridge.axodcreative.com`. See the [README](../../README.md) for current state. This document is the original v1 scope/architecture record (2026-05-27); its deferred-roadmap section still informs direction.
 > **Created:** 2026-05-27
 > **Owner:** [@adrew0321](https://github.com/adrew0321)
 > **Target ship:** 5 weeks from build start

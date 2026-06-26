@@ -1,5 +1,7 @@
 # Mission Control — Oracle Always-Free deploy runbook
 
+> ⚠️ **Superseded — historical reference.** Oracle never yielded A1 capacity; the live deploy is the home Mac Mini behind a Cloudflare Tunnel — see **[runbook-deploy-homelab.md](runbook-deploy-homelab.md)**. Kept for reference only.
+
 **Target:** Oracle Cloud Always Free, `VM.Standard.A1.Flex` (ARM Ampere), 2 vCPU / 12 GB,
 Ubuntu 24.04. **Result:** `https://bridge.axodcreative.com`.
 Login is the `ubuntu` user via SSH key; privileged steps use `sudo`. **Idempotent** — every
