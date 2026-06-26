@@ -21,6 +21,11 @@ import { getActiveSessionId } from './discord-session';
 import { createDiscordSink } from './discord-sink';
 import { runSessionTurn } from './run-turn';
 
+let readyClient: Client | null = null;
+export function getReadyClient(): Client | null {
+  return readyClient;
+}
+
 const COMMANDS = [
   new SlashCommandBuilder()
     .setName('mc')
@@ -67,6 +72,7 @@ export function startDiscordBot(): void {
   });
 
   client.once(Events.ClientReady, async (c) => {
+    readyClient = c;
     console.log(`[discord] logged in as ${c.user.tag}`);
     try {
       if (appId) await registerCommands(appId, token, guildId);
