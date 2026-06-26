@@ -78,3 +78,7 @@ coverage/
 /scratch/
 TODO.local.md
 .superpowers/
+
+# python bytecode (deploy/*.py helpers)
+__pycache__/
+*.pyc

@@ -11,6 +11,58 @@ Cloud = source of truth; local data migrated once.
 
 ---
 
+## Current state (2026-06-26) — LIVE
+
+The Mini (`mc-bridge`, `10.0.0.218`) is running **v1.8.0**, publicly reachable at
+**https://bridge.axodcreative.com** via a cloudflared **named tunnel** (`mc-bridge`, systemd
+boot service — see Phase 3). The full stack runs 24/7: app, Scheduler, nightly health-check,
+Dreaming, and the Discord bot (chat + notifications). Login: `adrew0321@gmail.com` (the
+throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-backup.timer`,
+03:30 UTC → `/srv/backups`); R2 offsite backups (Phase 4) deferred.
+
+### Updating the live box (deploy a new release)
+
+```bash
+# code/data update — run as the app user `mc` (owns /srv/mission-control):
+sudo -u mc bash -lc 'cd /srv/mission-control \
+  && git pull --ff-only origin main \
+  && pnpm install --frozen-lockfile \
+  && pnpm build \
+  && (set -a; . ./.env; set +a; pnpm db:migrate)'
+# then restart (allowlisted for akeem — see sudo note):
+sudo systemctl restart mission-control
+```
+
+`scripts/deploy.sh` automates this but assumes `mc` can sudo the restart; run the restart as
+`akeem` instead. The `ERR_PNPM_IGNORED_BUILDS` warning on install is the intentional
+`ignore-scripts` allowlist — do NOT `pnpm approve-builds`.
+
+### Gotchas learned (the hard way)
+
+- **The Mini DB is SEPARATE from any dev machine's DB.** They do not sync. Work done against a
+  local `pnpm dev` (channel `/mc bind`s, schedules, sessions) does NOT appear on the Mini. This
+  silently broke Discord chat once: with no `discord_bindings` row on the Mini, `handleMessage`
+  dropped messages at the binding check (no turn, nothing logged). **The Mini is the source of
+  truth — keep any local `pnpm dev` stopped, or re-migrate the DB.** Re-create per-channel
+  bindings on the box itself (`/mc bind` from Discord, which now hits the Mini) and schedules via
+  the Scheduler UI / a DB insert.
+- **`pnpm seed:admin` is interactive and does NOT work over piped stdin** (its hidden-password
+  readline hangs). Seed non-interactively (small env-driven script) instead. Deleting an admin
+  needs its `auth_sessions` rows cleared first (FK `auth_sessions.user_id → auth_users.id`).
+- **Discord bot token = one gateway connection.** When handing the bot from a dev machine to the
+  Mini, STOP the dev server first, then restart the Mini service, so only one process holds the
+  token.
+
+### Security posture (2026-06-26)
+
+- App runs as `mc`; `mc`'s only sudo right is `systemctl restart mission-control` (contained).
+- `akeem` sudo is scoped: passwordless only for `sudo -u mc …` and specific service restarts
+  (`/etc/sudoers.d/99-akeem-nopasswd`); **arbitrary root requires akeem's password**. Log reads
+  go through `akeem`'s `adm` group membership (no sudo). One-time root admin (apt installs,
+  installing systemd units, editing `/root` or sudoers) therefore needs an interactive password.
+
+---
+
 ## Phase 0 — Make the Ubuntu installer (on your Windows PC)
 1. Download **Ubuntu Server 24.04 LTS** ISO: <https://ubuntu.com/download/server> (the "Manual
    install" / ISO, ~2–3 GB).
