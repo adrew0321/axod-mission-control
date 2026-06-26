@@ -11,11 +11,6 @@ import {
   type Message,
 } from 'discord.js';
 import { parseAllowedIds, isAllowed } from './discord-allow';
-
-let readyClient: Client | null = null;
-export function getReadyClient(): Client | null {
-  return readyClient;
-}
 import {
   getBinding,
   setBinding,
@@ -25,6 +20,11 @@ import {
 import { getActiveSessionId } from './discord-session';
 import { createDiscordSink } from './discord-sink';
 import { runSessionTurn } from './run-turn';
+
+let readyClient: Client | null = null;
+export function getReadyClient(): Client | null {
+  return readyClient;
+}
 
 const COMMANDS = [
   new SlashCommandBuilder()
