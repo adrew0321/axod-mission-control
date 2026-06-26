@@ -69,6 +69,18 @@ export async function ensureWorktree(
   repoPath: string,
   baseBranch = 'dev',
 ): Promise<WorktreeInfo> {
+  // An agent must only ever run in a real isolated worktree. Validate the source
+  // repo up front so a bad/stale repoPath fails loudly here instead of letting the
+  // caller fall back to running in the wrong directory.
+  if (!repoPath || !existsSync(repoPath)) {
+    throw new Error(`repo path does not exist: ${repoPath}`);
+  }
+  try {
+    await exec('git', ['-C', repoPath, 'rev-parse', '--is-inside-work-tree']);
+  } catch {
+    throw new Error(`not a git repository: ${repoPath}`);
+  }
+
   const wtPath = sessionWorktreePath(sessionId);
   const branch = sessionBranch(sessionId);
 

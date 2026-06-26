@@ -158,18 +158,25 @@ export async function runSessionTurn(
       primaryEmitted = true;
     };
 
-    let workingDir = project?.repo_path ?? process.cwd();
-    if (project?.repo_path) {
-      try {
-        const wt = await ensureWorktree(sessionId, project.repo_path, project.default_branch ?? 'dev');
-        workingDir = wt.path;
-        if (session.worktree_path !== wt.path) {
-          await db.update(sessions).set({ worktree_path: wt.path }).where(eq(sessions.id, sessionId));
-        }
-        emit({ type: 'worktree', path: wt.path, branch: wt.branch });
-      } catch (err) {
-        emit({ type: 'worktree_error', message: err instanceof Error ? err.message : String(err) });
+    // An agent must NEVER run outside a real isolated worktree. If we can't create
+    // one, abort the turn — do not fall back to repo_path or process.cwd() (the live
+    // app dir). The lease is released by the finally below.
+    if (!project?.repo_path) {
+      emit({ type: 'error', message: 'no repo configured for this project — cannot run a turn' });
+      return { status: 'error', reason: 'no repo_path' };
+    }
+    let workingDir: string;
+    try {
+      const wt = await ensureWorktree(sessionId, project.repo_path, project.default_branch ?? 'dev');
+      workingDir = wt.path;
+      if (session.worktree_path !== wt.path) {
+        await db.update(sessions).set({ worktree_path: wt.path }).where(eq(sessions.id, sessionId));
       }
+      emit({ type: 'worktree', path: wt.path, branch: wt.branch });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      emit({ type: 'error', message: `could not prepare an isolated worktree: ${message}` });
+      return { status: 'error', reason: `worktree failed: ${message}` };
     }
 
     // Best-effort plan persistence: never let a DB hiccup break the turn.

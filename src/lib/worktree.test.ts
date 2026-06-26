@@ -33,6 +33,26 @@ async function cleanup(...dirs: string[]): Promise<void> {
   for (const d of dirs) await rm(d, { recursive: true, force: true }).catch(() => {});
 }
 
+test('ensureWorktree throws when the repo path does not exist', async () => {
+  const root = await freshWorktreeRoot();
+  const missing = path.join(tmpdir(), 'mc-no-such-repo-' + Date.now());
+  try {
+    await assert.rejects(() => ensureWorktree('sess_missing', missing, 'dev'), /repo path does not exist/);
+  } finally {
+    await cleanup(root);
+  }
+});
+
+test('ensureWorktree throws when the path is not a git repository', async () => {
+  const root = await freshWorktreeRoot();
+  const notGit = await mkdtemp(path.join(tmpdir(), 'mc-notgit-'));
+  try {
+    await assert.rejects(() => ensureWorktree('sess_notgit', notGit, 'dev'), /not a git repository/);
+  } finally {
+    await cleanup(notGit, root);
+  }
+});
+
 test('removeWorktree unlinks the node_modules junction without deleting the source', async () => {
   const repo = await makeRepo();
   const root = await freshWorktreeRoot();
