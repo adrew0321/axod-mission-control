@@ -13,8 +13,8 @@ import {
   type ScheduleRunRow,
   type DreamRowLite,
 } from './discord-notify-diff';
-import { scheduleEmbed, dreamEmbed, proposalEmbed } from './discord-format';
-import type { APIEmbed } from 'discord.js';
+import { scheduleEmbed, dreamEmbed, proposalEmbed, proposalActionRow } from './discord-format';
+import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js';
 
 const POLL_MS = 30_000;
 // Dreams are global (not project-scoped) → route to the operator's "home" project channel.
@@ -28,13 +28,18 @@ let primed = false;
 /** Send an embed to every channel bound to a project. Returns false on send failure
  *  (so the caller can leave the cursor unadvanced and retry). No bound channel → true
  *  (nothing to do; don't retry forever). */
-async function postToProject(client: Client, projectId: string, embed: APIEmbed): Promise<boolean> {
+async function postToProject(
+  client: Client,
+  projectId: string,
+  embed: APIEmbed,
+  components?: APIActionRowComponent<APIComponentInMessageActionRow>[],
+): Promise<boolean> {
   try {
     const channelIds = await getChannelsForProject(projectId);
     for (const id of channelIds) {
       const ch = await client.channels.fetch(id);
       if (ch && 'send' in ch && typeof ch.send === 'function') {
-        await ch.send({ embeds: [embed] });
+        await ch.send({ embeds: [embed], ...(components ? { components } : {}) });
       }
     }
     return true;
@@ -107,7 +112,7 @@ async function tick(): Promise<void> {
   // --- proposals: add on success, then drop any that are no longer present ---
   for (const id of prop.newIds) {
     const p = proposals.find((x) => x.sessionId === id);
-    if (p && (await postToProject(client, p.projectId, proposalEmbed(p)))) {
+    if (p && (await postToProject(client, p.projectId, proposalEmbed(p), [proposalActionRow(p.sessionId)]))) {
       proposalCursor.add(id);
     }
   }

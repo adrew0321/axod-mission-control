@@ -8,6 +8,7 @@ import {
   SlashCommandBuilder,
   MessageFlags,
   type Interaction,
+  type ButtonInteraction,
   type Message,
 } from 'discord.js';
 import { parseAllowedIds, isAllowed } from './discord-allow';
@@ -20,6 +21,11 @@ import {
 import { getActiveSessionId } from './discord-session';
 import { createDiscordSink } from './discord-sink';
 import { runSessionTurn } from './run-turn';
+import { mergeWorktree, discardWorktree } from './worktree';
+import { parseActionId, proposalResultEmbed } from './discord-format';
+import { db } from '@/db/client';
+import { sessions, projects } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 let readyClient: Client | null = null;
 export function getReadyClient(): Client | null {
@@ -92,6 +98,7 @@ export function startDiscordBot(): void {
 }
 
 async function handleInteraction(interaction: Interaction, allowed: Set<string>): Promise<void> {
+  if (interaction.isButton()) return handleButton(interaction, allowed);
   if (!interaction.isChatInputCommand()) return;
   try {
     if (!isAllowed(interaction.user.id, allowed)) {
@@ -118,6 +125,53 @@ async function handleInteraction(interaction: Interaction, allowed: Set<string>)
     }
   } catch (err) {
     console.error('[discord] interaction failed:', err instanceof Error ? err.message : err);
+  }
+}
+
+async function handleButton(interaction: ButtonInteraction, allowed: Set<string>): Promise<void> {
+  const parsed = parseActionId(interaction.customId);
+  if (!parsed) return; // not one of our proposal buttons
+  try {
+    if (!isAllowed(interaction.user.id, allowed)) {
+      await interaction.reply({ content: 'Not authorized.', flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await interaction.deferUpdate(); // merge can take seconds; beat the 3s limit, keep the message
+    const { action, sessionId } = parsed;
+
+    const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
+    const title = session?.title ?? undefined;
+    if (!session || !session.worktree_path) {
+      await interaction.message.edit({ embeds: [proposalResultEmbed('stale', { sessionTitle: title })], components: [] });
+      return;
+    }
+    const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
+    if (!project) {
+      await interaction.message.edit({ embeds: [proposalResultEmbed('stale', { sessionTitle: title })], components: [] });
+      return;
+    }
+
+    if (action === 'merge') {
+      const base = project.default_branch ?? 'dev';
+      const result = await mergeWorktree(sessionId, project.repo_path, base);
+      if (result.ok) {
+        await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
+        await interaction.message.edit({ embeds: [proposalResultEmbed('merged', { baseBranch: base, sessionTitle: title })], components: [] });
+      } else {
+        await interaction.message.edit({ embeds: [proposalResultEmbed('conflict', { sessionTitle: title })], components: [] });
+      }
+    } else {
+      await discardWorktree(sessionId, project.repo_path);
+      await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
+      await interaction.message.edit({ embeds: [proposalResultEmbed('discarded', { sessionTitle: title })], components: [] });
+    }
+  } catch (err) {
+    console.error('[discord] button action failed:', err instanceof Error ? err.message : err);
+    try {
+      await interaction.followUp({ content: `Action failed: ${err instanceof Error ? err.message : err}`, flags: MessageFlags.Ephemeral });
+    } catch {
+      /* best-effort */
+    }
   }
 }
 

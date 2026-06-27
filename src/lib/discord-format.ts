@@ -1,4 +1,4 @@
-import type { APIEmbed } from 'discord.js'; // type-only: erased at runtime, keeps this module pure
+import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js'; // type-only: erased at runtime, keeps this module pure
 import type { ScheduleRunRow, DreamRowLite } from './discord-notify-diff';
 import type { Proposal } from './proposals';
 
@@ -6,6 +6,7 @@ const GREEN = 0x10b981;
 const RED = 0xef4444;
 const AMBER = 0xf59e0b;
 const BLUE = 0x3b82f6;
+const GREY = 0x6e7681;
 
 /**
  * Split text into Discord-sendable chunks each ≤ max chars (default 2000).
@@ -58,4 +59,44 @@ export function proposalEmbed(p: Proposal): APIEmbed {
       { name: 'Files', value: String(p.files.length), inline: true },
     ],
   };
+}
+
+/** Encode/parse a proposal-action button id. Pure. */
+export function buildActionId(action: 'merge' | 'discard', sessionId: string): string {
+  return `mc:${action}:${sessionId}`;
+}
+export function parseActionId(
+  customId: string,
+): { action: 'merge' | 'discard'; sessionId: string } | null {
+  const m = /^mc:(merge|discard):(.+)$/.exec(customId);
+  return m ? { action: m[1] as 'merge' | 'discard', sessionId: m[2] } : null;
+}
+
+/**
+ * Action row for a proposal embed: green "Approve & Merge" + red "Discard".
+ * Hand-built component JSON (Discord literals: ActionRow=1, Button=2; Success=3, Danger=4)
+ * so this module never imports discord.js runtime enums. Pure.
+ */
+export function proposalActionRow(sessionId: string): APIActionRowComponent<APIComponentInMessageActionRow> {
+  return {
+    type: 1,
+    components: [
+      { type: 2, style: 3, label: 'Approve & Merge', custom_id: buildActionId('merge', sessionId) },
+      { type: 2, style: 4, label: 'Discard', custom_id: buildActionId('discard', sessionId) },
+    ],
+  } as unknown as APIActionRowComponent<APIComponentInMessageActionRow>;
+}
+
+/** Embed shown after a proposal button resolves (replaces the proposal embed). Pure. */
+export function proposalResultEmbed(
+  kind: 'merged' | 'discarded' | 'conflict' | 'stale',
+  opts?: { baseBranch?: string; sessionTitle?: string },
+): APIEmbed {
+  const description = opts?.sessionTitle;
+  if (kind === 'merged')
+    return { title: `✅ Merged${opts?.baseBranch ? ` into ${opts.baseBranch}` : ''}`, description, color: GREEN };
+  if (kind === 'discarded') return { title: '🗑️ Discarded', description, color: GREY };
+  if (kind === 'conflict')
+    return { title: '⚠️ Merge conflict — resolve in Mission Control', description, color: AMBER };
+  return { title: 'Proposal already resolved', description, color: GREY };
 }
