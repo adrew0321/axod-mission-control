@@ -1,4 +1,4 @@
-import type { APIEmbed, APIActionRowComponent, APIMessageActionRowComponent } from 'discord.js'; // type-only: erased at runtime, keeps this module pure
+import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js'; // type-only: erased at runtime, keeps this module pure
 import type { ScheduleRunRow, DreamRowLite } from './discord-notify-diff';
 import type { Proposal } from './proposals';
 
@@ -77,14 +77,14 @@ export function parseActionId(
  * Hand-built component JSON (Discord literals: ActionRow=1, Button=2; Success=3, Danger=4)
  * so this module never imports discord.js runtime enums. Pure.
  */
-export function proposalActionRow(sessionId: string): APIActionRowComponent<APIMessageActionRowComponent> {
+export function proposalActionRow(sessionId: string): APIActionRowComponent<APIComponentInMessageActionRow> {
   return {
     type: 1,
     components: [
       { type: 2, style: 3, label: 'Approve & Merge', custom_id: buildActionId('merge', sessionId) },
       { type: 2, style: 4, label: 'Discard', custom_id: buildActionId('discard', sessionId) },
     ],
-  } as unknown as APIActionRowComponent<APIMessageActionRowComponent>;
+  } as unknown as APIActionRowComponent<APIComponentInMessageActionRow>;
 }
 
 /** Embed shown after a proposal button resolves (replaces the proposal embed). Pure. */
