@@ -1,4 +1,4 @@
-import { desc, asc, eq, sql, and, gt } from "drizzle-orm";
+import { desc, asc, eq, sql, and, gt, isNull } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "@/db/client";
 import { agents, sessions, messages, projects, approvals } from "@/db/schema";
@@ -79,7 +79,7 @@ export default async function HomePage() {
   const sessionRows = await db
     .select()
     .from(sessions)
-    .where(eq(sessions.project_id, project.id))
+    .where(and(eq(sessions.project_id, project.id), isNull(sessions.archived_at)))
     .orderBy(desc(sessions.updated_at));
 
   // Cleared sessions only surface messages created after the clear marker; the

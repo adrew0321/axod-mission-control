@@ -1,5 +1,5 @@
 import 'server-only';
-import { eq, and, desc, isNotNull } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { sessions, projects, messages } from '@/db/schema';
 import { diffWorktree } from './worktree';
@@ -20,7 +20,7 @@ export async function getProposals(): Promise<Proposal[]> {
     })
     .from(sessions)
     .innerJoin(projects, eq(sessions.project_id, projects.id))
-    .where(isNotNull(sessions.worktree_path));
+    .where(and(isNotNull(sessions.worktree_path), isNull(sessions.archived_at)));
 
   const rowsWithSummary = await Promise.all(
     rows.map(async (r) => {

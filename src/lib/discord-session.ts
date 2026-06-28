@@ -1,5 +1,5 @@
 import 'server-only';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, and, isNull } from 'drizzle-orm';
 import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { sessions, projects } from '@/db/schema';
@@ -21,7 +21,7 @@ export async function getActiveSessionId(projectId: string): Promise<string> {
   const rows = await db
     .select({ id: sessions.id })
     .from(sessions)
-    .where(eq(sessions.project_id, projectId))
+    .where(and(eq(sessions.project_id, projectId), isNull(sessions.archived_at)))
     .orderBy(desc(sessions.updated_at));
 
   const decision = resolveActiveSession({
