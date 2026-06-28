@@ -57,6 +57,13 @@
       "when": 1782235512732,
       "tag": "0007_clear_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1782616556019,
+      "tag": "0008_panoramic_lester",
+      "breakpoints": true
     }
   ]
 }
