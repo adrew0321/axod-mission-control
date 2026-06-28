@@ -76,6 +76,12 @@ export default async function HomePage() {
 
   const currentSessionRow = await getOrCreateActiveSession(project.id);
 
+  const sessionRows = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.project_id, project.id))
+    .orderBy(desc(sessions.updated_at));
+
   // Cleared sessions only surface messages created after the clear marker; the
   // rest stay in the DB (archived). cleared_at is null for un-cleared sessions.
   const messageRows = await db
@@ -201,6 +207,14 @@ export default async function HomePage() {
       initialMessages={messagesForUi}
       projects={projectRows.map((p) => ({ id: p.id, name: p.name }))}
       activeProjectId={project.id}
+      sessions={sessionRows.map((s) => ({
+        id: s.id,
+        title: (s.title ?? "").trim() || "New session",
+        baseBranch: s.base_branch ?? project.default_branch ?? "dev",
+        hasChanges: s.worktree_path != null,
+        isActive: s.id === currentSessionRow.id,
+      }))}
+      activeSessionId={currentSessionRow.id}
       initialLiveFeedEvents={liveFeedEvents}
       initialTaskBoard={initialTaskBoard}
       initialProposals={initialProposals}
