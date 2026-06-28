@@ -1,5 +1,5 @@
 import 'server-only';
-import { eq, and, desc, isNotNull, isNull } from 'drizzle-orm';
+import { eq, and, desc, isNotNull, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { sessions, projects, messages } from '@/db/schema';
 import { diffWorktree } from './worktree';
@@ -28,7 +28,7 @@ export async function getProposals(): Promise<Proposal[]> {
         .select({ content: messages.content })
         .from(messages)
         .where(and(eq(messages.session_id, r.sessionId), eq(messages.role, 'agent')))
-        .orderBy(desc(messages.created_at))
+        .orderBy(desc(messages.created_at), desc(sql`rowid`))
         .limit(1)
         .then((x) => x[0]);
       return { ...r, summaryRaw: last?.content ?? null };
