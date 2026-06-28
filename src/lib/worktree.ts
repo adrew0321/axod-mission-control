@@ -9,7 +9,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
-import { readFile, lstat, symlink, unlink } from 'node:fs/promises';
+import { readFile, lstat, symlink, unlink, rm } from 'node:fs/promises';
 
 const exec = promisify(execFile);
 
@@ -60,6 +60,39 @@ async function linkNodeModules(worktreePath: string, repoPath: string): Promise<
 }
 
 /**
+ * True only if wtPath is its own real git worktree — not a stray/hollow dir that
+ * git would resolve UPWARD to a parent repo (which is how a leftover dir inside the
+ * app repo silently "becomes" the Mission Control repo). The local `.git` check is
+ * the guard: a real linked worktree has its own `.git` file, a hollow dir does not —
+ * so a dir that only resolves to a parent has no `.git` here and is rejected. The
+ * rev-parse then confirms that `.git` actually points at a live working tree (not a
+ * pruned/broken one). We avoid string-comparing `--show-toplevel` to wtPath: git
+ * normalizes separators/realpaths differently per-OS, which gives false negatives.
+ */
+export async function isWorktreeValid(wtPath: string): Promise<boolean> {
+  try {
+    if (!existsSync(path.join(wtPath, '.git'))) return false;
+    const { stdout } = await exec('git', ['-C', wtPath, 'rev-parse', '--is-inside-work-tree']);
+    return stdout.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Remove a stale/corrupt scratch dir at wtPath so it can be recreated cleanly.
+ * Unlinks the node_modules link first (never recurse into the live node_modules),
+ * tries git's own removal (clears registration if it IS a registered worktree),
+ * then hard-deletes any leftover dir and prunes stale registrations. Best-effort.
+ */
+async function removeStaleWorktreeDir(wtPath: string, repoPath: string): Promise<void> {
+  await unlinkNodeModulesLink(wtPath);
+  await exec('git', ['-C', repoPath, 'worktree', 'remove', '--force', wtPath]).catch(() => {});
+  await rm(wtPath, { recursive: true, force: true }).catch(() => {});
+  await exec('git', ['-C', repoPath, 'worktree', 'prune']).catch(() => {});
+}
+
+/**
  * Ensure a worktree exists for this session, checked out to a session-scoped
  * branch (`mc/<sessionId>`) forked from `baseBranch`. Idempotent: returns the
  * existing worktree if already present.
@@ -85,8 +118,14 @@ export async function ensureWorktree(
   const branch = sessionBranch(sessionId);
 
   if (existsSync(wtPath)) {
-    await linkNodeModules(wtPath, repoPath);
-    return { path: wtPath, branch };
+    if (await isWorktreeValid(wtPath)) {
+      await linkNodeModules(wtPath, repoPath);
+      return { path: wtPath, branch };
+    }
+    // Stale/corrupt scratch dir (e.g. a hollow dir with no .git that would resolve
+    // to the parent repo). Remove and recreate — real session work lives on the
+    // branch, not the loose dir, so this is safe.
+    await removeStaleWorktreeDir(wtPath, repoPath);
   }
 
   if (await branchExists(repoPath, branch)) {
