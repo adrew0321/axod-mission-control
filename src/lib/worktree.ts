@@ -324,8 +324,13 @@ export async function mergeWorktree(
   // 1. Commit any uncommitted edits in the worktree so the branch carries them.
   const { stdout: status } = await exec('git', ['-C', wtPath, 'status', '--porcelain']);
   if (status.trim()) {
-    await exec('git', ['-C', wtPath, 'add', '-A']);
-    await exec('git', ['-C', wtPath, 'commit', '-m', `mission-control: ${branch}`]);
+    await exec('git', ['-C', wtPath, 'reset', '-q', '--', 'node_modules']).catch(() => {}); // drop any pre-staged node_modules
+    await exec('git', ['-C', wtPath, 'add', '-A', '--', '.', ':!node_modules']); // stage everything except node_modules
+    await exec('git', [
+      '-c', 'user.email=mc@axodcreative.com',
+      '-c', 'user.name=Mission Control',
+      '-C', wtPath, 'commit', '-m', `mission-control: ${branch}`,
+    ]);
   }
 
   // 2. Merge into the base WITHOUT disturbing the operator's working tree. If the base
@@ -347,7 +352,10 @@ export async function mergeWorktree(
   };
 
   try {
-    await exec('git', ['-C', mergeDir, 'merge', '--no-ff', '-m', `Merge ${branch}`, branch]);
+    await exec('git', [
+      '-c', 'user.email=mc@axodcreative.com',
+      '-c', 'user.name=Mission Control',
+      '-C', mergeDir, 'merge', '--no-ff', '-m', `Merge ${branch}`, branch]);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await exec('git', ['-C', mergeDir, 'merge', '--abort']).catch(() => {});

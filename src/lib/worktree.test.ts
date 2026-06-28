@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ensureWorktree, removeWorktree, isWorktreeValid } from './worktree';
+import { ensureWorktree, removeWorktree, isWorktreeValid, mergeWorktree } from './worktree';
 
 const exec = promisify(execFile);
 
@@ -161,6 +161,33 @@ test('ensureWorktree heals a hollow dir (no .git) by removing and recreating', a
     assert.equal(await isWorktreeValid(wtPath), true);
   } finally {
     await removeWorktree('sess_hollow', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('mergeWorktree commits as Mission Control and excludes node_modules', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  try {
+    const wt = await ensureWorktree('sess_merge', repo, 'dev');
+    // A real change + a node_modules dir that must NOT be committed.
+    await writeFile(path.join(wt.path, 'feature.txt'), 'hello\n');
+    await mkdir(path.join(wt.path, 'node_modules', 'junkpkg'), { recursive: true });
+    await writeFile(path.join(wt.path, 'node_modules', 'junkpkg', 'index.js'), 'x');
+    await exec('git', ['-C', wt.path, 'add', 'node_modules']).catch(() => {}); // even if an agent pre-staged it
+
+    const res = await mergeWorktree('sess_merge', repo, 'dev');
+    assert.equal(res.ok, true);
+
+    // The merge commit author is Mission Control (inline identity applied).
+    const { stdout: author } = await exec('git', ['-C', repo, 'log', 'dev', '-1', '--format=%an']);
+    assert.equal(author.trim(), 'Mission Control');
+
+    // feature.txt landed on dev; node_modules did NOT.
+    const { stdout: tree } = await exec('git', ['-C', repo, 'ls-tree', '-r', '--name-only', 'dev']);
+    assert.ok(tree.split('\n').includes('feature.txt'), 'feature.txt should be committed');
+    assert.ok(!tree.split('\n').some((f) => f.startsWith('node_modules')), 'node_modules must NOT be committed');
+  } finally {
     await cleanup(repo, root);
   }
 });
