@@ -203,6 +203,31 @@ Each integration is a clean add-on once the Phase 1 engine exists.
   reach delivered as **MCP tools** (Postiz for social/YouTube, CalDAV/EventKit for calendar, rsync
   for files). The "Self-layer" compounding = deepen MC's existing Memory + Dreaming.
 
+### Experience layer — voice + login greeting + J.A.R.V.I.S. HUD (2026-06-28)
+
+Operator wants the full "Iron Man ↔ Jarvis" feel: log into MC, Hermes **greets by voice**
+("Good morning — what shall we work on?") and you **converse by voice**, with a J.A.R.V.I.S.-style
+**HUD visualization** that reacts as it listens/speaks. This is the experience skin over Hermes.
+
+- **Voice stack (phased by cost):**
+  - **v1 — browser-native, free, zero infra:** Web Speech API — `SpeechRecognition` (STT, Chrome)
+    + `speechSynthesis` (TTS). Runs client-side in the existing Next.js app; no API key. Enough for
+    the morning greeting + push-to-talk commands. Right first step (Pro-window-friendly).
+  - **v2 — premium "Jarvis voice":** OpenAI **Realtime API** (WebRTC, true barge-in/interruptible
+    live dialog — smoothest for conversation) for full duplex, or **ElevenLabs** for a custom
+    cloned British-butler voice (best quality, ~400-800ms so better for the spoken brief than live
+    back-and-forth). Both metered → adopt after v1 proves the UX. (Cartesia/Deepgram if ultra-low
+    latency ever needed.)
+- **Login greeting:** a hook on auth → Hermes composes a short **morning brief** (Dreaming insights
+  + Live Feed + open proposals + today's schedule) and speaks it via TTS; "what shall we work on?"
+  This is a small, high-delight early win — mostly reuses data MC already has.
+- **HUD visualization:** an audio-reactive arc/orb (canvas or WebGL) driven by the Web Audio
+  `AnalyserNode` — pulses with the mic while you talk and with Hermes's TTS while it speaks; idle
+  "breathing" state otherwise. This is a strong fit for the **brainstorming visual companion**
+  ([[visual-companion-standing-permission]]) to mock up HUD concepts before building.
+- **Slots into Hermes Phase 3 (voice)**, but the **login greeting + a first HUD** could ship earlier
+  as the demoable wow once Phase 1's engine + morning-brief data exist.
+
 ## Sources
 
 - [How we built our multi-agent research system — Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)
