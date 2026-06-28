@@ -32,6 +32,8 @@ import RosterPanel from "@/components/roster-panel";
 import { AgentIcon } from "@/components/mission-control-bits";
 import ProjectSwitcher from "@/components/project-switcher";
 import AddProjectDialog from "@/components/add-project-dialog";
+import SessionSwitcher, { type SessionOption } from "@/components/session-switcher";
+import NewSessionDialog from "@/components/new-session-dialog";
 import DiffViewer, { type FileDiff } from "@/components/diff-viewer";
 import Markdown from "@/components/markdown";
 import { splitMessageSegments } from "@/lib/message-segments";
@@ -61,6 +63,8 @@ export interface MissionControlProps {
   initialMessages: Message[];
   projects: ProjectOption[];
   activeProjectId: string;
+  sessions: SessionOption[];
+  activeSessionId: string;
   initialLiveFeedEvents: LiveFeedEvent[];
   initialTaskBoard: BoardColumns;
   initialProposals: Proposal[];
@@ -257,6 +261,8 @@ export default function MissionControl({
   initialMessages,
   projects,
   activeProjectId,
+  sessions,
+  activeSessionId,
   initialLiveFeedEvents,
   initialTaskBoard,
   initialProposals,
@@ -268,6 +274,7 @@ export default function MissionControl({
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [newSessionOpen, setNewSessionOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [activeSection, setActiveSection] = useState<string>("agent-team");
   const [liveFeedEvents, setLiveFeedEvents] = useState<LiveFeedEvent[]>(initialLiveFeedEvents);
@@ -862,6 +869,14 @@ export default function MissionControl({
             projects={projects}
             activeProjectId={activeProjectId}
             onAddProject={() => setAddProjectOpen(true)}
+          />
+
+          <div className="hidden sm:block h-4 w-[1px] bg-[#1e2632]" />
+
+          <SessionSwitcher
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onNewSession={() => setNewSessionOpen(true)}
           />
 
           <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#161c25] border border-[#2a3441] rounded-md">
@@ -1589,6 +1604,7 @@ export default function MissionControl({
         </div>
       </footer>
       <AddProjectDialog open={addProjectOpen} onClose={() => setAddProjectOpen(false)} />
+      <NewSessionDialog open={newSessionOpen} projectId={activeProjectId} onClose={() => setNewSessionOpen(false)} />
 
       {proposalToast && (
         <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 bg-[#161c25] border border-[#f0a020]/40 rounded-lg px-4 py-3 shadow-lg shadow-black/50 animate-in">

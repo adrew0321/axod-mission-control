@@ -10,6 +10,7 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { readFile, lstat, symlink, unlink, rm } from 'node:fs/promises';
+import { parseGitBranches } from './sessions';
 
 const exec = promisify(execFile);
 
@@ -366,4 +367,19 @@ export async function mergeWorktree(
 export async function discardWorktree(sessionId: string, repoPath: string): Promise<void> {
   await removeWorktree(sessionId, repoPath);
   await exec('git', ['-C', repoPath, 'branch', '-D', sessionBranch(sessionId)]).catch(() => {});
+}
+
+/**
+ * List the repo's branches (local + remote-tracking, de-duped, default first) for
+ * the session base-branch picker. Best-effort: returns just [defaultBranch] when the
+ * repo is missing/not a git repo, so the UI always has at least the default.
+ */
+export async function listBranches(repoPath: string, defaultBranch: string): Promise<string[]> {
+  try {
+    if (!repoPath || !existsSync(repoPath)) return [defaultBranch];
+    const { stdout } = await exec('git', ['-C', repoPath, 'branch', '-a', '--format=%(refname:short)']);
+    return parseGitBranches(stdout, defaultBranch);
+  } catch {
+    return [defaultBranch];
+  }
 }

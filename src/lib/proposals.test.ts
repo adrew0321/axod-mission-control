@@ -27,7 +27,7 @@ test('empty diff is zero/zero', () => {
 
 function row(over: Partial<ProposalRow> = {}): ProposalRow {
   return {
-    sessionId: 's', sessionTitle: 'S', worktreePath: '/wt/s',
+    sessionId: 's', sessionTitle: 'S', worktreePath: '/wt/s', baseBranch: null,
     updatedAt: new Date('2026-06-01T00:00:00Z'), projectId: 'p', projectName: 'P',
     defaultBranch: 'dev', ...over,
   };
@@ -68,4 +68,16 @@ test('collectProposals maps fields and counts the diff', async () => {
   assert.equal(p.branch, 'mc/x');
   assert.equal(p.baseBranch, 'dev'); // null defaultBranch falls back to 'dev'
   assert.deepEqual({ a: p.additions, d: p.deletions }, { a: 1, d: 1 });
+});
+
+test('collectProposals: session base_branch wins over project default', async () => {
+  const rows = [row({ sessionId: 'b', worktreePath: '/wt/b', baseBranch: 'main', defaultBranch: 'dev' })];
+  let seenBase = '';
+  const diff = async (_wt: string, base: string) => {
+    seenBase = base;
+    return { diff: '+a\n', files: [{ status: 'M', path: 'f' }] };
+  };
+  const [p] = await collectProposals(rows, diff);
+  assert.equal(seenBase, 'main'); // diff invoked with the session base
+  assert.equal(p.baseBranch, 'main');
 });

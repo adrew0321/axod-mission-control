@@ -152,7 +152,7 @@ async function handleButton(interaction: ButtonInteraction, allowed: Set<string>
     }
 
     if (action === 'merge') {
-      const base = project.default_branch ?? 'dev';
+      const base = session.base_branch ?? project.default_branch ?? 'dev';
       const result = await mergeWorktree(sessionId, project.repo_path, base);
       if (result.ok) {
         await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
