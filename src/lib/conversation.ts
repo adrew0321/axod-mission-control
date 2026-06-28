@@ -11,7 +11,9 @@ export interface TranscriptMessage {
 }
 
 const FRAMING_HEADER =
-  'This is the ongoing conversation for the current session. Reply to the latest Operator message below, using the full context of the conversation.';
+  'This is the ongoing conversation for the current session. Reply to the latest Operator message below, using the full context of the conversation. ' +
+  'When you dispatch an agent and receive its report, do NOT restate or re-summarize the report — the Operator can already read it. ' +
+  'Reply with at most a one-line TL;DR of the outcome, or simply note the report is ready. Never duplicate information the Operator can already see.';
 
 /**
  * Render messages (in the order given — caller passes them chronologically) into
