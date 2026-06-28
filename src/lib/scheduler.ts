@@ -6,6 +6,7 @@ import { schedules, sessions, projects, messages } from '@/db/schema';
 import { runSessionTurn } from '@/lib/run-turn';
 import { computeNextRun, parseCadence } from '@/lib/schedule';
 import { healthStatus } from '@/lib/health-verdict';
+import { discardWorktree } from '@/lib/worktree';
 
 const TICK_MS = 60_000;
 
@@ -90,6 +91,17 @@ export async function tick(): Promise<void> {
         .update(schedules)
         .set({ last_run_at: new Date(), last_session_id: sessionId, last_status, updated_at: new Date() })
         .where(eq(schedules.id, s.id));
+      // Scheduled runs are automation, not reviewable work — never leave a lingering proposal.
+      const ran = await db
+        .select({ wt: sessions.worktree_path, projectId: sessions.project_id })
+        .from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
+      if (ran?.wt) {
+        const proj = await db
+          .select({ repo: projects.repo_path })
+          .from(projects).where(eq(projects.id, ran.projectId)).limit(1).then((r) => r[0]);
+        if (proj) await discardWorktree(sessionId, proj.repo).catch(() => {});
+        await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
+      }
     } catch (err) {
       console.error(`[scheduler] schedule ${s.id} failed:`, err instanceof Error ? err.message : err);
       try {
