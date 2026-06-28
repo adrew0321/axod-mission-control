@@ -7,6 +7,7 @@ export const projects = sqliteTable('projects', {
   repo_path: text('repo_path').notNull(),
   github_url: text('github_url'),
   default_branch: text('default_branch').default('dev'),
+  active_session_id: text('active_session_id'),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
@@ -25,6 +26,7 @@ export const sessions = sqliteTable('sessions', {
   project_id: text('project_id').references(() => projects.id).notNull(),
   title: text('title'),
   branch: text('branch'),
+  base_branch: text('base_branch'),
   worktree_path: text('worktree_path'),
   status: text('status').notNull(),
   // When set, the conversation log + Sage's memory transcript only include

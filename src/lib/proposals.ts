@@ -31,6 +31,7 @@ export interface ProposalRow {
   sessionId: string;
   sessionTitle: string | null;
   worktreePath: string | null;
+  baseBranch: string | null;
   updatedAt: Date | null;
   projectId: string;
   projectName: string;
@@ -52,7 +53,7 @@ export async function collectProposals(rows: ProposalRow[], diff: DiffFn): Promi
   for (const r of rows) {
     if (!r.worktreePath) continue;
     try {
-      const base = r.defaultBranch ?? 'dev';
+      const base = r.baseBranch ?? r.defaultBranch ?? 'dev';
       const { diff: text, files } = await diff(r.worktreePath, base);
       if (files.length === 0) continue;
       const { additions, deletions } = summarizeDiff(text);

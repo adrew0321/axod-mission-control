@@ -12,6 +12,7 @@ export async function getProposals(): Promise<Proposal[]> {
       sessionId: sessions.id,
       sessionTitle: sessions.title,
       worktreePath: sessions.worktree_path,
+      baseBranch: sessions.base_branch,
       updatedAt: sessions.updated_at,
       projectId: projects.id,
       projectName: projects.name,

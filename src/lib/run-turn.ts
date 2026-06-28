@@ -167,7 +167,7 @@ export async function runSessionTurn(
     }
     let workingDir: string;
     try {
-      const wt = await ensureWorktree(sessionId, project.repo_path, project.default_branch ?? 'dev');
+      const wt = await ensureWorktree(sessionId, project.repo_path, session.base_branch ?? project.default_branch ?? 'dev');
       workingDir = wt.path;
       if (session.worktree_path !== wt.path) {
         await db.update(sessions).set({ worktree_path: wt.path }).where(eq(sessions.id, sessionId));
