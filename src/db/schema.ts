@@ -38,6 +38,7 @@ export const sessions = sqliteTable('sessions', {
   // Concurrency lease: set while a turn runs (browser or CLI), null when idle.
   // A stale value (older than a turn's max duration + grace) is reclaimable.
   running_since: integer('running_since', { mode: 'timestamp' }),
+  archived_at: integer('archived_at', { mode: 'timestamp' }),
 });
 
 export const messages = sqliteTable('messages', {

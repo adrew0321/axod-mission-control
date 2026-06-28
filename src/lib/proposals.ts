@@ -11,6 +11,7 @@ export interface Proposal {
   additions: number;
   deletions: number;
   ts: string;            // session.updated_at, ISO
+  summary: string;
 }
 
 /**
@@ -32,10 +33,26 @@ export interface ProposalRow {
   sessionTitle: string | null;
   worktreePath: string | null;
   baseBranch: string | null;
+  summaryRaw: string | null;
   updatedAt: Date | null;
   projectId: string;
   projectName: string;
   defaultBranch: string | null;
+}
+
+/** Condense an agent message into a short proposal summary: trim blank lines,
+ * keep the first `maxLines`, cap at `maxChars` with an ellipsis. Pure. */
+export function summarizeForProposal(
+  text: string | null | undefined,
+  maxChars = 280,
+  maxLines = 4,
+): string {
+  if (!text) return '';
+  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return '';
+  let out = lines.slice(0, maxLines).join('\n');
+  if (out.length > maxChars) out = out.slice(0, maxChars - 1).trimEnd() + '…';
+  return out;
 }
 
 type DiffFn = (
@@ -68,6 +85,7 @@ export async function collectProposals(rows: ProposalRow[], diff: DiffFn): Promi
         additions,
         deletions,
         ts: (r.updatedAt ?? new Date()).toISOString(),
+        summary: summarizeForProposal(r.summaryRaw),
       });
     } catch (err) {
       console.warn(`[proposals] skipping session ${r.sessionId}: ${err instanceof Error ? err.message : err}`);

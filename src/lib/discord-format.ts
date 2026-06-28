@@ -52,6 +52,7 @@ export function dreamEmbed(dream: DreamRowLite): APIEmbed {
 export function proposalEmbed(p: Proposal): APIEmbed {
   return {
     title: `Proposal ready: ${p.sessionTitle}`,
+    ...(p.summary ? { description: p.summary } : {}),
     color: BLUE,
     fields: [
       { name: 'Project', value: p.projectName, inline: true },

@@ -52,3 +52,8 @@ test('empty input returns just the header (no throw)', () => {
   const out = buildOrchestratorPrompt([], LABELS);
   assert.match(out, /ongoing conversation for the current session/i);
 });
+
+test('orchestrator prompt carries the post-dispatch brevity rule', () => {
+  const out = buildOrchestratorPrompt([{ role: 'user', content: 'hi' }], {});
+  assert.match(out, /do not restate|don't restate|one-line TL;DR/i);
+});
