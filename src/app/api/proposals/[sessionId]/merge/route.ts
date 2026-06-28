@@ -24,7 +24,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ sessionId: st
   if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
   try {
-    const result = await mergeWorktree(sessionId, project.repo_path, project.default_branch ?? 'dev');
+    const result = await mergeWorktree(sessionId, project.repo_path, session.base_branch ?? project.default_branch ?? 'dev');
     if (!result.ok) return Response.json(result, { status: 200 }); // { ok:false, conflict, message }
     await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
     return Response.json({ ok: true });
