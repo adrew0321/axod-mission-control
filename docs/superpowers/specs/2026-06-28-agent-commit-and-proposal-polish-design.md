@@ -12,6 +12,7 @@ Three independent, small improvements shipped together as a patch:
 2. **Proposal summaries** — proposal embeds carry a 2-4 line "what changed" summary from the agent's own words.
 3. **Leaner orchestration** — after dispatching an agent, Sage gives a one-line TL;DR instead of restating the report.
 4. **Scheduled jobs stop leaving proposals** — automated runs (health check, digest) clean up their worktree so they never pile up in the inbox.
+5. **Archive sessions** — remove a session from the switcher (reversible, history kept) so the dropdown stays clean.
 
 **Out of scope:** changing how proposals are detected, the merge algorithm, or the dispatch mechanism; per-session git identities; an extra LLM call to generate summaries (we reuse the agent's existing message).
 
@@ -83,6 +84,21 @@ Add `discardWorktree` (from `@/lib/worktree`) and `projects` to the scheduler's 
 
 **Testing:** `scheduler.ts` is `server-only` (not unit-tested) — verified by `tsc` + a runtime check that a scheduled run no longer appears in the proposals inbox afterward.
 
+## 5. Archive sessions — `sessions.archived_at` + switcher action
+
+Soft-archive: a session stays in the DB (transcript/history preserved) but disappears from the switcher and from active/proposal resolution. Reversible.
+
+- **Migration `0009`** (via `pnpm db:generate`): add `sessions.archived_at` (integer timestamp, nullable).
+- **API** `POST /api/sessions/[id]/archive`: set `archived_at = now`. Guard: if the session still has a `worktree_path` (an open proposal), return `409 { error: 'Resolve its proposal (merge or discard) first' }` — don't silently throw away unmerged work. If the archived session was the project's `active_session_id`, clear it (`active_session_id = null`) so the resolver self-heals to another session.
+- **Exclude archived sessions everywhere they'd surface:**
+  - `GET /api/sessions` (Task: list) → add `and(eq(project_id), isNull(sessions.archived_at))`.
+  - `page.tsx` `sessionRows` query → filter `isNull(sessions.archived_at)`.
+  - `getProposals` / `proposals-data` → the join already requires `worktree_path IS NOT NULL`; also filter `isNull(sessions.archived_at)` for safety.
+  - Active-session resolution (`getOrCreateActiveSession`, `getActiveSessionId`): only consider non-archived sessions when listing `existingIds` / `newestId`.
+- **UI** (`session-switcher.tsx`): add a trash icon per row (mirror `project-switcher.tsx`'s remove-with-confirm), calling `POST /api/sessions/[id]/archive` → `router.refresh()`. Show a tiny "history kept" note in the confirm. Don't offer archive on the only remaining session (guard in the UI).
+
+**Testing:** pure — none new beyond the resolver (the `resolveActiveSession` helper already only sees the ids it's handed, so the "exclude archived" filtering lives in the server queries). Effectful (route, queries, migration, UI) → `tsc` + suite + runtime (archive a junk session → it leaves the switcher; the active session never points at an archived one).
+
 ## Testing summary
 
 - **Pure unit (tsx):** `summarizeForProposal`; `proposalEmbed` description behavior; `FRAMING_HEADER` content; `mergeWorktree` author + node_modules exclusion (real git in a temp dir — `worktree.ts` is pure-testable).
@@ -90,4 +106,4 @@ Add `discardWorktree` (from `@/lib/worktree`) and `projects` to the scheduler's 
 
 ## Rollout
 
-Patch release **v1.9.1**. No new deps, no migration → deploy is `git pull` → `pnpm build` → restart. The Mini already has the `mc` git identity set (2026-06-28), but this change makes commits box-independent regardless.
+Release **v1.9.1**. No new deps; **one migration (`0009`, adds `sessions.archived_at`)** → deploy is `git pull` → `pnpm build` → `pnpm db:migrate` → restart. The Mini already has the `mc` git identity set (2026-06-28), but item 1 makes commits box-independent regardless. After deploy, optionally bulk-archive the existing junk sessions (the discarded digests/health-checks + old test sessions) so the switcher is immediately clean.
