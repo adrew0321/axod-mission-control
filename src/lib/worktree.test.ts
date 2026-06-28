@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ensureWorktree, removeWorktree } from './worktree';
+import { ensureWorktree, removeWorktree, isWorktreeValid } from './worktree';
 
 const exec = promisify(execFile);
 
@@ -123,6 +123,44 @@ test('ensureWorktree is a no-op for linking when the repo has no node_modules', 
     assert.equal(existsSync(path.join(wt.path, 'node_modules')), false, 'no link created');
   } finally {
     await removeWorktree('sess_none', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('isWorktreeValid: true for a real worktree, false for a hollow dir or missing path', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  try {
+    const wt = await ensureWorktree('sess_valid', repo, 'dev');
+    assert.equal(await isWorktreeValid(wt.path), true);
+
+    const hollow = path.join(root, 'hollow');
+    await mkdir(hollow, { recursive: true });
+    await writeFile(path.join(hollow, 'junk.txt'), 'x'); // a dir with no .git
+    assert.equal(await isWorktreeValid(hollow), false);
+
+    assert.equal(await isWorktreeValid(path.join(root, 'does-not-exist')), false);
+  } finally {
+    await removeWorktree('sess_valid', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('ensureWorktree heals a hollow dir (no .git) by removing and recreating', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  try {
+    const wtPath = path.join(root, 'sess_hollow');
+    await mkdir(wtPath, { recursive: true });
+    await writeFile(path.join(wtPath, 'junk.txt'), 'x'); // hollow: a dir with no .git
+    assert.equal(await isWorktreeValid(wtPath), false);
+
+    const wt = await ensureWorktree('sess_hollow', repo, 'dev');
+    assert.equal(wt.path, wtPath);
+    assert.equal(existsSync(path.join(wtPath, '.git')), true);
+    assert.equal(await isWorktreeValid(wtPath), true);
+  } finally {
+    await removeWorktree('sess_hollow', repo).catch(() => {});
     await cleanup(repo, root);
   }
 });
