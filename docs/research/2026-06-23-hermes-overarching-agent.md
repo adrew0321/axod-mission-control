@@ -126,6 +126,83 @@ given the token multiples; and the security model for a high-privilege chat-reac
 
 ---
 
+## Expanded vision + web research (2026-06-28)
+
+Operator's 40,000-ft goal: Hermes is the **personal "Jarvis / Bat-computer"** — a self-learning
+assistant that is *also* the overseer of all the other agents, with real-world reach (Apple
+calendar/phone, moving files laptop↔Mini, posting to YouTube/social), in service of building
+**AXOD CREATIVE** (online presence, iOS/Android apps, content). Mapped to what people actually
+ship today:
+
+- **Self-learning assistant — strongest blueprint:** Nous Research's open-source **"Hermes Agent"**
+  (same name) is a self-improving agent on a 5-pillar model — **Memory, Skills, Soul, Crons,
+  Self-improvement**. "Self-improving" = *structured note-taking, not weight changes*: facts in
+  `MEMORY.md`, per-user in `USER.md`, and it **writes a new skill doc every time it figures out
+  something complex**. **MC already does all of this** (MEMORY.md + per-project memory, the
+  `ship-mc-feature` skill, and the standing "watch for repeated workflows → make a skill"
+  instruction). So our Hermes = formalize the 5 pillars on top of MC's existing substrate.
+- **Overseer of the agents:** the supervisor-above-Sage structure from the convergent direction
+  above. Hermes routes intent → project/pillar; Sage stays the in-project orchestrator.
+- **Apple calendar / phone:** MCP servers exist — `mcp-server-apple-events` (Reminders+Calendar via
+  EventKit), **Macuse** (Calendar/Mail/Notes/Reminders/Messages via on-device Computer Use), **iMCP**
+  (Swift, iMessage/Calendar/Contacts/Reminders). **Constraint:** these are macOS-native and need the
+  iCloud account on that Mac — but the Mini now runs **Ubuntu**, and the operator's dev box is
+  **Windows**. So calendar/phone access needs one of: (a) **iCloud CalDAV** (cross-platform, no Mac),
+  (b) run an EventKit MCP on an actual Mac signed into the Apple ID, or (c) iPhone Shortcuts. Decide
+  at design time; CalDAV is the most portable.
+- **Move files laptop↔Mini:** low-effort — MC already SSHes to the Mini; add an `rsync`/`scp` or
+  filesystem-MCP transfer capability. No new infra.
+- **YouTube / social posting:** **Postiz** (open-source, **self-hostable**, 30+ networks incl.
+  YouTube/TikTok/IG/X/LinkedIn, **built-in MCP server** + REST API, explicitly supports "Hermes"
+  agents) is the cleanest path. Caveat from the survey: most social MCPs *can't actually publish* —
+  Postiz and Socialync are the real ones.
+- **Architecture precedent:** Jarvis-on-Claude-Code builds (enochko/Ramsbaby/isair `jarvis`) = one
+  engine + thin channels (Discord), MCP tools (exec/file/rag), macOS LaunchAgents for crons, RAG
+  memory. MC ≈ this already; Hermes is the missing router/persona layer.
+
+**Reality checks for the design:** (1) **Cost** — parallel multi-agent ≈15× a chat's tokens, so keep
+Hermes mostly single-agent chat+tools and reserve parallel subagents for breadth-first audits
+(matters on the Pro window). (2) **Security** — Hermes is high-privilege + chat-reachable: prompt-
+injection defense, no raw Bash, write-dir restrictions, one subprocess at a time (the jarvis builds
+all do this). (3) **Apple access** is the one genuinely hard integration (see constraint above);
+everything else is additive MCP tools.
+
+**Recommended phasing (multi-stage, not one build):**
+1. **Hermes Phase 1 — self-learning fleet assistant:** the router above Sage + the 5-pillar
+   memory/skills formalized + "what happened overnight / what's ready to merge" (read-only, breadth-
+   first) + laptop↔Mini file movement. Cheap, high-wow, low-risk.
+2. **Phase 2 — integrations as MCP tools:** Postiz (social/YouTube), then calendar (CalDAV).
+3. **Phase 3 — cross-project dispatch + voice.**
+Each integration is a clean add-on once the Phase 1 engine exists.
+
+### Tina Huang / Nous "Hermes Agent OS" — and why MC is already this
+
+- **Hermes is a shipped product** (Nous Research, Feb 2026; repo `NousResearch/hermes-agent`).
+  Confirmed pillars: **Memory** (agent-curated, FTS5 cross-session recall + LLM summarization),
+  **Skills** (autonomous creation + self-improvement during use; agentskills.io standard),
+  **SOUL.md** (persona/voice), **Crons** (built-in, deliver to any platform), **Self-improvement**
+  loop. Runs on **Nous Portal / OpenRouter / OpenAI / any endpoint** (NOT Claude-SDK-native);
+  20+ messaging platforms, 60+ tools + MCP, 6 terminal backends (local/Docker/SSH/Daytona/
+  Singularity/Modal); security = command approval + authorization + container isolation.
+- **The "Agent OS / Mission Control" pattern people build around it** (the Tina-Huang-adjacent
+  setup the operator referenced): a local dashboard over multiple agents on **4 layers** —
+  Intelligence (Claude: reason/plan), Execution (OpenClaw: route/sessions), Research (Hermes:
+  background workflows/Kanban/skills), **Self (Obsidian + OMI: records activity/mic → compounding
+  personalized knowledge)**. Local-first. The Self layer is the differentiator: day-1 useful →
+  day-30 business-specific.
+- **Strategic read:** AXOD MC has *organically built this same Agent OS* — but as ONE
+  Claude-Agent-SDK-native app (Sage/Atlas/Echo/Forge + Memory + Dreaming + Scheduler + Live Feed +
+  Discord) instead of gluing Hermes+OpenClaw+Obsidian+OMI together. MC already has **4 of Hermes's
+  5 pillars**: memory, skills (incl. autonomous skill-writing), crons (Scheduler), self-improvement
+  (the standing "make a skill" instruction). The missing pieces are a **SOUL.md persona** + the
+  **top-level router**.
+- **Recommendation — build Hermes NATIVE; don't bolt on the Nous product.** Adopting Nous Hermes
+  would fragment MC's clean Claude stack (endpoint-agnostic/non-Claude, its own gateway/terminals).
+  Instead **borrow its proven patterns** into MC's own Hermes layer: a `SOUL.md` persona,
+  FTS5/LLM-summarized memory recall, a formalized 5-pillar self-improvement loop, and real-world
+  reach delivered as **MCP tools** (Postiz for social/YouTube, CalDAV/EventKit for calendar, rsync
+  for files). The "Self-layer" compounding = deepen MC's existing Memory + Dreaming.
+
 ## Sources
 
 - [How we built our multi-agent research system — Anthropic](https://www.anthropic.com/engineering/multi-agent-research-system)
