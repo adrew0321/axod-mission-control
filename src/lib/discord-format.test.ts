@@ -57,7 +57,7 @@ test('proposalEmbed: blue, shows project + change counts + file count', () => {
     sessionId: 's', sessionTitle: 'Add widget', projectId: 'p', projectName: 'AXOD MC',
     branch: 'mc/s', baseBranch: 'dev',
     files: [{ status: 'M', path: 'a.ts' }, { status: 'A', path: 'b.ts' }],
-    additions: 10, deletions: 2, ts: '2026-06-25T00:00:00Z',
+    additions: 10, deletions: 2, ts: '2026-06-25T00:00:00Z', summary: '',
   });
   assert.equal(e.color, 0x3b82f6);
   const blob = JSON.stringify(e);
@@ -93,6 +93,16 @@ test('proposalActionRow has merge + discard buttons with correct ids/styles/labe
     { style: btns[1].style, label: btns[1].label, id: btns[1].custom_id },
     { style: 4, label: 'Discard', id: 'mc:discard:sess_ab12' },
   );
+});
+
+test('proposalEmbed includes the summary as description when present', () => {
+  const base = {
+    sessionId: 's', sessionTitle: 'T', projectId: 'p', projectName: 'P',
+    branch: 'mc/s', baseBranch: 'dev', files: [{ status: 'M', path: 'f' }],
+    additions: 1, deletions: 0, ts: '2026-06-28T00:00:00.000Z',
+  };
+  assert.equal(proposalEmbed({ ...base, summary: 'Did X.' }).description, 'Did X.');
+  assert.equal(proposalEmbed({ ...base, summary: '' }).description, undefined);
 });
 
 test('proposalResultEmbed: color + text per kind', () => {

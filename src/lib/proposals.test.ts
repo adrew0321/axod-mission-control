@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeDiff, collectProposals, type ProposalRow } from './proposals';
+import { summarizeDiff, collectProposals, summarizeForProposal, type ProposalRow } from './proposals';
 
 test('counts added and removed content lines', () => {
   const diff = [
@@ -27,7 +27,7 @@ test('empty diff is zero/zero', () => {
 
 function row(over: Partial<ProposalRow> = {}): ProposalRow {
   return {
-    sessionId: 's', sessionTitle: 'S', worktreePath: '/wt/s', baseBranch: null,
+    sessionId: 's', sessionTitle: 'S', worktreePath: '/wt/s', baseBranch: null, summaryRaw: null,
     updatedAt: new Date('2026-06-01T00:00:00Z'), projectId: 'p', projectName: 'P',
     defaultBranch: 'dev', ...over,
   };
@@ -80,4 +80,21 @@ test('collectProposals: session base_branch wins over project default', async ()
   const [p] = await collectProposals(rows, diff);
   assert.equal(seenBase, 'main'); // diff invoked with the session base
   assert.equal(p.baseBranch, 'main');
+});
+
+test('summarizeForProposal: trims lines, caps lines and chars', () => {
+  assert.equal(summarizeForProposal(null), '');
+  assert.equal(summarizeForProposal('  '), '');
+  assert.equal(summarizeForProposal('  one  \n\n  two  '), 'one\ntwo');
+  assert.equal(summarizeForProposal('a\nb\nc\nd\ne', 999, 3), 'a\nb\nc');
+  const long = 'x'.repeat(400);
+  const out = summarizeForProposal(long, 280, 4);
+  assert.ok(out.length <= 280 && out.endsWith('…'));
+});
+
+test('collectProposals sets summary from summaryRaw', async () => {
+  const rows = [row({ sessionId: 'z', worktreePath: '/wt/z', summaryRaw: 'Did the thing.\nAnd another.' })];
+  const diff = async () => ({ diff: '+a\n', files: [{ status: 'M', path: 'f' }] });
+  const [p] = await collectProposals(rows, diff);
+  assert.equal(p.summary, 'Did the thing.\nAnd another.');
 });
