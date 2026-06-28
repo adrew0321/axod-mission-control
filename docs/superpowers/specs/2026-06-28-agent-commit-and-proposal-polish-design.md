@@ -11,6 +11,7 @@ Three independent, small improvements shipped together as a patch:
 1. **Commit hardening** — agent merges never fail on git identity and never commit `node_modules`.
 2. **Proposal summaries** — proposal embeds carry a 2-4 line "what changed" summary from the agent's own words.
 3. **Leaner orchestration** — after dispatching an agent, Sage gives a one-line TL;DR instead of restating the report.
+4. **Scheduled jobs stop leaving proposals** — automated runs (health check, digest) clean up their worktree so they never pile up in the inbox.
 
 **Out of scope:** changing how proposals are detected, the merge algorithm, or the dispatch mechanism; per-session git identities; an extra LLM call to generate summaries (we reuse the agent's existing message).
 
@@ -59,6 +60,28 @@ Extend `FRAMING_HEADER` (the always-prepended orchestrator guidance) with a brev
 > After you dispatch an agent and receive its report, do NOT restate or re-summarize the report — the Operator can already read it. Reply with at most a one-line TL;DR of the outcome, or simply note the report is ready. Never duplicate information the Operator can already see.
 
 **Tests:** `conversation.test.ts` — update any assertion on the header text; add a check that the rendered prompt contains the brevity guidance.
+
+## 4. Scheduled jobs stop leaving proposals — `src/lib/scheduler.ts`
+
+The scheduler creates a fresh session per run and calls `runSessionTurn`, which lazily creates an `mc/<id>` worktree when the agent edits files. It never cleans up, so reporting jobs (health check, digest) pile up in the proposals inbox. Fix: after the scheduled turn completes and status is recorded, discard the session's worktree.
+
+```js
+// Scheduled runs are automation, not reviewable work — never leave a lingering proposal.
+const sess = await db
+  .select({ wt: sessions.worktree_path, projectId: sessions.project_id })
+  .from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
+if (sess?.wt) {
+  const project = await db
+    .select({ repo: projects.repo_path })
+    .from(projects).where(eq(projects.id, sess.projectId)).limit(1).then((r) => r[0]);
+  if (project) await discardWorktree(sessionId, project.repo).catch(() => {});
+  await db.update(sessions).set({ worktree_path: null }).where(eq(sessions.id, sessionId));
+}
+```
+
+Add `discardWorktree` (from `@/lib/worktree`) and `projects` to the scheduler's imports. The health/digest result is already captured in `last_status` / `last_session_id` + the stored agent message, so discarding the worktree loses nothing. If a future scheduled job is meant to PROPOSE reviewable changes, that becomes an explicit opt-in — out of scope here.
+
+**Testing:** `scheduler.ts` is `server-only` (not unit-tested) — verified by `tsc` + a runtime check that a scheduled run no longer appears in the proposals inbox afterward.
 
 ## Testing summary
 
