@@ -21,7 +21,7 @@ export async function GET() {
     ...(dbError ? { dbError } : {}),
     durationMs: Date.now() - startedAt,
     timestamp: new Date().toISOString(),
-    version: '1.10.7',
+    version: '1.10.8',
   };
 
   return Response.json(body, { status: dbStatus === 'ok' ? 200 : 503 });

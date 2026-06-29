@@ -35,7 +35,7 @@ function useInView<T extends HTMLElement>() {
   return { ref, inView };
 }
 
-export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
+export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initialBrief?: string | null }) {
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
   const [voiceOn, setVoiceOn] = useState(true);
@@ -142,8 +142,15 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   }, []);
 
   useEffect(() => {
+    // If a recent brief exists, show it without a turn (no Claude call on refresh).
+    // Only run a fresh brief when there's nothing recent to reuse.
+    if (initialBrief) {
+      setReply(initialBrief);
+      setMode("idle");
+      return;
+    }
     runTurn("Brief the operator on the current fleet state.");
-  }, [runTurn]);
+  }, [runTurn, initialBrief]);
 
   async function goToProject(projectId: string, sessionId?: string | null) {
     await fetch("/api/projects/active", {
@@ -223,7 +230,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.7</span>
+        <span style={meta}>v1.10.8</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
