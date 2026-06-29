@@ -23,7 +23,8 @@ export const agents = sqliteTable('agents', {
 
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(),
-  project_id: text('project_id').references(() => projects.id).notNull(),
+  // Nullable: the reserved AKIRA conversation row (id 'akira') has no project.
+  project_id: text('project_id').references(() => projects.id),
   title: text('title'),
   branch: text('branch'),
   base_branch: text('base_branch'),

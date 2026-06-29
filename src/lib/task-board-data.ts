@@ -32,7 +32,7 @@ export async function getTaskBoard(projectId: string): Promise<BoardColumns> {
     id: s.id,
     title: s.title,
     status: s.status,
-    project_id: s.project_id,
+    project_id: s.project_id ?? projectId, // filtered by projectId above, never null here
     projectName,
     updated_at: s.updated_at,
     hasActivity: Number(s.agentMsgs) > 0,

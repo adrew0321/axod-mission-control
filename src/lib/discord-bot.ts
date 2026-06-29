@@ -141,7 +141,7 @@ async function handleButton(interaction: ButtonInteraction, allowed: Set<string>
 
     const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
     const title = session?.title ?? undefined;
-    if (!session || !session.worktree_path) {
+    if (!session || !session.worktree_path || !session.project_id) {
       await interaction.message.edit({ embeds: [proposalResultEmbed('stale', { sessionTitle: title })], components: [] });
       return;
     }

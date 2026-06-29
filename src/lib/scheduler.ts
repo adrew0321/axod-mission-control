@@ -110,7 +110,7 @@ export async function tick(): Promise<void> {
           const ran = await db
             .select({ wt: sessions.worktree_path, projectId: sessions.project_id })
             .from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
-          if (ran?.wt) {
+          if (ran?.wt && ran.projectId) {
             const proj = await db
               .select({ repo: projects.repo_path })
               .from(projects).where(eq(projects.id, ran.projectId)).limit(1).then((r) => r[0]);

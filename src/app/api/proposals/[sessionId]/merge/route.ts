@@ -20,6 +20,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ sessionId: st
   if (!session || !session.worktree_path) {
     return Response.json({ error: 'No proposal for this session' }, { status: 404 });
   }
+  if (!session.project_id) {
+    return Response.json({ error: 'Session has no project' }, { status: 400 });
+  }
   const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
   if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 

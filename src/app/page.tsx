@@ -71,7 +71,7 @@ export default async function HomePage() {
   const project = resolveActiveProject(
     projectRows,
     jar.get(ACTIVE_PROJECT_COOKIE)?.value,
-    recentSession?.project_id,
+    recentSession?.project_id ?? undefined,
   )!; // non-null: projectRows is non-empty (guarded above)
 
   const currentSessionRow = await getOrCreateActiveSession(project.id);
