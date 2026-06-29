@@ -73,6 +73,19 @@ Full procedure: `docs/runbook-deploy-homelab.md`. The critical moves:
      with a native rebuild) when deps actually changed. See [[homelab-deploy-progress]].
 2. **Run migrations only if the release added any** (`drizzle/` changed):
    `sudo -u mc bash -lc "cd /srv/mission-control && set -a; . ./.env; set +a; pnpm db:migrate"`.
+   - **Table-rebuild migrations fail under `pnpm db:migrate`** (any SQLite change that
+     recreates a table — relaxing NOT NULL, dropping a column: drizzle emits
+     `CREATE __new_x → INSERT → DROP x → RENAME`). `drizzle-kit migrate` runs it in a
+     transaction with FK enforcement on, so `DROP TABLE x` trips child-table FKs and the
+     migrate aborts (cryptically — exit 1, no error text). The migration is fine; the
+     runner isn't. **Fix:** stop the service, `wal_checkpoint(TRUNCATE)` + `cp` the DB to a
+     backup, apply the migration SQL directly with the `sqlite3` CLI (FK off by default —
+     `sqlite3 "$DBF" < drizzle/NNNN_*.sql`), then record drizzle's bookkeeping so future
+     migrates skip it: `INSERT INTO __drizzle_migrations (hash, created_at) VALUES
+     ('<sha256 of the .sql file>', <the entry's "when" from drizzle/meta/_journal.json>);`
+     (verify the hash method first: `sha256sum` of an already-applied migration's `.sql`
+     equals its recorded `hash`). Re-run `pnpm db:migrate` to confirm a clean no-op, then
+     start the service. (First hit: v1.10.0 / migration 0010 / sessions.project_id.)
 3. Restart (needs root, so as `akeem` not `mc`): `sudo systemctl restart mission-control`.
 4. Verify: `curl -s 127.0.0.1:3000/api/health` shows the new `version` + `db:ok`;
    `curl -s -o /dev/null -w "%{http_code}" -L 127.0.0.1:3000/` is `200`; the journal shows
