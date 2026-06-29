@@ -223,7 +223,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.6</span>
+        <span style={meta}>v1.10.7</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -414,7 +414,7 @@ const hero: React.CSSProperties = {
   display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "70px 18px 40px",
 };
 const greetLine: React.CSSProperties = {
-  marginTop: 22, fontSize: "clamp(20px,3.4vmin,30px)", fontWeight: 600, letterSpacing: 0.3,
+  marginTop: -28, fontSize: "clamp(20px,3.4vmin,30px)", fontWeight: 600, letterSpacing: 0.3,
   background: "linear-gradient(90deg,#eaffff,#7fdcff)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
 };
 const replyText: React.CSSProperties = {
