@@ -274,7 +274,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.9</span>
+        <span style={meta}>v1.10.10</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -300,15 +300,18 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         <div style={greetLine}>{greeting}, A&apos;Keem.</div>
         <div
           style={{
-            ...replyText,
-            opacity: replyDim ? 0 : 1,
-            maxHeight: collapsed ? 0 : 600,
-            marginTop: collapsed ? 0 : (replyText.marginTop as number),
-            overflow: "hidden",
-            transition: "opacity .9s ease, max-height .6s cubic-bezier(.4,0,.2,1), margin .6s cubic-bezier(.4,0,.2,1)",
+            width: "100%",
+            maxWidth: 680,
+            display: "grid",
+            gridTemplateRows: collapsed ? "0fr" : "1fr",
+            transition: "grid-template-rows .55s cubic-bezier(.4,0,.2,1)",
           }}
         >
-          {reply || (mode === "thinking" ? "…" : "")}
+          <div style={{ overflow: "hidden", minHeight: 0 }}>
+            <div style={{ ...replyText, minHeight: 0, opacity: replyDim ? 0 : 1, transition: "opacity .8s ease" }}>
+              {reply || (mode === "thinking" ? "…" : "")}
+            </div>
+          </div>
         </div>
 
         {proposal && (
@@ -325,8 +328,13 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         <div
           onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
           onDragOver={(e) => e.preventDefault()}
-          style={{ width: "min(540px, 90vw)", marginTop: 26 }}
+          style={{
+            width: "min(540px, 90vw)",
+            marginTop: collapsed ? 8 : 22,
+            transition: "margin-top .55s cubic-bezier(.4,0,.2,1)",
+          }}
         >
+        <form onSubmit={submitDraft} style={askBox(focused, attachments.length > 0)}>
           {attachments.length > 0 && (
             <div style={chipRow}>
               {attachments.map((a) => (
@@ -342,7 +350,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
               ))}
             </div>
           )}
-        <form onSubmit={submitDraft} style={askForm(focused)}>
+          <div style={controlRow}>
           {support.stt && (
             <button
               type="button"
@@ -401,6 +409,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
               <polyline points="6 11 12 5 18 11" />
             </svg>
           </button>
+          </div>
         </form>
         </div>
 
@@ -554,18 +563,18 @@ const proposalCard: React.CSSProperties = {
   marginTop: 18, padding: 14, border: "1px solid #1f3347", borderRadius: 12, background: "rgba(7,13,22,.85)", textAlign: "center",
 };
 
-const chipRow: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 };
+const chipRow: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 6, padding: "2px 4px 8px" };
 const chip: React.CSSProperties = {
-  display: "flex", alignItems: "center", gap: 8, padding: "5px 8px 5px 5px",
-  background: "rgba(8,15,26,.7)", border: "1px solid rgba(127,220,255,.22)", borderRadius: 10, maxWidth: 240,
+  display: "flex", alignItems: "center", gap: 7, padding: "4px 7px 4px 4px",
+  background: "rgba(127,220,255,.06)", border: "1px solid rgba(127,220,255,.18)", borderRadius: 9, maxWidth: 180,
 };
-const chipImg: React.CSSProperties = { width: 30, height: 30, objectFit: "cover", borderRadius: 6, flex: "none" };
+const chipImg: React.CSSProperties = { width: 24, height: 24, objectFit: "cover", borderRadius: 5, flex: "none" };
 const chipDoc: React.CSSProperties = {
-  width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 6, flex: "none",
-  background: "rgba(127,220,255,.1)", fontSize: 15,
+  width: 24, height: 24, display: "grid", placeItems: "center", borderRadius: 5, flex: "none",
+  background: "rgba(127,220,255,.1)", fontSize: 13,
 };
 const chipName: React.CSSProperties = {
-  fontSize: 12.5, color: "#c4d3e3", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+  fontSize: 12, color: "#c4d3e3", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
 };
 const chipX: React.CSSProperties = {
   flex: "none", width: 20, height: 20, borderRadius: "50%", border: 0, cursor: "pointer",
@@ -609,22 +618,27 @@ const iconBase: React.CSSProperties = {
   background: "transparent",
 };
 
-function askForm(focused: boolean): React.CSSProperties {
+function askBox(focused: boolean, hasChips: boolean): React.CSSProperties {
   return {
     width: "100%",
     display: "flex",
-    alignItems: "center",
-    gap: 2,
-    height: 48,
-    padding: "0 6px",
-    borderRadius: 999,
+    flexDirection: "column",
     background: focused ? "rgba(8,15,26,.62)" : "rgba(8,15,26,.42)",
     border: `1px solid ${focused ? "rgba(127,220,255,.7)" : "rgba(127,220,255,.16)"}`,
+    borderRadius: hasChips ? 18 : 999,
     boxShadow: focused ? "0 0 22px rgba(127,220,255,.10)" : "none",
     backdropFilter: "blur(10px)",
-    transition: "border-color .3s, box-shadow .3s, background .3s",
+    padding: hasChips ? "8px 8px 4px" : "0 6px",
+    transition: "border-color .3s, box-shadow .3s, background .3s, border-radius .3s, padding .3s",
   };
 }
+const controlRow: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 2,
+  height: 44,
+  width: "100%",
+};
 function iconBtn(active: boolean): React.CSSProperties {
   return {
     ...iconBase,
