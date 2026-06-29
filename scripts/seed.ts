@@ -2,6 +2,7 @@ import 'dotenv/config';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../src/db/schema';
+import { AKIRA_SYSTEM_PROMPT } from '../src/lib/akira/prompt';
 
 const sqlite = new Database(process.env.DATABASE_PATH ?? './data/mission-control.db');
 sqlite.pragma('journal_mode = WAL');
@@ -209,6 +210,15 @@ async function main() {
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-pink-400 to-rose-600',
     },
+    {
+      id: 'akira',
+      name: 'AKIRA',
+      role: 'concierge',
+      model: 'claude-opus-4-8',
+      system_prompt: AKIRA_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
+      color: 'from-sky-300 to-cyan-400',
+    },
   ];
   for (const row of agentRows) {
     await db
@@ -226,6 +236,19 @@ async function main() {
         },
       });
   }
+
+  // AKIRA's reserved conversation (no project, no worktree).
+  await db
+    .insert(schema.sessions)
+    .values({
+      id: 'akira',
+      project_id: null,
+      title: 'AKIRA',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflictDoNothing();
 
   // Demo session
   const sessionId = 'sess_a4f9';

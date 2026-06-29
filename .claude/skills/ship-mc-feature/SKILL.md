@@ -83,6 +83,13 @@ Claude auth on the Mini is a year-long token in `/srv/mission-control/.env`
 (`CLAUDE_CODE_OAUTH_TOKEN`); if turns 401, re-mint with `claude setup-token`
 ([[homelab-deploy-progress]]).
 
+## Keep AKIRA aware
+When a feature adds a new **user-visible subsystem**, add a snapshot contributor in
+`src/lib/fleet-contributors.ts` (and extend `FleetSnapshot` in `src/lib/fleet-snapshot.ts`)
+so AKIRA — the front-door concierge — stays aware of it. New *instances* of existing kinds
+are free (the snapshot queries live tables); only genuinely new *kinds* of things need a
+contributor. The registry is the single seam for "teach AKIRA about the new thing."
+
 ## After shipping
 Update affected memory notes and any docs that drifted ([[keep-docs-in-sync]]). If this
 change followed an incident, mark the incident note's fixes as shipped with the release tag.

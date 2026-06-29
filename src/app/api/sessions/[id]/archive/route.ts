@@ -21,9 +21,11 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
 
   await db.update(sessions).set({ archived_at: new Date() }).where(eq(sessions.id, id));
 
-  const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
-  if (project?.active_session_id === id) {
-    await db.update(projects).set({ active_session_id: null }).where(eq(projects.id, project.id));
+  if (session.project_id) {
+    const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
+    if (project?.active_session_id === id) {
+      await db.update(projects).set({ active_session_id: null }).where(eq(projects.id, project.id));
+    }
   }
   return Response.json({ ok: true });
 }

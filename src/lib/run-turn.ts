@@ -106,6 +106,10 @@ export async function runSessionTurn(
     }
     // lastUserMessage is now guaranteed (instruction was inserted, or one existed).
 
+    if (!session.project_id) {
+      emit({ type: 'error', message: 'session has no project — cannot run a turn' });
+      return { status: 'error', reason: 'no project' };
+    }
     const project = await db
       .select()
       .from(projects)

@@ -18,6 +18,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
   const { id: sessionId } = await ctx.params;
   const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
   if (!session) return Response.json({ error: 'Session not found' }, { status: 404 });
+  if (!session.project_id) return Response.json({ error: 'Session has no project' }, { status: 400 });
 
   await db.update(projects).set({ active_session_id: sessionId }).where(eq(projects.id, session.project_id));
   jar.set(ACTIVE_PROJECT_COOKIE, session.project_id, cookieOptions());
