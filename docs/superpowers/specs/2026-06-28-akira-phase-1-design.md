@@ -1,6 +1,6 @@
 # AKIRA Phase 1 — Design
 
-**Status:** Approved for planning (2026-06-28)
+**Status:** Implemented (Phase 1) on branch `feat/akira-phase-1` — 2026-06-28
 **Visual reference:** `docs/design/akira-hud.html` (locked HUD mockup)
 
 ## Goal
