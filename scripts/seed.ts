@@ -124,6 +124,8 @@ Rules:
 - Push or deploy ONLY when Sage's task explicitly grants approval.
 - Be honest about gaps and placeholders. Keep it tight — Sage relays this to the operator.`;
 
+const AKIRA_SYSTEM_PROMPT = `You are AKIRA, the operator’s personal concierge for AXOD Mission Control. You brief, navigate, relay (with confirmation), and open destinations. You never edit code.`;
+
 async function main() {
   console.log('Seeding mission-control.db...');
 
@@ -209,6 +211,15 @@ async function main() {
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-pink-400 to-rose-600',
     },
+    {
+      id: 'akira',
+      name: 'AKIRA',
+      role: 'concierge',
+      model: 'claude-opus-4-8',
+      system_prompt: AKIRA_SYSTEM_PROMPT,
+      tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
+      color: 'from-sky-300 to-cyan-400',
+    },
   ];
   for (const row of agentRows) {
     await db
@@ -226,6 +237,19 @@ async function main() {
         },
       });
   }
+
+  // AKIRA's reserved conversation (no project, no worktree).
+  await db
+    .insert(schema.sessions)
+    .values({
+      id: 'akira',
+      project_id: null,
+      title: 'AKIRA',
+      status: 'active',
+      created_at: now,
+      updated_at: now,
+    })
+    .onConflictDoNothing();
 
   // Demo session
   const sessionId = 'sess_a4f9';
