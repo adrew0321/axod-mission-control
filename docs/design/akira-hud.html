@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AKIRA — full-screen HUD → Mission Control</title>
+<style>
+  :root { --bg:#04060b; --txt:#e6edf3; --dim:#6b7a8d; --acc:#7fdcff; --core:#eaffff;
+          --warm:#ffb2e6; --accT:rgba(127,220,255,.35); --line:#13202e; --panel:#070d16; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; }
+  body { background:radial-gradient(1300px 860px at 50% 38%, #0c1726 0%, #070d16 52%, var(--bg) 100%);
+         color:var(--txt); font-family:"Segoe UI",system-ui,sans-serif; scroll-behavior:smooth; }
+
+  /* ambient particle background (whole page, behind everything) */
+  #bg { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+  /* ===== top bar ===== */
+  .topbar { position:fixed; top:0; left:0; right:0; height:48px; z-index:30;
+    display:flex; align-items:center; gap:14px; padding:0 18px;
+    background:linear-gradient(180deg, rgba(4,6,11,.92), rgba(4,6,11,.5) 70%, transparent);
+    backdrop-filter:blur(6px); }
+  .brand { font-weight:700; letter-spacing:2px; font-size:13px; color:var(--core); }
+  .brand b { color:var(--acc); }
+  .tdot { width:7px; height:7px; border-radius:50%; background:#37d39b; box-shadow:0 0 8px #37d39b; }
+  .tmeta { color:var(--dim); font-size:12px; font-family:ui-monospace,monospace; }
+  .tspacer { flex:1; }
+
+  /* ===== HERO ===== */
+  .hero { height:100vh; position:relative; z-index:1; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; }
+  .hud { width:min(52vmin,360px); height:min(52vmin,360px); position:relative; }
+  canvas#cv { position:absolute; inset:0; width:100%; height:100%; }
+
+  .greet { margin-top:26px; text-align:center; z-index:1; }
+  .greet .line { font-size:clamp(18px,3.2vmin,30px); font-weight:600; letter-spacing:.3px;
+    background:linear-gradient(90deg,#eaffff,#7fdcff); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .greet .sub { margin-top:8px; color:var(--dim); font-size:13px; font-family:ui-monospace,monospace; letter-spacing:1.4px; min-height:16px; }
+
+  .mic { margin-top:22px; display:inline-flex; align-items:center; gap:10px;
+    padding:11px 20px; border:1px solid var(--accT); border-radius:30px; z-index:1;
+    color:var(--acc); font-size:13px; letter-spacing:.5px; cursor:pointer;
+    background:rgba(127,220,255,.05); transition:.2s; }
+  .mic:hover { background:rgba(127,220,255,.12); border-color:var(--acc); }
+  .mic .ico { width:9px; height:9px; border-radius:50%; background:var(--acc); box-shadow:0 0 10px var(--acc); animation:pulseDot 1.6s ease-in-out infinite; }
+  @keyframes pulseDot { 0%,100%{opacity:.4;transform:scale(.8)} 50%{opacity:1;transform:scale(1.25)} }
+
+  .enter { margin-top:14px; color:var(--dim); font-size:12px; letter-spacing:1px; cursor:pointer; z-index:1;
+    border-bottom:1px dashed transparent; transition:.2s; }
+  .enter:hover { color:var(--acc); border-color:var(--accT); }
+
+  .scroll-cue { position:absolute; bottom:22px; left:50%; transform:translateX(-50%);
+    color:var(--dim); font-size:11px; letter-spacing:2px; text-align:center; animation:bob 2.2s ease-in-out infinite; z-index:1; }
+  .scroll-cue .chev { display:block; margin:6px auto 0; width:14px; height:14px;
+    border-right:2px solid var(--acc); border-bottom:2px solid var(--acc); transform:rotate(45deg); opacity:.8; }
+  @keyframes bob { 0%,100%{transform:translate(-50%,0)} 50%{transform:translate(-50%,7px)} }
+
+  /* ===== docked mini-orb (bottom-left) ===== */
+  .dock { position:fixed; bottom:18px; left:18px; width:54px; height:54px; z-index:31;
+    opacity:0; transform:scale(.6); transition:.35s; pointer-events:none; cursor:pointer; }
+  .dock.show { opacity:1; transform:scale(1); pointer-events:auto; }
+  .dock canvas { width:100%; height:100%; }
+  .dock .lbl { position:absolute; left:62px; top:50%; transform:translateY(-50%); white-space:nowrap;
+    color:var(--dim); font-size:11px; font-family:ui-monospace,monospace; letter-spacing:1px; }
+
+  /* ===== Mission Control ===== */
+  .mc { position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:30px 20px 80px; }
+  .mc-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+  .mc-head h2 { font-size:16px; letter-spacing:1px; margin:0; }
+  .open-real { display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border-radius:8px;
+    border:1px solid var(--accT); color:var(--acc); font-size:13px; cursor:pointer; background:rgba(127,220,255,.05); transition:.2s; }
+  .open-real:hover { background:rgba(127,220,255,.12); }
+  h3.sec { font-size:12px; letter-spacing:2px; color:var(--dim); text-transform:uppercase;
+    margin:26px 0 12px; border-bottom:1px solid var(--line); padding-bottom:7px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; transition:.18s; }
+  .card:hover { border-color:var(--accT); transform:translateY(-2px); }
+  .card .h { display:flex; align-items:center; gap:9px; font-weight:600; font-size:15px; }
+  .card .h .s { width:8px; height:8px; border-radius:50%; }
+  .s.ok{background:#37d39b;box-shadow:0 0 7px #37d39b}.s.run{background:var(--acc);box-shadow:0 0 7px var(--acc)}
+  .s.idle{background:#3a4859}.s.warn{background:#ffb84d;box-shadow:0 0 7px #ffb84d}
+  .card .meta { color:var(--dim); font-size:12px; margin-top:8px; line-height:1.6; font-family:ui-monospace,monospace; }
+  .pill { display:inline-block; font-size:11px; padding:2px 9px; border-radius:20px; border:1px solid var(--line); color:var(--dim); margin-top:10px; }
+  .stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px; text-align:center; }
+  .stat .n { font-size:30px; font-weight:700; color:var(--core); }
+  .stat .l { color:var(--dim); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; margin-top:4px; }
+  @media(max-width:680px){ .stat-row{grid-template-columns:repeat(2,1fr)} }
+</style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+
+  <div class="topbar">
+    <span class="brand"><b>AKIRA</b> · MISSION CONTROL</span>
+    <span class="tdot"></span><span class="tmeta">online · v1.9.1</span>
+    <span class="tspacer"></span>
+    <span class="tmeta" id="clock">—</span>
+  </div>
+
+  <div class="dock" id="dock" title="Summon AKIRA">
+    <canvas id="cvDock" width="108" height="108"></canvas>
+    <span class="lbl">AKIRA · listening</span>
+  </div>
+
+  <section class="hero">
+    <div class="hud"><canvas id="cv" width="440" height="440"></canvas></div>
+    <div class="greet">
+      <div class="line" id="greetLine">Good evening, A'Keem.</div>
+      <div class="sub" id="greetSub">● AKIRA READY — what shall we work on?</div>
+    </div>
+    <div class="mic" id="mic"><span class="ico"></span>Tap to speak</div>
+    <div class="enter" id="enterLink">Enter Mission Control ↓</div>
+    <div class="scroll-cue">SCROLL<span class="chev"></span></div>
+  </section>
+
+  <main class="mc">
+    <div class="mc-head">
+      <h2>Mission Control</h2>
+      <span class="open-real" id="openReal">Open full dashboard ↗</span>
+    </div>
+
+    <h3 class="sec">At a glance</h3>
+    <div class="stat-row">
+      <div class="stat"><div class="n">6</div><div class="l">Projects</div></div>
+      <div class="stat"><div class="n">2</div><div class="l">Running turns</div></div>
+      <div class="stat"><div class="n">1</div><div class="l">Proposal</div></div>
+      <div class="stat"><div class="n">03:00</div><div class="l">Next health job</div></div>
+    </div>
+
+    <h3 class="sec">Projects</h3>
+    <div class="grid">
+      <div class="card"><div class="h"><span class="s run"></span>Mission Control</div>
+        <div class="meta">session: test session today<br>branch: mc/1a2b · base: dev<br>turn running — Sage dispatching</div>
+        <span class="pill">2 agents active</span></div>
+      <div class="card"><div class="h"><span class="s ok"></span>AXOD Creative — Web</div>
+        <div class="meta">session: landing-redesign<br>branch: mc/9f0a · base: main<br>last turn: 14m ago</div>
+        <span class="pill">idle</span></div>
+      <div class="card"><div class="h"><span class="s run"></span>iOS App</div>
+        <div class="meta">session: onboarding-flow<br>branch: mc/77cd · base: dev<br>turn running — Nova building</div>
+        <span class="pill">building</span></div>
+      <div class="card"><div class="h"><span class="s warn"></span>Social / YouTube</div>
+        <div class="meta">session: weekly-posts<br>1 proposal awaiting review<br>via Postiz MCP</div>
+        <span class="pill">needs you</span></div>
+      <div class="card"><div class="h"><span class="s idle"></span>Discord Bot</div>
+        <div class="meta">session: —<br>poller: healthy (30s)<br>last event: dream · 02:14</div>
+        <span class="pill">idle</span></div>
+      <div class="card"><div class="h"><span class="s ok"></span>Brand / Identity</div>
+        <div class="meta">session: deck-v3<br>branch: mc/4e21 · base: dev<br>last turn: 1h ago</div>
+        <span class="pill">idle</span></div>
+    </div>
+
+    <h3 class="sec">AKIRA — overnight brief</h3>
+    <div class="grid">
+      <div class="card"><div class="h"><span class="s ok"></span>Dream insight</div>
+        <div class="meta">Curator flagged: iOS onboarding and web signup ask for the same data twice. Suggest a shared form schema.</div>
+        <span class="pill">review</span></div>
+      <div class="card"><div class="h"><span class="s ok"></span>Health check · 03:00</div>
+        <div class="meta">HEALTH: PASS — build green, 0 failing tests across 6 repos.</div>
+        <span class="pill">all clear</span></div>
+      <div class="card"><div class="h"><span class="s warn"></span>Calendar</div>
+        <div class="meta">10:30 — investor call (prep deck-v3)<br>14:00 — YouTube upload window</div>
+        <span class="pill">2 today</span></div>
+    </div>
+  </main>
+
+  <script>
+    // ============ ambient particle background ============
+    (function(){
+      var c=document.getElementById('bg'), x=c.getContext('2d'), pts=[], N=90, W,H;
+      function size(){ W=c.width=innerWidth; H=c.height=innerHeight; }
+      size(); addEventListener('resize',size);
+      for(var i=0;i<N;i++) pts.push({x:Math.random(),y:Math.random(),
+        vx:(Math.random()-.5)*0.00006, vy:(Math.random()-.5)*0.00006, r:Math.random()*1.4+0.3, tw:Math.random()*6.28});
+      function loop(t){ x.clearRect(0,0,W,H);
+        for(var i=0;i<N;i++){ var p=pts[i]; p.x+=p.vx; p.y+=p.vy;
+          if(p.x<0)p.x=1; if(p.x>1)p.x=0; if(p.y<0)p.y=1; if(p.y>1)p.y=0;
+          var px=p.x*W, py=p.y*H, a=0.10+0.10*Math.sin(t/1400+p.tw);
+          x.fillStyle='rgba(127,220,255,'+a+')'; x.beginPath(); x.arc(px,py,p.r,0,6.28); x.fill();
+          for(var j=i+1;j<N;j++){ var q=pts[j], dx=(p.x-q.x)*W, dy=(p.y-q.y)*H, d=dx*dx+dy*dy;
+            if(d<13000){ x.strokeStyle='rgba(127,220,255,'+(0.05*(1-d/13000))+')'; x.lineWidth=1;
+              x.beginPath(); x.moveTo(px,py); x.lineTo(q.x*W,q.y*H); x.stroke(); } } }
+        requestAnimationFrame(loop); }
+      requestAnimationFrame(loop);
+    })();
+
+    // ============ AKIRA orb (modes: idle / listening / speaking) ============
+    function makeOrb(canvas, R, count, labelEl){
+      var ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height, cx=W/2, cy=H/2;
+      var NB=56, spec=new Float32Array(NB), P=[], ripples=[], t=0, lastEnv=0, cool=0;
+      var mode='idle';
+      for (var k=0;k<count;k++){
+        P.push({ ang:Math.random()*6.28, rad:R*Math.sqrt(Math.random()), stray:Math.random()<0.10,
+          sdx:(Math.random()-0.5)*R*1.6, sdy:-(R*0.3+Math.random()*R*1.6),
+          ph:Math.random()*6.28, jb:0.6+Math.random()*0.8, tw:Math.random()*6.28 }); }
+      function frame(now){
+        t += (1-t)*0.05; var e=t*t*(3-2*t);
+        var speaking=mode==='speaking', listening=mode==='listening';
+        var swx=Math.sin(now/1800)*4, swy=Math.sin(now/2600)*3, spin=now/5000;
+        // envelope: loud on speak, softer/rolling on listen, near-silent idle
+        var env = speaking ? Math.max(0,Math.abs(Math.sin(now/150))*Math.abs(Math.sin(now/61))*1.15)
+                : listening ? (0.30+0.22*Math.abs(Math.sin(now/240))) : 0.06;
+        for (var b=0;b<NB;b++){ var v=0.5*Math.sin(now/120+b*0.5)+0.3*Math.sin(now/70+b*1.3)+0.2*Math.sin(now/210-b*0.7);
+          v=Math.abs(v)*env; spec[b]+=(v-spec[b])*0.4; }
+        var pulse= speaking?(1+0.05*Math.sin(now/280)) : listening?(1-0.05+0.03*Math.sin(now/360)) : (1+0.02*Math.sin(now/900));
+        ctx.clearRect(0,0,W,H);
+        var col = listening ? '170,236,255' : '127,220,255';
+        // soft glow that fully fades INSIDE the canvas (no square edge)
+        var g=ctx.createRadialGradient(cx,cy,4,cx,cy,R*1.28);
+        g.addColorStop(0,'rgba('+col+','+(0.07+0.14*t+env*0.08)+')'); g.addColorStop(1,'rgba('+col+',0)');
+        ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+        var ps=Math.max(0.8,R/95);
+        ctx.lineCap='round';
+        for (var i=0;i<P.length;i++){ var p=P[i], tx, ty;
+          if (p.stray){ var sm=speaking?0.4:0.12; tx=cx+p.sdx*sm; ty=cy+p.sdy*sm; }
+          else { var ang=p.ang+spin, bin=((ang%6.283+6.283)%6.283)/6.283*NB|0;
+            var spike=spec[bin]*(R*0.42)*(p.rad/R)*(listening?-0.5:1);   // listening: surface draws slightly inward
+            var rad=p.rad*pulse+spike; tx=cx+Math.cos(ang)*rad; ty=cy+Math.sin(ang)*rad; }
+          var bx=cx+(tx-cx)*e+swx, by=cy+(ty-cy)*e+swy;
+          var x=bx+Math.sin(now/620+p.ph)*0.5*p.jb, y=by+Math.cos(now/680+p.ph)*0.5*p.jb;
+          var tw=0.68+0.32*Math.sin(now/220+p.tw), nd=p.stray?1:(p.rad/R);
+          var alpha=(0.26+0.6*e-(p.stray?0.14:0))*tw;
+          ctx.fillStyle=(e>0.5&&nd<0.5&&!p.stray)?'rgba(234,255,255,'+alpha+')':'rgba('+col+','+alpha+')';
+          ctx.beginPath(); ctx.arc(x,y,ps,0,6.283); ctx.fill(); }
+        // rim equalizer — OUTWARD when speaking, INWARD when listening (thinner, softer, rounded)
+        if (speaking || listening){ ctx.lineWidth=Math.max(1,R/95);
+          var rim=R*pulse+R*0.18, dir=listening?-1:1;
+          for (var b2=0;b2<NB;b2++){ var ang=b2/NB*6.283+spin, len=R*0.05+spec[b2]*(R*0.4);
+            var ix=cx+Math.cos(ang)*rim+swx, iy=cy+Math.sin(ang)*rim+swy;
+            var ox=cx+Math.cos(ang)*(rim+len*dir)+swx, oy=cy+Math.sin(ang)*(rim+len*dir)+swy;
+            ctx.strokeStyle='rgba('+col+','+(0.18+0.42*Math.min(1,spec[b2]*2))+')';
+            ctx.beginPath(); ctx.moveTo(ix,iy); ctx.lineTo(ox,oy); ctx.stroke(); } }
+        // ripples — expand out on speak peaks, contract IN on listen peaks
+        cool-=16;
+        if (env>0.7 && lastEnv<=0.7 && cool<=0){
+          if (speaking){ ripples.push({r:R+12, vr:2.4*(R/62), a:0.45}); cool=260; }
+          else if (listening){ ripples.push({r:R*2.0, vr:-1.8*(R/62), a:0.40}); cool=340; } }
+        lastEnv=env;
+        for (var ri=ripples.length-1;ri>=0;ri--){ var rp=ripples[ri]; rp.r+=rp.vr; rp.a*=0.97;
+          // radial falloff: ripple fades to nothing well before the canvas edge — no hard clip
+          var fall=Math.max(0, 1-Math.abs(rp.r-R)/(R*0.62)), ea=rp.a*fall;
+          if (ea>0.004){ ctx.strokeStyle='rgba('+col+','+ea+')'; ctx.lineWidth=1.5;
+            ctx.beginPath(); ctx.arc(cx+swx,cy+swy,Math.max(2,rp.r),0,6.283); ctx.stroke(); }
+          if (rp.a<0.02 || rp.r<R*0.45 || fall<=0) ripples.splice(ri,1); }
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      return { set:function(m){ mode=m; if(labelEl) labelEl.textContent='AKIRA · '+m; } };
+    }
+
+    var sub=document.getElementById('greetSub');
+    var SUBS={ idle:'● AKIRA READY — what shall we work on?',
+      listening:'● LISTENING — go ahead, I’m listening…',
+      speaking:'● AKIRA — "Two turns are running. Social needs your review."' };
+    var hero = makeOrb(document.getElementById('cv'), 120, 850, null);
+    var dock = makeOrb(document.getElementById('cvDock'), 36, 240, document.querySelector('.dock .lbl'));
+
+    function setBoth(m){ hero.set(m); dock.set(m); sub.textContent=SUBS[m]; }
+
+    // auto-demo so you see all three states cycle
+    function demo(){ setBoth('listening');
+      setTimeout(function(){ setBoth('speaking'); }, 2600);
+      setTimeout(function(){ setBoth('idle'); }, 8200);
+      setTimeout(demo, 12000); }
+    setTimeout(demo, 2200);
+
+    // mic = manual listening burst
+    document.getElementById('mic').addEventListener('click', function(){
+      setBoth('listening'); setTimeout(function(){ setBoth('speaking'); }, 2200); });
+
+    // dock + links
+    var dockEl=document.getElementById('dock');
+    addEventListener('scroll', function(){
+      if (scrollY > innerHeight*0.55) dockEl.classList.add('show'); else dockEl.classList.remove('show'); });
+    dockEl.addEventListener('click', function(){ scrollTo({top:0,behavior:'smooth'}); });
+    function toMC(){ document.querySelector('.mc').scrollIntoView({behavior:'smooth'}); }
+    document.getElementById('enterLink').addEventListener('click', toMC);
+    document.getElementById('openReal').addEventListener('click', function(){
+      alert('In the real app this routes to your existing /dashboard (the Mission Control already built).'); });
+
+    function tick(){ var d=new Date(), h=d.getHours();
+      var g=h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+      document.getElementById('greetLine').textContent=g+", A'Keem.";
+      document.getElementById('clock').textContent=d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+    tick(); setInterval(tick,30000);
+  </script>
+</body>
+</html>
