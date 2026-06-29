@@ -202,7 +202,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.4</span>
+        <span style={meta}>v1.10.5</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />

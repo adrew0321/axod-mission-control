@@ -214,7 +214,7 @@ async function main() {
       id: 'akira',
       name: 'AKIRA',
       role: 'concierge',
-      model: 'claude-opus-4-8',
+      model: 'claude-haiku-4-5-20251001',
       system_prompt: AKIRA_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
       color: 'from-sky-300 to-cyan-400',
