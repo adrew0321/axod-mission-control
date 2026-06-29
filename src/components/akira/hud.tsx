@@ -52,7 +52,9 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
   const [greeting, setGreeting] = useState("Hello");
   const [docked, setDocked] = useState(false);
   const [replyDim, setReplyDim] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Idle "going to sleep" stages: 0 active · 1 reply faded · 2 greeting faded · 3 resting (textbox faded).
+  const [idleStage, setIdleStage] = useState(0);
+  const lastActivityRef = useRef(Date.now());
   const spokenBuffer = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
@@ -85,31 +87,60 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // After a few idle minutes, fade her last message so she reads as "waiting".
-  // Any activity (new turn clears reply; typing changes draft) resets the timer.
-  const IDLE_FADE_MS = 180_000;
+  // Idle timeline (resets on any activity): 60s → fade her reply; 120s → fade the
+  // greeting; 130s → fade the textbox (resting). Wakes on movement/interaction.
+  const STAGE1_MS = 60_000;
+  const STAGE2_MS = 120_000;
+  const STAGE3_MS = 130_000;
+
+  // Any movement/interaction counts as activity → wakes her on the next tick.
   useEffect(() => {
-    if (mode !== "idle" || !reply) {
+    const bump = () => {
+      lastActivityRef.current = Date.now();
+    };
+    const evs = ["mousemove", "pointerdown", "keydown", "scroll", "touchstart", "wheel"];
+    evs.forEach((e) => window.addEventListener(e, bump, { passive: true }));
+    return () => evs.forEach((e) => window.removeEventListener(e, bump));
+  }, []);
+
+  // Advance / reset the idle stage once per second. While she's working (not idle),
+  // she's active — stay awake.
+  useEffect(() => {
+    if (mode !== "idle") {
+      lastActivityRef.current = Date.now();
+      setIdleStage(0);
+      return;
+    }
+    const id = setInterval(() => {
+      const idle = Date.now() - lastActivityRef.current;
+      const stage = idle >= STAGE3_MS ? 3 : idle >= STAGE2_MS ? 2 : idle >= STAGE1_MS ? 1 : 0;
+      setIdleStage((s) => (s === stage ? s : stage));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [mode]);
+
+  // Stage 1: fade her reply (height stable), then clear it so the box collapses
+  // on empty content (smoother than fading + collapsing at once). Wake undoes it.
+  useEffect(() => {
+    if (idleStage === 0) {
       setReplyDim(false);
       return;
     }
-    const t = setTimeout(() => setReplyDim(true), IDLE_FADE_MS);
-    return () => clearTimeout(t);
-  }, [mode, reply, draft]);
-  useEffect(() => {
-    if (!replyDim) return;
-    const t = setTimeout(() => {
-      setReply("");
-      setReplyDim(false);
-      setCollapsed(true); // then glide the empty space closed
-    }, 900); // let the fade finish, then clear the text
-    return () => clearTimeout(t);
-  }, [replyDim]);
+    if (idleStage >= 1 && reply) {
+      setReplyDim(true);
+      const t = setTimeout(() => {
+        setReply("");
+        setReplyDim(false);
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  }, [idleStage, reply]);
 
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
     setReplyDim(false);
-    setCollapsed(false);
+    lastActivityRef.current = Date.now();
+    setIdleStage(0);
     spokenBuffer.current = "";
     setMode("thinking");
     const qs = instruction ? `?instruction=${encodeURIComponent(instruction)}` : "";
@@ -153,7 +184,8 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     // Only run a fresh brief when there's nothing recent to reuse.
     if (initialBrief) {
       setReply(initialBrief);
-      setCollapsed(false);
+      lastActivityRef.current = Date.now();
+      setIdleStage(0);
       setMode("idle");
       return;
     }
@@ -274,7 +306,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.10</span>
+        <span style={meta}>v1.10.11</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -297,14 +329,24 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
       {/* HERO */}
       <section style={hero}>
         <Orb mode={mode} size={320} />
-        <div style={greetLine}>{greeting}, A&apos;Keem.</div>
+        <div
+          style={{
+            ...greetLine,
+            opacity: idleStage >= 2 ? 0 : 1,
+            transition: "opacity 1s ease",
+          }}
+        >
+          {greeting}, A&apos;Keem.
+        </div>
         <div
           style={{
             width: "100%",
             maxWidth: 680,
             display: "grid",
-            gridTemplateRows: collapsed ? "0fr" : "1fr",
-            transition: "grid-template-rows .55s cubic-bezier(.4,0,.2,1)",
+            // Animate only when collapsing (empty); on open, track the streaming
+            // text naturally — far smoother than animating against growing content.
+            gridTemplateRows: reply || mode === "thinking" ? "1fr" : "0fr",
+            transition: reply || mode === "thinking" ? "none" : "grid-template-rows .6s cubic-bezier(.4,0,.2,1)",
           }}
         >
           <div style={{ overflow: "hidden", minHeight: 0 }}>
@@ -330,8 +372,10 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
           onDragOver={(e) => e.preventDefault()}
           style={{
             width: "min(540px, 90vw)",
-            marginTop: collapsed ? 8 : 22,
-            transition: "margin-top .55s cubic-bezier(.4,0,.2,1)",
+            marginTop: reply ? 22 : 8,
+            opacity: idleStage >= 3 ? 0 : 1,
+            pointerEvents: idleStage >= 3 ? "none" : "auto",
+            transition: "margin-top .55s cubic-bezier(.4,0,.2,1), opacity 1s ease",
           }}
         >
         <form onSubmit={submitDraft} style={askBox(focused, attachments.length > 0)}>
