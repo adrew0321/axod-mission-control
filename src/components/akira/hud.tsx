@@ -202,8 +202,9 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
+        <span style={meta}>v1.10.4</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
-        <span style={meta}>online · v1.10.3</span>
+        <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
         <span style={meta}>{clock}</span>
       </div>
@@ -246,7 +247,11 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
               title="Tap to speak"
               style={iconBtn(mode === "listening")}
             >
-              🎙
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3" />
+                <path d="M5 10a7 7 0 0 0 14 0" />
+                <line x1="12" y1="19" x2="12" y2="22" />
+              </svg>
             </button>
           )}
           <input
@@ -265,7 +270,20 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
               title={voiceOn ? "Voice on — she speaks replies" : "Voice off"}
               style={iconBtn(voiceOn)}
             >
-              {voiceOn ? "🔊" : "🔇"}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                {voiceOn ? (
+                  <>
+                    <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                    <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+                  </>
+                ) : (
+                  <>
+                    <line x1="22" y1="9" x2="16" y2="15" />
+                    <line x1="16" y1="9" x2="22" y2="15" />
+                  </>
+                )}
+              </svg>
             </button>
           )}
           <button type="submit" title="Send" aria-label="Send" style={sendBtn(draft.trim().length > 0)}>
@@ -483,8 +501,8 @@ function askForm(focused: boolean): React.CSSProperties {
 function iconBtn(active: boolean): React.CSSProperties {
   return {
     ...iconBase,
-    color: active ? "#7fdcff" : "#56657a",
-    background: active ? "rgba(127,220,255,.12)" : "transparent",
+    color: active ? "#7fdcff" : "rgba(127,220,255,.6)",
+    background: active ? "rgba(127,220,255,.14)" : "rgba(127,220,255,.05)",
   };
 }
 function sendBtn(active: boolean): React.CSSProperties {
