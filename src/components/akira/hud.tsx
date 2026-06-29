@@ -8,16 +8,43 @@ import { splitSentences } from "@/lib/voice/chunk";
 
 type RelayProposal = { projectId: string; sessionId: string; instruction: string };
 
+function greetingFor(d: Date): string {
+  const h = d.getHours();
+  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+}
+
+/** Fade a block in the first time it scrolls into view. */
+function useInView<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return { ref, inView };
+}
+
 export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
   const [micOn, setMicOn] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
-  // Computed in an effect (client-only) so the buttons re-enable after mount —
-  // voiceSupport() is false during SSR where `window` doesn't exist.
   const [support, setSupport] = useState({ tts: false, stt: false });
   const [clock, setClock] = useState("");
+  const [greeting, setGreeting] = useState("Hello");
+  const [docked, setDocked] = useState(false);
   const spokenBuffer = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
@@ -39,10 +66,20 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   }, [voiceOn]);
 
   useEffect(() => {
-    const tick = () => setClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    const tick = () => {
+      const d = new Date();
+      setClock(d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      setGreeting(greetingFor(d));
+    };
     tick();
     const id = setInterval(tick, 30000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => setDocked(window.scrollY > window.innerHeight * 0.55);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const runTurn = useCallback((instruction?: string) => {
@@ -70,7 +107,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
         setProposal({ projectId: e.projectId, sessionId: e.sessionId, instruction: e.instruction });
       } else if (e.type === "persisted" || e.type === "error") {
         if (e.type === "error") {
-          setReply((r) => r || "Good to see you, A'Keem. I couldn't compose a brief just now — tap to retry.");
+          setReply((r) => r || "I couldn't compose a brief just now — tap to retry.");
         } else if (voiceOnRef.current && spokenBuffer.current.trim()) {
           speak(spokenBuffer.current);
         }
@@ -79,7 +116,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
       }
     };
     es.onerror = () => {
-      setReply((r) => r || "Good to see you, A'Keem. I couldn't reach the brief just now — tap to retry.");
+      setReply((r) => r || "I couldn't reach the brief just now — tap to retry.");
       setMode("idle");
       es.close();
     };
@@ -142,23 +179,32 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
     setMode("idle");
   }
 
+  const stats = [
+    { n: String(snapshot.projects.length), l: "Projects" },
+    { n: String(snapshot.running.length), l: "Running" },
+    { n: String(snapshot.proposals.length), l: "Proposals" },
+    { n: snapshot.health.verdict, l: "Health" },
+  ];
+
+  const glance = useInView<HTMLDivElement>();
+  const projectsView = useInView<HTMLDivElement>();
+  const briefView = useInView<HTMLDivElement>();
+
   return (
     <>
       <Constellation />
 
-      {/* top bar */}
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2, fontSize: 13, color: "#eaffff" }}>
           <b style={{ color: "#7fdcff" }}>AKIRA</b> · MISSION CONTROL
         </span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
-        <span style={meta}>online · v1.10.0</span>
+        <span style={meta}>online · v1.10.2</span>
         <span style={{ flex: 1 }} />
         <span style={meta}>{clock}</span>
       </div>
 
-      {/* toggles */}
-      <div style={{ position: "fixed", top: 54, right: 16, display: "flex", gap: 10, zIndex: 10 }}>
+      <div style={{ position: "fixed", top: 54, right: 16, display: "flex", gap: 10, zIndex: 20 }}>
         <button disabled={!support.stt} onClick={() => setMicOn((v) => !v)} title="Microphone (speech input)" style={toggleStyle(micOn, support.stt)}>
           {micOn ? "🎙 Mic On" : "🎙 Mic Off"}
         </button>
@@ -167,21 +213,30 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
         </button>
       </div>
 
-      <div style={stage}>
+      {/* docked mini-orb (appears on scroll) */}
+      <div
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        title="Summon AKIRA"
+        style={{
+          position: "fixed", bottom: 18, left: 18, zIndex: 20, cursor: "pointer",
+          opacity: docked ? 1 : 0, transform: docked ? "scale(1)" : "scale(.6)",
+          transition: ".35s", pointerEvents: docked ? "auto" : "none",
+        }}
+      >
+        <Orb mode={mode} size={54} />
+      </div>
+
+      {/* HERO */}
+      <section style={hero}>
         <Orb mode={mode} size={320} />
-
+        <div style={greetLine}>{greeting}, A&apos;Keem.</div>
         <div style={replyText}>{reply || (mode === "thinking" ? "…" : "")}</div>
-
-        <div style={metaLine}>
-          {snapshot.running.length} running · {snapshot.proposals.length} proposal(s) · health: {snapshot.health.verdict}
-        </div>
 
         {micOn && (
           <button onClick={startMic} style={{ ...pillStyle, marginTop: 18 }}>
             🎤 Tap to speak
           </button>
         )}
-
         {proposal && (
           <div style={proposalCard}>
             <div style={{ marginBottom: 10 }}>
@@ -192,74 +247,168 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
           </div>
         )}
 
-        <a href="/dashboard" style={{ marginTop: 24, color: "#6b7a8d", fontSize: 12.5, letterSpacing: 1, textDecoration: "none" }}>
-          Open full dashboard ↗
-        </a>
-      </div>
+        <div style={scrollCue}>
+          SCROLL INTO MISSION CONTROL
+          <span style={chev} />
+        </div>
+      </section>
+
+      {/* MISSION CONTROL */}
+      <main style={mc}>
+        <div style={mcHead}>
+          <h2 style={{ fontSize: 16, letterSpacing: 1, margin: 0 }}>Mission Control</h2>
+          <a href="/dashboard" style={openReal}>Open full dashboard ↗</a>
+        </div>
+
+        <h3 style={sec}>At a glance</h3>
+        <div ref={glance.ref} style={statRow}>
+          {stats.map((s, i) => (
+            <div key={s.l} style={fadeCard(glance.inView, i, statCard)}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: "#eaffff" }}>{s.n}</div>
+              <div style={statLabel}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {snapshot.projects.length > 0 && (
+          <>
+            <h3 style={sec}>Projects</h3>
+            <div ref={projectsView.ref} style={grid}>
+              {snapshot.projects.map((p, i) => {
+                const isRunning = snapshot.running.some((r) => r.projectId === p.id);
+                return (
+                  <div key={p.id} style={fadeCard(projectsView.inView, i, card)}>
+                    <div style={cardH}>
+                      <span style={dot(isRunning ? "#7fdcff" : "#3a4859", isRunning)} />
+                      {p.name}
+                    </div>
+                    <div style={cardMeta}>{isRunning ? "turn running" : "idle"}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <h3 style={sec}>AKIRA — overnight brief</h3>
+        <div ref={briefView.ref} style={grid}>
+          <div style={fadeCard(briefView.inView, 0, card)}>
+            <div style={cardH}>
+              <span style={dot(snapshot.health.verdict === "fail" ? "#ffb84d" : "#37d39b", true)} />
+              Health check
+            </div>
+            <div style={cardMeta}>
+              {snapshot.health.verdict.toUpperCase()}
+              {snapshot.health.at ? ` · ${new Date(snapshot.health.at).toLocaleString()}` : ""}
+            </div>
+          </div>
+
+          <div style={fadeCard(briefView.inView, 1, card)}>
+            <div style={cardH}>
+              <span style={dot(snapshot.insights.length ? "#7fdcff" : "#3a4859", snapshot.insights.length > 0)} />
+              Dream insights
+            </div>
+            <div style={cardMeta}>
+              {snapshot.insights.length
+                ? snapshot.insights.map((x) => x.title).join(" · ")
+                : "No new insights."}
+            </div>
+          </div>
+
+          <div style={fadeCard(briefView.inView, 2, card)}>
+            <div style={cardH}>
+              <span style={dot(snapshot.schedules.length ? "#ffb84d" : "#3a4859", snapshot.schedules.length > 0)} />
+              Scheduled today
+            </div>
+            <div style={cardMeta}>
+              {snapshot.schedules.length
+                ? snapshot.schedules.map((x) => x.title).join(" · ")
+                : "Nothing scheduled."}
+            </div>
+          </div>
+        </div>
+      </main>
     </>
   );
 }
 
 const topbar: React.CSSProperties = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  right: 0,
-  height: 48,
-  zIndex: 10,
-  display: "flex",
-  alignItems: "center",
-  gap: 14,
-  padding: "0 18px",
+  position: "fixed", top: 0, left: 0, right: 0, height: 48, zIndex: 20,
+  display: "flex", alignItems: "center", gap: 14, padding: "0 18px",
   background: "linear-gradient(180deg, rgba(4,6,11,.92), rgba(4,6,11,.5) 70%, transparent)",
   backdropFilter: "blur(6px)",
 };
 const meta: React.CSSProperties = { color: "#6b7a8d", fontSize: 12, fontFamily: "ui-monospace, monospace" };
-const stage: React.CSSProperties = {
-  position: "relative",
-  zIndex: 1,
-  minHeight: "100vh",
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  padding: "70px 18px 40px",
+const hero: React.CSSProperties = {
+  position: "relative", zIndex: 1, minHeight: "100vh",
+  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "70px 18px 40px",
+};
+const greetLine: React.CSSProperties = {
+  marginTop: 22, fontSize: "clamp(20px,3.4vmin,30px)", fontWeight: 600, letterSpacing: 0.3,
+  background: "linear-gradient(90deg,#eaffff,#7fdcff)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
 };
 const replyText: React.CSSProperties = {
-  marginTop: 22,
-  maxWidth: 680,
-  textAlign: "center",
-  color: "#c4d3e3",
-  lineHeight: 1.7,
-  fontSize: 16,
-  minHeight: 52,
+  marginTop: 10, maxWidth: 680, textAlign: "center", color: "#c4d3e3", lineHeight: 1.7, fontSize: 15.5, minHeight: 44,
 };
-const metaLine: React.CSSProperties = {
-  marginTop: 14,
-  color: "#7fdcff",
-  fontFamily: "ui-monospace, monospace",
-  fontSize: 13,
-  letterSpacing: 1.2,
+const scrollCue: React.CSSProperties = {
+  position: "absolute", bottom: 22, left: "50%", transform: "translateX(-50%)",
+  color: "#6b7a8d", fontSize: 11, letterSpacing: 2, textAlign: "center",
+};
+const chev: React.CSSProperties = {
+  display: "block", margin: "8px auto 0", width: 12, height: 12,
+  borderRight: "2px solid #7fdcff", borderBottom: "2px solid #7fdcff", transform: "rotate(45deg)", opacity: 0.8,
+};
+const mc: React.CSSProperties = {
+  position: "relative", zIndex: 1, maxWidth: 1000, margin: "0 auto", padding: "30px 20px 90px",
+};
+const mcHead: React.CSSProperties = {
+  display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+};
+const openReal: React.CSSProperties = {
+  border: "1px solid rgba(127,220,255,.35)", color: "#7fdcff", background: "rgba(127,220,255,.05)",
+  borderRadius: 8, padding: "9px 16px", fontSize: 13, textDecoration: "none",
+};
+const sec: React.CSSProperties = {
+  fontSize: 12, letterSpacing: 2, color: "#6b7a8d", textTransform: "uppercase",
+  margin: "26px 0 12px", borderBottom: "1px solid #13202e", paddingBottom: 7,
+};
+const statRow: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 };
+const statCard: React.CSSProperties = {
+  background: "rgba(7,13,22,.7)", border: "1px solid #13202e", borderRadius: 12, padding: 18, textAlign: "center",
+};
+const statLabel: React.CSSProperties = {
+  color: "#6b7a8d", fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", marginTop: 4,
+};
+const grid: React.CSSProperties = {
+  display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 14,
+};
+const card: React.CSSProperties = {
+  background: "rgba(7,13,22,.7)", border: "1px solid #13202e", borderRadius: 12, padding: 16,
+};
+const cardH: React.CSSProperties = { display: "flex", alignItems: "center", gap: 9, fontWeight: 600, fontSize: 15 };
+const cardMeta: React.CSSProperties = {
+  color: "#6b7a8d", fontSize: 12, marginTop: 8, lineHeight: 1.6, fontFamily: "ui-monospace, monospace",
 };
 const pillStyle: React.CSSProperties = {
-  border: "1px solid rgba(127,220,255,.35)",
-  color: "#7fdcff",
-  background: "rgba(127,220,255,.05)",
-  borderRadius: 30,
-  padding: "9px 16px",
-  fontSize: 13,
-  cursor: "pointer",
-  fontFamily: "inherit",
+  border: "1px solid rgba(127,220,255,.35)", color: "#7fdcff", background: "rgba(127,220,255,.05)",
+  borderRadius: 30, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit",
 };
 const proposalCard: React.CSSProperties = {
-  marginTop: 18,
-  padding: 14,
-  border: "1px solid #1f3347",
-  borderRadius: 12,
-  background: "rgba(7,13,22,.85)",
-  textAlign: "center",
+  marginTop: 18, padding: 14, border: "1px solid #1f3347", borderRadius: 12, background: "rgba(7,13,22,.85)", textAlign: "center",
 };
 
+function dot(color: string, glow: boolean): React.CSSProperties {
+  return { width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: glow ? `0 0 7px ${color}` : "none" };
+}
+function fadeCard(inView: boolean, i: number, base: React.CSSProperties): React.CSSProperties {
+  return {
+    ...base,
+    opacity: inView ? 1 : 0,
+    transform: inView ? "none" : "translateY(10px)",
+    transition: "opacity .45s ease, transform .45s ease",
+    transitionDelay: `${i * 70}ms`,
+  };
+}
 function toggleStyle(on: boolean, supported: boolean): React.CSSProperties {
   return {
     ...pillStyle,
