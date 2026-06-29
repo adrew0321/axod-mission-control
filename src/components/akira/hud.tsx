@@ -48,6 +48,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   const [clock, setClock] = useState("");
   const [greeting, setGreeting] = useState("Hello");
   const [docked, setDocked] = useState(false);
+  const [replyDim, setReplyDim] = useState(false);
   const spokenBuffer = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
@@ -79,6 +80,26 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // After a few idle minutes, fade her last message so she reads as "waiting".
+  // Any activity (new turn clears reply; typing changes draft) resets the timer.
+  const IDLE_FADE_MS = 180_000;
+  useEffect(() => {
+    if (mode !== "idle" || !reply) {
+      setReplyDim(false);
+      return;
+    }
+    const t = setTimeout(() => setReplyDim(true), IDLE_FADE_MS);
+    return () => clearTimeout(t);
+  }, [mode, reply, draft]);
+  useEffect(() => {
+    if (!replyDim) return;
+    const t = setTimeout(() => {
+      setReply("");
+      setReplyDim(false);
+    }, 900); // let the fade finish, then clear the text
+    return () => clearTimeout(t);
+  }, [replyDim]);
 
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
@@ -202,7 +223,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.5</span>
+        <span style={meta}>v1.10.6</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -226,7 +247,9 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
       <section style={hero}>
         <Orb mode={mode} size={320} />
         <div style={greetLine}>{greeting}, A&apos;Keem.</div>
-        <div style={replyText}>{reply || (mode === "thinking" ? "…" : "")}</div>
+        <div style={{ ...replyText, opacity: replyDim ? 0 : 1, transition: "opacity .9s ease" }}>
+          {reply || (mode === "thinking" ? "…" : "")}
+        </div>
 
         {proposal && (
           <div style={proposalCard}>

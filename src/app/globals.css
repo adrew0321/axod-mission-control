@@ -4,6 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* AKIRA HUD — themed ice-blue scrollbar (scoped to the AKIRA landing page) */
+html:has(.akira-page) { scrollbar-color: rgba(127, 220, 255, 0.28) #04060b; scrollbar-width: thin; }
+html:has(.akira-page)::-webkit-scrollbar { width: 10px; }
+html:has(.akira-page)::-webkit-scrollbar-track { background: #04060b; }
+html:has(.akira-page)::-webkit-scrollbar-thumb {
+  background: rgba(127, 220, 255, 0.22);
+  border-radius: 8px;
+  border: 2px solid #04060b;
+}
+html:has(.akira-page)::-webkit-scrollbar-thumb:hover { background: rgba(127, 220, 255, 0.42); }
+
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
