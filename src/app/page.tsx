@@ -7,6 +7,7 @@ export default async function HomePage() {
   const snapshot = await getFleetSnapshotLive();
   return (
     <main
+      className="akira-page"
       style={{
         background: "radial-gradient(1300px 860px at 50% 38%, #0c1726 0%, #070d16 52%, #04060b 100%)",
         color: "#e6edf3",
