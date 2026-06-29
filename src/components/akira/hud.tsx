@@ -306,7 +306,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.11</span>
+        <span style={meta}>v1.10.12</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -328,7 +328,14 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       {/* HERO */}
       <section style={hero}>
-        <Orb mode={mode} size={320} />
+        <div
+          style={{
+            transform: idleStage >= 3 ? "scale(1.45)" : "scale(1)",
+            transition: "transform 1.4s cubic-bezier(.4,0,.2,1)",
+          }}
+        >
+          <Orb mode={mode} size={320} />
+        </div>
         <div
           style={{
             ...greetLine,
