@@ -1,10 +1,15 @@
 import { getFleetSnapshotLive } from "@/lib/fleet-contributors";
+import { getRecentBrief } from "@/lib/akira/recent-brief";
 import { Hud } from "@/components/akira/hud";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const snapshot = await getFleetSnapshotLive();
+  // Reuse a recent brief on refresh instead of running a fresh turn (token saver).
+  // Tunable without a redeploy via AKIRA_BRIEF_TTL_MINUTES (default 4h).
+  const ttlMin = Number(process.env.AKIRA_BRIEF_TTL_MINUTES ?? 240);
+  const initialBrief = await getRecentBrief(ttlMin * 60_000);
   return (
     <main
       className="akira-page"
@@ -15,7 +20,7 @@ export default async function HomePage() {
         fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
-      <Hud snapshot={snapshot} />
+      <Hud snapshot={snapshot} initialBrief={initialBrief} />
     </main>
   );
 }
