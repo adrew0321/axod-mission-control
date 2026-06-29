@@ -42,6 +42,9 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
+  const [attachments, setAttachments] = useState<
+    { id: string; name: string; size: number; isImage: boolean; url?: string; file: File }[]
+  >([]);
   const [support, setSupport] = useState({ tts: false, stt: false });
   // Mic is push-to-talk (the 🎙 in the input bar) — privacy-safe: it only ever
   // listens on an explicit tap, so there's no persistent on/off to track.
@@ -49,6 +52,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
   const [greeting, setGreeting] = useState("Hello");
   const [docked, setDocked] = useState(false);
   const [replyDim, setReplyDim] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const spokenBuffer = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
@@ -97,12 +101,15 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     const t = setTimeout(() => {
       setReply("");
       setReplyDim(false);
+      setCollapsed(true); // then glide the empty space closed
     }, 900); // let the fade finish, then clear the text
     return () => clearTimeout(t);
   }, [replyDim]);
 
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
+    setReplyDim(false);
+    setCollapsed(false);
     spokenBuffer.current = "";
     setMode("thinking");
     const qs = instruction ? `?instruction=${encodeURIComponent(instruction)}` : "";
@@ -146,6 +153,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     // Only run a fresh brief when there's nothing recent to reuse.
     if (initialBrief) {
       setReply(initialBrief);
+      setCollapsed(false);
       setMode("idle");
       return;
     }
@@ -163,12 +171,48 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     window.open("/dashboard", "_blank", "noopener");
   }
 
-  function submitDraft(e: React.FormEvent) {
+  function addFiles(files: FileList | File[]) {
+    for (const file of Array.from(files)) {
+      const isImage = file.type.startsWith("image/");
+      setAttachments((a) => [
+        ...a,
+        { id: `${Date.now()}-${file.name}-${a.length}`, name: file.name, size: file.size, isImage, url: isImage ? URL.createObjectURL(file) : undefined, file },
+      ]);
+    }
+  }
+  function removeAttachment(id: string) {
+    setAttachments((x) => {
+      const gone = x.find((y) => y.id === id);
+      if (gone?.url) URL.revokeObjectURL(gone.url);
+      return x.filter((y) => y.id !== id);
+    });
+  }
+
+  async function submitDraft(e: React.FormEvent) {
     e.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text && attachments.length === 0) return;
     setDraft("");
-    runTurn(text);
+    const atts = attachments;
+    setAttachments([]);
+    if (atts.length === 0) {
+      runTurn(text);
+      return;
+    }
+    // Upload each file so AKIRA can read it by path with her Read tool.
+    setMode("thinking");
+    const paths: string[] = [];
+    for (const a of atts) {
+      const fd = new FormData();
+      fd.append("file", a.file, a.name);
+      const r = await fetch("/api/akira/upload", { method: "POST", body: fd }).then((x) => x.json()).catch(() => null);
+      if (r?.path) paths.push(r.path);
+      if (a.url) URL.revokeObjectURL(a.url);
+    }
+    const instruction = paths.length
+      ? `${text}\n\n[Attached files — open them with your Read tool:\n${paths.map((p) => `- ${p}`).join("\n")}]`
+      : text;
+    runTurn(instruction);
   }
 
   function startMic() {
@@ -230,7 +274,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.8</span>
+        <span style={meta}>v1.10.9</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -254,7 +298,16 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
       <section style={hero}>
         <Orb mode={mode} size={320} />
         <div style={greetLine}>{greeting}, A&apos;Keem.</div>
-        <div style={{ ...replyText, opacity: replyDim ? 0 : 1, transition: "opacity .9s ease" }}>
+        <div
+          style={{
+            ...replyText,
+            opacity: replyDim ? 0 : 1,
+            maxHeight: collapsed ? 0 : 600,
+            marginTop: collapsed ? 0 : (replyText.marginTop as number),
+            overflow: "hidden",
+            transition: "opacity .9s ease, max-height .6s cubic-bezier(.4,0,.2,1), margin .6s cubic-bezier(.4,0,.2,1)",
+          }}
+        >
           {reply || (mode === "thinking" ? "…" : "")}
         </div>
 
@@ -268,7 +321,27 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
           </div>
         )}
 
-        {/* control bar — type, talk, toggle voice, send; all in one row */}
+        {/* input wrapper — drop zone + attachment chips + control bar */}
+        <div
+          onDrop={(e) => { e.preventDefault(); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
+          onDragOver={(e) => e.preventDefault()}
+          style={{ width: "min(540px, 90vw)", marginTop: 26 }}
+        >
+          {attachments.length > 0 && (
+            <div style={chipRow}>
+              {attachments.map((a) => (
+                <div key={a.id} style={chip}>
+                  {a.isImage && a.url ? (
+                    <img src={a.url} alt="" style={chipImg} />
+                  ) : (
+                    <span style={chipDoc}>📄</span>
+                  )}
+                  <span style={chipName}>{a.name}</span>
+                  <button type="button" onClick={() => removeAttachment(a.id)} style={chipX} title="Remove">×</button>
+                </div>
+              ))}
+            </div>
+          )}
         <form onSubmit={submitDraft} style={askForm(focused)}>
           {support.stt && (
             <button
@@ -289,6 +362,12 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
             onChange={(e) => setDraft(e.target.value)}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
+            onPaste={(e) => {
+              if (e.clipboardData?.files?.length) {
+                e.preventDefault();
+                addFiles(e.clipboardData.files);
+              }
+            }}
             placeholder="Ask AKIRA…"
             autoComplete="off"
             style={askInput}
@@ -316,13 +395,14 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
               </svg>
             </button>
           )}
-          <button type="submit" title="Send" aria-label="Send" style={sendBtn(draft.trim().length > 0)}>
+          <button type="submit" title="Send" aria-label="Send" style={sendBtn(draft.trim().length > 0 || attachments.length > 0)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="19" x2="12" y2="5" />
               <polyline points="6 11 12 5 18 11" />
             </svg>
           </button>
         </form>
+        </div>
 
         <div style={scrollCue}>
           SCROLL INTO MISSION CONTROL
@@ -474,6 +554,24 @@ const proposalCard: React.CSSProperties = {
   marginTop: 18, padding: 14, border: "1px solid #1f3347", borderRadius: 12, background: "rgba(7,13,22,.85)", textAlign: "center",
 };
 
+const chipRow: React.CSSProperties = { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 };
+const chip: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 8, padding: "5px 8px 5px 5px",
+  background: "rgba(8,15,26,.7)", border: "1px solid rgba(127,220,255,.22)", borderRadius: 10, maxWidth: 240,
+};
+const chipImg: React.CSSProperties = { width: 30, height: 30, objectFit: "cover", borderRadius: 6, flex: "none" };
+const chipDoc: React.CSSProperties = {
+  width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 6, flex: "none",
+  background: "rgba(127,220,255,.1)", fontSize: 15,
+};
+const chipName: React.CSSProperties = {
+  fontSize: 12.5, color: "#c4d3e3", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+};
+const chipX: React.CSSProperties = {
+  flex: "none", width: 20, height: 20, borderRadius: "50%", border: 0, cursor: "pointer",
+  background: "transparent", color: "#6b7a8d", fontSize: 16, lineHeight: "16px",
+};
+
 function dot(color: string, glow: boolean): React.CSSProperties {
   return { width: 8, height: 8, borderRadius: "50%", background: color, boxShadow: glow ? `0 0 7px ${color}` : "none" };
 }
@@ -513,8 +611,7 @@ const iconBase: React.CSSProperties = {
 
 function askForm(focused: boolean): React.CSSProperties {
   return {
-    marginTop: 26,
-    width: "min(540px, 90vw)",
+    width: "100%",
     display: "flex",
     alignItems: "center",
     gap: 2,
