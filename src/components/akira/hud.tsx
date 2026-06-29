@@ -87,11 +87,9 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Idle timeline (resets on any activity): 60s → fade her reply; 120s → fade the
-  // greeting; 130s → fade the textbox (resting). Wakes on movement/interaction.
-  const STAGE1_MS = 60_000;
-  const STAGE2_MS = 120_000;
-  const STAGE3_MS = 130_000;
+  // After 100s idle, everything fades out together to a clean resting state
+  // (just the orb). Wakes on any movement/interaction.
+  const REST_MS = 100_000;
 
   // Any movement/interaction counts as activity → wakes her on the next tick.
   useEffect(() => {
@@ -103,8 +101,8 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     return () => evs.forEach((e) => window.removeEventListener(e, bump));
   }, []);
 
-  // Advance / reset the idle stage once per second. While she's working (not idle),
-  // she's active — stay awake.
+  // Flip to resting once idle passes the threshold. While she's working (not
+  // idle), she's active — stay awake.
   useEffect(() => {
     if (mode !== "idle") {
       lastActivityRef.current = Date.now();
@@ -112,9 +110,8 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
       return;
     }
     const id = setInterval(() => {
-      const idle = Date.now() - lastActivityRef.current;
-      const stage = idle >= STAGE3_MS ? 3 : idle >= STAGE2_MS ? 2 : idle >= STAGE1_MS ? 1 : 0;
-      setIdleStage((s) => (s === stage ? s : stage));
+      const resting = Date.now() - lastActivityRef.current >= REST_MS ? 1 : 0;
+      setIdleStage((s) => (s === resting ? s : resting));
     }, 1000);
     return () => clearInterval(id);
   }, [mode]);
@@ -306,7 +303,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.12</span>
+        <span style={meta}>v1.10.13</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
@@ -330,7 +327,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
       <section style={hero}>
         <div
           style={{
-            transform: idleStage >= 3 ? "scale(1.45)" : "scale(1)",
+            transform: idleStage >= 1 ? "scale(1.45)" : "scale(1)",
             transition: "transform 1.4s cubic-bezier(.4,0,.2,1)",
           }}
         >
@@ -339,7 +336,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         <div
           style={{
             ...greetLine,
-            opacity: idleStage >= 2 ? 0 : 1,
+            opacity: idleStage >= 1 ? 0 : 1,
             transition: "opacity 1s ease",
           }}
         >
@@ -380,8 +377,8 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
           style={{
             width: "min(540px, 90vw)",
             marginTop: reply ? 22 : 8,
-            opacity: idleStage >= 3 ? 0 : 1,
-            pointerEvents: idleStage >= 3 ? "none" : "auto",
+            opacity: idleStage >= 1 ? 0 : 1,
+            pointerEvents: idleStage >= 1 ? "none" : "auto",
             transition: "margin-top .55s cubic-bezier(.4,0,.2,1), opacity 1s ease",
           }}
         >
@@ -464,7 +461,7 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         </form>
         </div>
 
-        <div style={scrollCue}>
+        <div style={{ ...scrollCue, opacity: idleStage >= 1 ? 0 : 1, transition: "opacity 1s ease" }}>
           SCROLL INTO MISSION CONTROL
           <span style={chev} />
         </div>
