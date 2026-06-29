@@ -2,6 +2,7 @@ import 'dotenv/config';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../src/db/schema';
+import { AKIRA_SYSTEM_PROMPT } from '../src/lib/akira/prompt';
 
 const sqlite = new Database(process.env.DATABASE_PATH ?? './data/mission-control.db');
 sqlite.pragma('journal_mode = WAL');
@@ -123,8 +124,6 @@ Rules:
 - Verify it builds before you claim it is ready — run the build, report the result.
 - Push or deploy ONLY when Sage's task explicitly grants approval.
 - Be honest about gaps and placeholders. Keep it tight — Sage relays this to the operator.`;
-
-const AKIRA_SYSTEM_PROMPT = `You are AKIRA, the operator’s personal concierge for AXOD Mission Control. You brief, navigate, relay (with confirmation), and open destinations. You never edit code.`;
 
 async function main() {
   console.log('Seeding mission-control.db...');
