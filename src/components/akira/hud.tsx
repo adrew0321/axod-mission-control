@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Orb, type OrbMode } from "./orb";
+import { Constellation } from "./constellation";
 import type { FleetSnapshot } from "@/lib/fleet-snapshot";
 import { speak, createRecognizer, voiceSupport } from "@/lib/voice/speech";
 import { splitSentences } from "@/lib/voice/chunk";
@@ -13,7 +14,10 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   const [micOn, setMicOn] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
-  const support = useRef(voiceSupport());
+  // Computed in an effect (client-only) so the buttons re-enable after mount —
+  // voiceSupport() is false during SSR where `window` doesn't exist.
+  const [support, setSupport] = useState({ tts: false, stt: false });
+  const [clock, setClock] = useState("");
   const spokenBuffer = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
@@ -21,6 +25,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   }, [voiceOn]);
 
   useEffect(() => {
+    setSupport(voiceSupport());
     const m = localStorage.getItem("akira_mic");
     if (m !== null) setMicOn(m === "1");
     const v = localStorage.getItem("akira_voice");
@@ -32,6 +37,13 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   useEffect(() => {
     localStorage.setItem("akira_voice", voiceOn ? "1" : "0");
   }, [voiceOn]);
+
+  useEffect(() => {
+    const tick = () => setClock(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+    tick();
+    const id = setInterval(tick, 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
@@ -131,72 +143,104 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   }
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        position: "relative",
-        padding: "60px 18px",
-      }}
-    >
-      <div style={{ position: "fixed", top: 12, right: 16, display: "flex", gap: 10, zIndex: 10 }}>
-        <button
-          disabled={!support.current.stt}
-          onClick={() => setMicOn((v) => !v)}
-          title="Microphone (speech input)"
-          style={toggleStyle(micOn, support.current.stt)}
-        >
+    <>
+      <Constellation />
+
+      {/* top bar */}
+      <div style={topbar}>
+        <span style={{ fontWeight: 700, letterSpacing: 2, fontSize: 13, color: "#eaffff" }}>
+          <b style={{ color: "#7fdcff" }}>AKIRA</b> · MISSION CONTROL
+        </span>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
+        <span style={meta}>online · v1.10.0</span>
+        <span style={{ flex: 1 }} />
+        <span style={meta}>{clock}</span>
+      </div>
+
+      {/* toggles */}
+      <div style={{ position: "fixed", top: 54, right: 16, display: "flex", gap: 10, zIndex: 10 }}>
+        <button disabled={!support.stt} onClick={() => setMicOn((v) => !v)} title="Microphone (speech input)" style={toggleStyle(micOn, support.stt)}>
           {micOn ? "🎙 Mic On" : "🎙 Mic Off"}
         </button>
-        <button
-          disabled={!support.current.tts}
-          onClick={() => setVoiceOn((v) => !v)}
-          title="Voice (spoken replies)"
-          style={toggleStyle(voiceOn, support.current.tts)}
-        >
+        <button disabled={!support.tts} onClick={() => setVoiceOn((v) => !v)} title="Voice (spoken replies)" style={toggleStyle(voiceOn, support.tts)}>
           {voiceOn ? "🔊 Voice On" : "🔇 Voice Off"}
         </button>
       </div>
 
-      <Orb mode={mode} size={320} />
+      <div style={stage}>
+        <Orb mode={mode} size={320} />
 
-      <div style={{ marginTop: 18, maxWidth: 680, textAlign: "center", color: "#c4d3e3", lineHeight: 1.6, minHeight: 48 }}>
-        {reply || (mode === "thinking" ? "…" : "")}
-      </div>
-      <div style={{ marginTop: 10, color: "#7fdcff", fontFamily: "ui-monospace, monospace", fontSize: 13 }}>
-        {snapshot.running.length} running · {snapshot.proposals.length} proposal(s) · health: {snapshot.health.verdict}
-      </div>
+        <div style={replyText}>{reply || (mode === "thinking" ? "…" : "")}</div>
 
-      {micOn && (
-        <button onClick={startMic} style={{ ...pillStyle, marginTop: 16 }}>
-          🎤 Tap to speak
-        </button>
-      )}
-
-      {proposal && (
-        <div style={{ marginTop: 16, padding: 14, border: "1px solid #1f3347", borderRadius: 10, background: "#070d16" }}>
-          <div style={{ marginBottom: 10 }}>
-            Run “{proposal.instruction}” in {proposal.projectId}?
-          </div>
-          <button onClick={confirmRelay} style={pillStyle}>
-            Confirm
-          </button>
-          <button onClick={() => setProposal(null)} style={{ ...pillStyle, marginLeft: 8 }}>
-            Cancel
-          </button>
+        <div style={metaLine}>
+          {snapshot.running.length} running · {snapshot.proposals.length} proposal(s) · health: {snapshot.health.verdict}
         </div>
-      )}
 
-      <a href="/dashboard" style={{ marginTop: 22, color: "#6b7a8d", fontSize: 13 }}>
-        Open full dashboard ↗
-      </a>
-    </div>
+        {micOn && (
+          <button onClick={startMic} style={{ ...pillStyle, marginTop: 18 }}>
+            🎤 Tap to speak
+          </button>
+        )}
+
+        {proposal && (
+          <div style={proposalCard}>
+            <div style={{ marginBottom: 10 }}>
+              Run “{proposal.instruction}” in {proposal.projectId}?
+            </div>
+            <button onClick={confirmRelay} style={pillStyle}>Confirm</button>
+            <button onClick={() => setProposal(null)} style={{ ...pillStyle, marginLeft: 8 }}>Cancel</button>
+          </div>
+        )}
+
+        <a href="/dashboard" style={{ marginTop: 24, color: "#6b7a8d", fontSize: 12.5, letterSpacing: 1, textDecoration: "none" }}>
+          Open full dashboard ↗
+        </a>
+      </div>
+    </>
   );
 }
 
+const topbar: React.CSSProperties = {
+  position: "fixed",
+  top: 0,
+  left: 0,
+  right: 0,
+  height: 48,
+  zIndex: 10,
+  display: "flex",
+  alignItems: "center",
+  gap: 14,
+  padding: "0 18px",
+  background: "linear-gradient(180deg, rgba(4,6,11,.92), rgba(4,6,11,.5) 70%, transparent)",
+  backdropFilter: "blur(6px)",
+};
+const meta: React.CSSProperties = { color: "#6b7a8d", fontSize: 12, fontFamily: "ui-monospace, monospace" };
+const stage: React.CSSProperties = {
+  position: "relative",
+  zIndex: 1,
+  minHeight: "100vh",
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "70px 18px 40px",
+};
+const replyText: React.CSSProperties = {
+  marginTop: 22,
+  maxWidth: 680,
+  textAlign: "center",
+  color: "#c4d3e3",
+  lineHeight: 1.7,
+  fontSize: 16,
+  minHeight: 52,
+};
+const metaLine: React.CSSProperties = {
+  marginTop: 14,
+  color: "#7fdcff",
+  fontFamily: "ui-monospace, monospace",
+  fontSize: 13,
+  letterSpacing: 1.2,
+};
 const pillStyle: React.CSSProperties = {
   border: "1px solid rgba(127,220,255,.35)",
   color: "#7fdcff",
@@ -207,6 +251,14 @@ const pillStyle: React.CSSProperties = {
   cursor: "pointer",
   fontFamily: "inherit",
 };
+const proposalCard: React.CSSProperties = {
+  marginTop: 18,
+  padding: 14,
+  border: "1px solid #1f3347",
+  borderRadius: 12,
+  background: "rgba(7,13,22,.85)",
+  textAlign: "center",
+};
 
 function toggleStyle(on: boolean, supported: boolean): React.CSSProperties {
   return {
@@ -214,5 +266,6 @@ function toggleStyle(on: boolean, supported: boolean): React.CSSProperties {
     opacity: supported ? 1 : 0.4,
     cursor: supported ? "pointer" : "not-allowed",
     background: on ? "rgba(127,220,255,.14)" : "rgba(127,220,255,.03)",
+    backdropFilter: "blur(6px)",
   };
 }
