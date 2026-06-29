@@ -10,7 +10,9 @@ export const AKIRA_AGENT = {
   id: AKIRA_AGENT_ID,
   name: 'AKIRA',
   role: 'concierge',
-  model: 'claude-opus-4-8',
+  // Haiku: AKIRA is light-duty (summarize/route/chat) and latency-sensitive
+  // (brief runs every landing); far lighter on the Pro cap than Opus.
+  model: 'claude-haiku-4-5-20251001',
   system_prompt: AKIRA_SYSTEM_PROMPT,
   tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'] as string[],
   color: 'from-sky-300 to-cyan-400',
