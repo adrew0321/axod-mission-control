@@ -38,10 +38,13 @@ function useInView<T extends HTMLElement>() {
 export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
-  const [micOn, setMicOn] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
+  const [draft, setDraft] = useState("");
+  const [focused, setFocused] = useState(false);
   const [support, setSupport] = useState({ tts: false, stt: false });
+  // Mic is push-to-talk (the 🎙 in the input bar) — privacy-safe: it only ever
+  // listens on an explicit tap, so there's no persistent on/off to track.
   const [clock, setClock] = useState("");
   const [greeting, setGreeting] = useState("Hello");
   const [docked, setDocked] = useState(false);
@@ -53,14 +56,9 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
 
   useEffect(() => {
     setSupport(voiceSupport());
-    const m = localStorage.getItem("akira_mic");
-    if (m !== null) setMicOn(m === "1");
     const v = localStorage.getItem("akira_voice");
     if (v !== null) setVoiceOn(v === "1");
   }, []);
-  useEffect(() => {
-    localStorage.setItem("akira_mic", micOn ? "1" : "0");
-  }, [micOn]);
   useEffect(() => {
     localStorage.setItem("akira_voice", voiceOn ? "1" : "0");
   }, [voiceOn]);
@@ -133,11 +131,19 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
       body: JSON.stringify({ projectId }),
     });
     if (sessionId) await fetch(`/api/sessions/${sessionId}/active`, { method: "POST" });
-    window.location.href = "/dashboard";
+    // Open in a new tab so AKIRA stays put in her own window/monitor.
+    window.open("/dashboard", "_blank", "noopener");
+  }
+
+  function submitDraft(e: React.FormEvent) {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    runTurn(text);
   }
 
   function startMic() {
-    if (!micOn) return;
     setMode("listening");
     const rec = createRecognizer({
       onResult: (t) => runTurn(t),
@@ -195,22 +201,11 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
       <Constellation />
 
       <div style={topbar}>
-        <span style={{ fontWeight: 700, letterSpacing: 2, fontSize: 13, color: "#eaffff" }}>
-          <b style={{ color: "#7fdcff" }}>AKIRA</b> · MISSION CONTROL
-        </span>
+        <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
-        <span style={meta}>online · v1.10.2</span>
+        <span style={meta}>online · v1.10.3</span>
         <span style={{ flex: 1 }} />
         <span style={meta}>{clock}</span>
-      </div>
-
-      <div style={{ position: "fixed", top: 54, right: 16, display: "flex", gap: 10, zIndex: 20 }}>
-        <button disabled={!support.stt} onClick={() => setMicOn((v) => !v)} title="Microphone (speech input)" style={toggleStyle(micOn, support.stt)}>
-          {micOn ? "🎙 Mic On" : "🎙 Mic Off"}
-        </button>
-        <button disabled={!support.tts} onClick={() => setVoiceOn((v) => !v)} title="Voice (spoken replies)" style={toggleStyle(voiceOn, support.tts)}>
-          {voiceOn ? "🔊 Voice On" : "🔇 Voice Off"}
-        </button>
       </div>
 
       {/* docked mini-orb (appears on scroll) */}
@@ -232,11 +227,6 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
         <div style={greetLine}>{greeting}, A&apos;Keem.</div>
         <div style={replyText}>{reply || (mode === "thinking" ? "…" : "")}</div>
 
-        {micOn && (
-          <button onClick={startMic} style={{ ...pillStyle, marginTop: 18 }}>
-            🎤 Tap to speak
-          </button>
-        )}
         {proposal && (
           <div style={proposalCard}>
             <div style={{ marginBottom: 10 }}>
@@ -246,6 +236,45 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
             <button onClick={() => setProposal(null)} style={{ ...pillStyle, marginLeft: 8 }}>Cancel</button>
           </div>
         )}
+
+        {/* control bar — type, talk, toggle voice, send; all in one row */}
+        <form onSubmit={submitDraft} style={askForm(focused)}>
+          {support.stt && (
+            <button
+              type="button"
+              onClick={startMic}
+              title="Tap to speak"
+              style={iconBtn(mode === "listening")}
+            >
+              🎙
+            </button>
+          )}
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Ask AKIRA…"
+            autoComplete="off"
+            style={askInput}
+          />
+          {support.tts && (
+            <button
+              type="button"
+              onClick={() => setVoiceOn((v) => !v)}
+              title={voiceOn ? "Voice on — she speaks replies" : "Voice off"}
+              style={iconBtn(voiceOn)}
+            >
+              {voiceOn ? "🔊" : "🔇"}
+            </button>
+          )}
+          <button type="submit" title="Send" aria-label="Send" style={sendBtn(draft.trim().length > 0)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="6 11 12 5 18 11" />
+            </svg>
+          </button>
+        </form>
 
         <div style={scrollCue}>
           SCROLL INTO MISSION CONTROL
@@ -257,7 +286,7 @@ export function Hud({ snapshot }: { snapshot: FleetSnapshot }) {
       <main style={mc}>
         <div style={mcHead}>
           <h2 style={{ fontSize: 16, letterSpacing: 1, margin: 0 }}>Mission Control</h2>
-          <a href="/dashboard" style={openReal}>Open full dashboard ↗</a>
+          <a href="/dashboard" target="_blank" rel="noopener" style={openReal}>Open full dashboard ↗</a>
         </div>
 
         <h3 style={sec}>At a glance</h3>
@@ -409,12 +438,59 @@ function fadeCard(inView: boolean, i: number, base: React.CSSProperties): React.
     transitionDelay: `${i * 70}ms`,
   };
 }
-function toggleStyle(on: boolean, supported: boolean): React.CSSProperties {
+const askInput: React.CSSProperties = {
+  flex: 1,
+  background: "transparent",
+  border: 0,
+  outline: "none",
+  color: "#e6edf3",
+  fontFamily: "inherit",
+  fontSize: 14.5,
+  letterSpacing: 0.2,
+  padding: "0 8px",
+};
+const iconBase: React.CSSProperties = {
+  width: 34,
+  height: 34,
+  flex: "none",
+  border: 0,
+  borderRadius: "50%",
+  cursor: "pointer",
+  display: "grid",
+  placeItems: "center",
+  fontSize: 15,
+  transition: "background .2s, color .2s",
+  background: "transparent",
+};
+
+function askForm(focused: boolean): React.CSSProperties {
   return {
-    ...pillStyle,
-    opacity: supported ? 1 : 0.4,
-    cursor: supported ? "pointer" : "not-allowed",
-    background: on ? "rgba(127,220,255,.14)" : "rgba(127,220,255,.03)",
-    backdropFilter: "blur(6px)",
+    marginTop: 26,
+    width: "min(540px, 90vw)",
+    display: "flex",
+    alignItems: "center",
+    gap: 2,
+    height: 48,
+    padding: "0 6px",
+    borderRadius: 999,
+    background: focused ? "rgba(8,15,26,.62)" : "rgba(8,15,26,.42)",
+    border: `1px solid ${focused ? "rgba(127,220,255,.7)" : "rgba(127,220,255,.16)"}`,
+    boxShadow: focused ? "0 0 22px rgba(127,220,255,.10)" : "none",
+    backdropFilter: "blur(10px)",
+    transition: "border-color .3s, box-shadow .3s, background .3s",
+  };
+}
+function iconBtn(active: boolean): React.CSSProperties {
+  return {
+    ...iconBase,
+    color: active ? "#7fdcff" : "#56657a",
+    background: active ? "rgba(127,220,255,.12)" : "transparent",
+  };
+}
+function sendBtn(active: boolean): React.CSSProperties {
+  return {
+    ...iconBase,
+    color: active ? "#04060b" : "#7fdcff",
+    background: active ? "#7fdcff" : "rgba(127,220,255,.16)",
   };
 }

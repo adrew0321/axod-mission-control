@@ -24,7 +24,8 @@ export function Orb({ mode, size = 320 }: { mode: OrbMode; size?: number }) {
     const H = canvas.height;
     const cx = W / 2;
     const cy = H / 2;
-    const R = size * 0.4;
+    const R = size * 0.3;
+    const maxR = Math.min(cx, cy) - 5; // hard safe radius: nothing draws past this
     const NB = 56;
     const spec = new Float32Array(NB);
     const count = 850;
@@ -115,16 +116,21 @@ export function Orb({ mode, size = 320 }: { mode: OrbMode; size?: number }) {
       }
       if (speaking || listening) {
         ctx!.lineWidth = Math.max(1, R / 95);
-        const rim = R * pulse + R * 0.18;
+        const rim = R * pulse + R * 0.14;
         const dir = listening ? -1 : 1;
+        const sway = Math.max(Math.abs(swx), Math.abs(swy));
         for (let b2 = 0; b2 < NB; b2++) {
           const ang = (b2 / NB) * 6.283 + spin;
-          const len = R * 0.05 + spec[b2] * (R * 0.4);
+          let len = R * 0.05 + spec[b2] * (R * 0.34);
+          // never let an outward bar reach the canvas edge — clamp + fade its tip
+          if (dir > 0) len = Math.min(len, Math.max(0, maxR - sway - rim));
+          const tip = rim + len * dir;
+          const edge = dir > 0 ? Math.max(0, Math.min(1, (maxR - sway - tip) / (R * 0.28))) : 1;
           const ix = cx + Math.cos(ang) * rim + swx;
           const iy = cy + Math.sin(ang) * rim + swy;
-          const ox = cx + Math.cos(ang) * (rim + len * dir) + swx;
-          const oy = cy + Math.sin(ang) * (rim + len * dir) + swy;
-          ctx!.strokeStyle = `rgba(${col},${(0.18 + 0.42 * Math.min(1, spec[b2] * 2))})`;
+          const ox = cx + Math.cos(ang) * tip + swx;
+          const oy = cy + Math.sin(ang) * tip + swy;
+          ctx!.strokeStyle = `rgba(${col},${(0.18 + 0.42 * Math.min(1, spec[b2] * 2)) * edge})`;
           ctx!.beginPath();
           ctx!.moveTo(ix, iy);
           ctx!.lineTo(ox, oy);
@@ -146,9 +152,9 @@ export function Orb({ mode, size = 320 }: { mode: OrbMode; size?: number }) {
         const rp = ripples[ri];
         rp.r += rp.vr;
         rp.a *= 0.97;
-        const fall = Math.max(0, 1 - Math.abs(rp.r - R) / (R * 0.62));
+        const fall = Math.max(0, 1 - Math.abs(rp.r - R) / (R * 0.55));
         const ea = rp.a * fall;
-        if (ea > 0.004) {
+        if (ea > 0.004 && rp.r < maxR) {
           ctx!.strokeStyle = `rgba(${col},${ea})`;
           ctx!.lineWidth = 1.5;
           ctx!.beginPath();
