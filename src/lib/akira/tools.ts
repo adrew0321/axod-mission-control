@@ -52,6 +52,9 @@ export async function getSessionDetailHandler(args: { sessionId: string }): Prom
   );
 }
 
+import { browserToolDefs } from './browser-tools';
+import { isOnline } from '@/lib/companion/registry';
+
 /**
  * Build the in-process MCP server exposing AKIRA's tools. Action handlers come
  * from the pure ./tool-actions module (unit-tested); the read handlers live here
@@ -103,10 +106,13 @@ export function createAkiraServer(ctx: AkiraToolContext) {
     (a) => getSessionDetailHandler(a),
   );
 
+  const base = [navigate, open, relay, listSessions, getSession];
+  const tools = isOnline() ? [...base, ...browserToolDefs(ctx)] : base;
+
   return createSdkMcpServer({
     name: AKIRA_SERVER_NAME,
     version: '1.0.0',
     alwaysLoad: true,
-    tools: [navigate, open, relay, listSessions, getSession],
+    tools,
   });
 }

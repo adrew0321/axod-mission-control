@@ -19,6 +19,9 @@ import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/boo
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
 
+import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
+import { isOnline as companionOnline } from '@/lib/companion/registry';
+
 export type TurnEmit = (e: { type: string; [k: string]: unknown }) => void;
 const KEEP_TURNS = 24; // last N messages kept verbatim in the persistent thread
 
@@ -68,7 +71,11 @@ export async function runAkiraTurn(
     );
 
     const snapshot = await getFleetSnapshotLive();
-    const prompt = buildAkiraPrompt(snapshot, roster, transcript, agentLabels);
+    const prompt =
+      buildAkiraPrompt(snapshot, roster, transcript, agentLabels) +
+      `\n\n## LAPTOP COMPANION\n${companionOnline()
+        ? 'The laptop companion is CONNECTED — you may use browser_navigate/read/type/click. Work read→act→read. State the task and let the operator approve before starting; never retry a gated (blocked) action — wait for approval.'
+        : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
 
     const akira = allAgents.find((a) => a.id === AKIRA_AGENT_ID);
     const server = createAkiraServer({ emit });
@@ -86,7 +93,14 @@ export async function runAkiraTurn(
       systemPrompt: akira?.system_prompt ?? AKIRA_SYSTEM_PROMPT,
       allowedTools: akira?.tools_allowlist ?? undefined,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
-      extraAllowedTools: [AKIRA_NAVIGATE, AKIRA_OPEN, AKIRA_RELAY, AKIRA_LIST_SESSIONS, AKIRA_GET_SESSION],
+      extraAllowedTools: [
+        AKIRA_NAVIGATE,
+        AKIRA_OPEN,
+        AKIRA_RELAY,
+        AKIRA_LIST_SESSIONS,
+        AKIRA_GET_SESSION,
+        ...BROWSER_TOOL_NAMES,
+      ],
       signal: opts.signal,
     })) {
       if (event.type === 'token') {
