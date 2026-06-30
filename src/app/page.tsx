@@ -1,6 +1,7 @@
 import { getFleetSnapshotLive } from "@/lib/fleet-contributors";
 import { getRecentBrief } from "@/lib/akira/recent-brief";
 import { Hud } from "@/components/akira/hud";
+import { isOnline } from "@/lib/companion/registry";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function HomePage() {
         fontFamily: '"Segoe UI", system-ui, sans-serif',
       }}
     >
-      <Hud snapshot={snapshot} initialBrief={initialBrief} />
+      <Hud snapshot={snapshot} initialBrief={initialBrief} companionOnline={isOnline()} />
     </main>
   );
 }

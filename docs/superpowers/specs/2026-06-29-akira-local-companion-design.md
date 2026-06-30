@@ -1,6 +1,6 @@
 # AKIRA Local Companion — Design
 
-**Status:** Approved for planning (2026-06-29)
+**Status:** Implemented — 2026-06-30
 
 ## Goal
 

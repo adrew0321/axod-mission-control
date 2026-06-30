@@ -35,11 +35,20 @@ function useInView<T extends HTMLElement>() {
   return { ref, inView };
 }
 
-export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initialBrief?: string | null }) {
+export function Hud({
+  snapshot,
+  initialBrief,
+  companionOnline = false,
+}: {
+  snapshot: FleetSnapshot;
+  initialBrief?: string | null;
+  companionOnline?: boolean;
+}) {
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
+  const [gate, setGate] = useState<{ ref: string; reason: string } | null>(null);
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [attachments, setAttachments] = useState<
@@ -159,6 +168,8 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         window.open(e.url, "_blank", "noopener");
       } else if (e.type === "relay_proposal") {
         setProposal({ projectId: e.projectId, sessionId: e.sessionId, instruction: e.instruction });
+      } else if (e.type === "hard_gate") {
+        setGate({ ref: e.ref, reason: e.reason });
       } else if (e.type === "persisted" || e.type === "error") {
         if (e.type === "error") {
           setReply((r) => r || "I couldn't compose a brief just now — tap to retry.");
@@ -286,6 +297,18 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
     setMode("idle");
   }
 
+  async function approveGate() {
+    if (!gate) return;
+    const g = gate;
+    setGate(null);
+    await fetch("/api/companion/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ref: g.ref }),
+    });
+    runTurn("I approved the gated action — continue.");
+  }
+
   const stats = [
     { n: String(snapshot.projects.length), l: "Projects" },
     { n: String(snapshot.running.length), l: "Running" },
@@ -307,6 +330,9 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
+        <span style={{ ...meta, color: companionOnline ? "#37d39b" : "#56657a", marginRight: 10 }}>
+          {companionOnline ? "laptop ●" : "laptop ○"}
+        </span>
         <span style={meta}>{clock}</span>
       </div>
 
@@ -367,6 +393,14 @@ export function Hud({ snapshot, initialBrief }: { snapshot: FleetSnapshot; initi
             </div>
             <button onClick={confirmRelay} style={pillStyle}>Confirm</button>
             <button onClick={() => setProposal(null)} style={{ ...pillStyle, marginLeft: 8 }}>Cancel</button>
+          </div>
+        )}
+
+        {gate && (
+          <div style={{ ...proposalCard, transition: "opacity .3s ease, transform .3s ease" }}>
+            <div style={{ marginBottom: 10 }}>⚠ AKIRA wants to do something irreversible: {gate.reason}. Approve?</div>
+            <button onClick={approveGate} style={pillStyle}>Approve</button>
+            <button onClick={() => setGate(null)} style={{ ...pillStyle, marginLeft: 8 }}>Cancel</button>
           </div>
         )}
 
