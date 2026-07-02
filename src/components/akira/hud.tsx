@@ -5,6 +5,9 @@ import { Constellation } from "./constellation";
 import type { FleetSnapshot } from "@/lib/fleet-snapshot";
 import { speak, createRecognizer, voiceSupport } from "@/lib/voice/speech";
 import { splitSentences } from "@/lib/voice/chunk";
+import { stripMarkdown } from "@/lib/akira/format";
+import { ConversationStream } from "./conversation-view";
+import type { Turn } from "@/lib/akira/turns";
 
 type RelayProposal = { projectId: string; sessionId: string; instruction: string };
 
@@ -37,15 +40,18 @@ function useInView<T extends HTMLElement>() {
 
 export function Hud({
   snapshot,
-  initialBrief,
+  initialTurns,
+  freshBrief = false,
   companionOnline = false,
 }: {
   snapshot: FleetSnapshot;
-  initialBrief?: string | null;
+  initialTurns?: Turn[];
+  freshBrief?: boolean;
   companionOnline?: boolean;
 }) {
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
+  const [turns, setTurns] = useState<Turn[]>(initialTurns ?? []);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
   const [gate, setGate] = useState<{ ref: string; reason: string } | null>(null);
@@ -60,11 +66,13 @@ export function Hud({
   const [clock, setClock] = useState("");
   const [greeting, setGreeting] = useState("Hello");
   const [docked, setDocked] = useState(false);
-  const [replyDim, setReplyDim] = useState(false);
-  // Idle "going to sleep" stages: 0 active · 1 reply faded · 2 greeting faded · 3 resting (textbox faded).
+  // Idle "going to sleep": 0 active · 1 resting (conversation + greeting + input faded to just the orb).
   const [idleStage, setIdleStage] = useState(0);
   const lastActivityRef = useRef(Date.now());
   const spokenBuffer = useRef("");
+  // Live streaming reply text (mirrors `reply` state) so we can commit it as a
+  // turn without threading the final string through setState updaters.
+  const liveReplyRef = useRef("");
   const voiceOnRef = useRef(voiceOn);
   useEffect(() => {
     voiceOnRef.current = voiceOn;
@@ -125,26 +133,9 @@ export function Hud({
     return () => clearInterval(id);
   }, [mode]);
 
-  // Stage 1: fade her reply (height stable), then clear it so the box collapses
-  // on empty content (smoother than fading + collapsing at once). Wake undoes it.
-  useEffect(() => {
-    if (idleStage === 0) {
-      setReplyDim(false);
-      return;
-    }
-    if (idleStage >= 1 && reply) {
-      setReplyDim(true);
-      const t = setTimeout(() => {
-        setReply("");
-        setReplyDim(false);
-      }, 800);
-      return () => clearTimeout(t);
-    }
-  }, [idleStage, reply]);
-
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
-    setReplyDim(false);
+    liveReplyRef.current = "";
     lastActivityRef.current = Date.now();
     setIdleStage(0);
     spokenBuffer.current = "";
@@ -155,11 +146,12 @@ export function Hud({
       const e = JSON.parse(ev.data);
       if (e.type === "token") {
         setMode("speaking");
+        liveReplyRef.current += e.content;
         setReply((r) => r + e.content);
         if (voiceOnRef.current) {
           spokenBuffer.current += e.content;
           const { ready, rest } = splitSentences(spokenBuffer.current);
-          ready.forEach(speak);
+          ready.forEach((s) => speak(stripMarkdown(s)));
           spokenBuffer.current = rest;
         }
       } else if (e.type === "navigate") {
@@ -173,8 +165,15 @@ export function Hud({
       } else if (e.type === "persisted" || e.type === "error") {
         if (e.type === "error") {
           setReply((r) => r || "I couldn't compose a brief just now — tap to retry.");
-        } else if (voiceOnRef.current && spokenBuffer.current.trim()) {
-          speak(spokenBuffer.current);
+        } else {
+          if (voiceOnRef.current && spokenBuffer.current.trim()) {
+            speak(stripMarkdown(spokenBuffer.current));
+          }
+          // Commit the finished reply as the newest turn, then clear the live buffer.
+          const done = liveReplyRef.current.trim();
+          if (done) setTurns((ts) => [...ts, { role: "akira", content: done, at: Date.now() }]);
+          liveReplyRef.current = "";
+          setReply("");
         }
         setMode("idle");
         es.close();
@@ -188,17 +187,17 @@ export function Hud({
   }, []);
 
   useEffect(() => {
-    // If a recent brief exists, show it without a turn (no Claude call on refresh).
-    // Only run a fresh brief when there's nothing recent to reuse.
-    if (initialBrief) {
-      setReply(initialBrief);
+    // The newest agent turn is already loaded as history. If it's recent enough,
+    // reuse it (no Claude call on refresh); otherwise run a fresh brief, which
+    // simply becomes the newest turn.
+    if (freshBrief) {
       lastActivityRef.current = Date.now();
       setIdleStage(0);
       setMode("idle");
       return;
     }
     runTurn("Brief the operator on the current fleet state.");
-  }, [runTurn, initialBrief]);
+  }, [runTurn, freshBrief]);
 
   async function goToProject(projectId: string, sessionId?: string | null) {
     await fetch("/api/projects/active", {
@@ -235,6 +234,8 @@ export function Hud({
     setDraft("");
     const atts = attachments;
     setAttachments([]);
+    // Show your message immediately (the real text, not the attachment wrapper).
+    if (text) setTurns((ts) => [...ts, { role: "you", content: text, at: Date.now() }]);
     if (atts.length === 0) {
       runTurn(text);
       return;
@@ -258,7 +259,11 @@ export function Hud({
   function startMic() {
     setMode("listening");
     const rec = createRecognizer({
-      onResult: (t) => runTurn(t),
+      onResult: (t) => {
+        const said = t.trim();
+        if (said) setTurns((ts) => [...ts, { role: "you", content: said, at: Date.now() }]);
+        runTurn(t);
+      },
       onEnd: () => setMode((m) => (m === "listening" ? "idle" : m)),
     });
     rec?.start();
@@ -270,6 +275,7 @@ export function Hud({
     setProposal(null);
     setMode("thinking");
     setReply("");
+    liveReplyRef.current = "";
     const res = await fetch("/api/akira/relay/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -290,10 +296,15 @@ export function Hud({
         const e = JSON.parse(m[1]);
         if (e.type === "token") {
           setMode("speaking");
+          liveReplyRef.current += e.content;
           setReply((r) => r + e.content);
         }
       }
     }
+    const done = liveReplyRef.current.trim();
+    if (done) setTurns((ts) => [...ts, { role: "akira", content: done, at: Date.now() }]);
+    liveReplyRef.current = "";
+    setReply("");
     setMode("idle");
   }
 
@@ -368,23 +379,12 @@ export function Hud({
         >
           {greeting}, A&apos;Keem.
         </div>
-        <div
-          style={{
-            width: "100%",
-            maxWidth: 680,
-            display: "grid",
-            // Animate only when collapsing (empty); on open, track the streaming
-            // text naturally — far smoother than animating against growing content.
-            gridTemplateRows: reply || mode === "thinking" ? "1fr" : "0fr",
-            transition: reply || mode === "thinking" ? "none" : "grid-template-rows .6s cubic-bezier(.4,0,.2,1)",
-          }}
-        >
-          <div style={{ overflow: "hidden", minHeight: 0 }}>
-            <div style={{ ...replyText, minHeight: 0, opacity: replyDim ? 0 : 1, transition: "opacity .8s ease" }}>
-              {reply || (mode === "thinking" ? "…" : "")}
-            </div>
-          </div>
-        </div>
+        <ConversationStream
+          turns={turns}
+          liveReply={reply}
+          thinking={mode === "thinking"}
+          dim={idleStage >= 1}
+        />
 
         {proposal && (
           <div style={proposalCard}>
@@ -594,9 +594,6 @@ const hero: React.CSSProperties = {
 const greetLine: React.CSSProperties = {
   marginTop: -28, fontSize: "clamp(20px,3.4vmin,30px)", fontWeight: 600, letterSpacing: 0.3,
   background: "linear-gradient(90deg,#eaffff,#7fdcff)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
-};
-const replyText: React.CSSProperties = {
-  marginTop: 10, maxWidth: 680, textAlign: "center", color: "#c4d3e3", lineHeight: 1.7, fontSize: 15.5, minHeight: 44,
 };
 const scrollCue: React.CSSProperties = {
   position: "absolute", bottom: 22, left: "50%", transform: "translateX(-50%)",
