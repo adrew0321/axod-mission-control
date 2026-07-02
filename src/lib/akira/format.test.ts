@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseReply, stripMarkdown } from './format';
+import { parseReply, stripMarkdown, isLongReply } from './format';
 
 test('splits blank-line-separated text into paragraph blocks', () => {
   const blocks = parseReply('First paragraph.\n\nSecond paragraph.');
@@ -52,4 +52,20 @@ test('stripMarkdown yields clean spoken text (no symbols, links become labels)',
 
 test('stripMarkdown drops leading bullet markers', () => {
   assert.equal(stripMarkdown('- First\n- Second'), 'First\nSecond');
+});
+
+test('isLongReply: a short one-liner is not long (stays centered)', () => {
+  assert.equal(isLongReply("It's a memory framework that keeps notes across sessions."), false);
+});
+
+test('isLongReply: multiple paragraphs is long', () => {
+  assert.equal(isLongReply('First thought.\n\nSecond thought.'), true);
+});
+
+test('isLongReply: a bullet list is long', () => {
+  assert.equal(isLongReply('Options:\n\n- One\n- Two'), true);
+});
+
+test('isLongReply: a single very long paragraph is long', () => {
+  assert.equal(isLongReply('word '.repeat(60)), true);
 });

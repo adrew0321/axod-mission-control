@@ -47,6 +47,17 @@ export function parseReply(text: string): Block[] {
   return blocks;
 }
 
+/**
+ * True when a reply is substantial enough to read better left-aligned than
+ * centered: more than one block, any bullet list, or a long single paragraph.
+ */
+export function isLongReply(text: string): boolean {
+  const blocks = parseReply(text);
+  if (blocks.length > 1) return true;
+  if (blocks.some((b) => b.type === 'list')) return true;
+  return text.trim().length > 220;
+}
+
 /** Flatten markdown to plain text for the voice path (no symbols spoken aloud). */
 export function stripMarkdown(text: string): string {
   return text
