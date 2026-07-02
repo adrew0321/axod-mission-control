@@ -5,6 +5,7 @@ import { Constellation } from "./constellation";
 import type { FleetSnapshot } from "@/lib/fleet-snapshot";
 import { speak, createRecognizer, voiceSupport } from "@/lib/voice/speech";
 import { splitSentences } from "@/lib/voice/chunk";
+import { parseReply, stripMarkdown, isLongReply, type Inline } from "@/lib/akira/format";
 
 type RelayProposal = { projectId: string; sessionId: string; instruction: string };
 
@@ -159,7 +160,7 @@ export function Hud({
         if (voiceOnRef.current) {
           spokenBuffer.current += e.content;
           const { ready, rest } = splitSentences(spokenBuffer.current);
-          ready.forEach(speak);
+          ready.forEach((s) => speak(stripMarkdown(s)));
           spokenBuffer.current = rest;
         }
       } else if (e.type === "navigate") {
@@ -174,7 +175,7 @@ export function Hud({
         if (e.type === "error") {
           setReply((r) => r || "I couldn't compose a brief just now — tap to retry.");
         } else if (voiceOnRef.current && spokenBuffer.current.trim()) {
-          speak(spokenBuffer.current);
+          speak(stripMarkdown(spokenBuffer.current));
         }
         setMode("idle");
         es.close();
@@ -380,8 +381,16 @@ export function Hud({
           }}
         >
           <div style={{ overflow: "hidden", minHeight: 0 }}>
-            <div style={{ ...replyText, minHeight: 0, opacity: replyDim ? 0 : 1, transition: "opacity .8s ease" }}>
-              {reply || (mode === "thinking" ? "…" : "")}
+            <div
+              style={{
+                ...replyText,
+                textAlign: reply && isLongReply(reply) ? "left" : "center",
+                minHeight: 0,
+                opacity: replyDim ? 0 : 1,
+                transition: "opacity .8s ease",
+              }}
+            >
+              {reply ? <ReplyBody text={reply} /> : mode === "thinking" ? "…" : ""}
             </div>
           </div>
         </div>
@@ -596,8 +605,47 @@ const greetLine: React.CSSProperties = {
   background: "linear-gradient(90deg,#eaffff,#7fdcff)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent",
 };
 const replyText: React.CSSProperties = {
-  marginTop: 10, maxWidth: 680, textAlign: "center", color: "#c4d3e3", lineHeight: 1.7, fontSize: 15.5, minHeight: 44,
+  maxWidth: 640, margin: "10px auto 0", textAlign: "left", color: "#c4d3e3", lineHeight: 1.7, fontSize: 15.5, minHeight: 44,
 };
+
+/** Render one AKIRA reply as paragraphs + bullet lists with inline bold/links. */
+function ReplyBody({ text }: { text: string }) {
+  const blocks = parseReply(text);
+  return (
+    <>
+      {blocks.map((b, i) =>
+        b.type === "list" ? (
+          <ul key={i} style={replyList}>
+            {b.items.map((item, j) => (
+              <li key={j} style={replyLi}>
+                <span style={{ color: "#7fdcff", marginRight: 9, flex: "none" }}>•</span>
+                <span>{item.map(renderSpan)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={i} style={replyPara}>
+            {b.spans.map(renderSpan)}
+          </p>
+        ),
+      )}
+    </>
+  );
+}
+function renderSpan(s: Inline, i: number) {
+  if (s.type === "bold") return <strong key={i} style={{ color: "#eaffff", fontWeight: 700 }}>{s.value}</strong>;
+  if (s.type === "link")
+    return (
+      <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={replyLink}>
+        {s.label}
+      </a>
+    );
+  return <span key={i}>{s.value}</span>;
+}
+const replyPara: React.CSSProperties = { margin: "0 0 12px", lineHeight: 1.7, whiteSpace: "pre-line" };
+const replyList: React.CSSProperties = { margin: "0 0 12px", padding: 0, listStyle: "none", display: "grid", gap: 6 };
+const replyLi: React.CSSProperties = { display: "flex", alignItems: "flex-start", lineHeight: 1.6 };
+const replyLink: React.CSSProperties = { color: "#7fdcff", textDecoration: "underline", textUnderlineOffset: 2 };
 const scrollCue: React.CSSProperties = {
   position: "absolute", bottom: 22, left: "50%", transform: "translateX(-50%)",
   color: "#6b7a8d", fontSize: 11, letterSpacing: 2, textAlign: "center",
