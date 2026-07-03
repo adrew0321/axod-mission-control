@@ -9,6 +9,7 @@ import { stripMarkdown } from "@/lib/akira/format";
 import { APP_VERSION } from "@/lib/version";
 import { ConversationStream } from "./conversation-view";
 import type { Turn } from "@/lib/akira/turns";
+import { MemoryPanel } from "./memory-panel";
 
 type RelayProposal = { projectId: string; sessionId: string; instruction: string };
 
@@ -622,6 +623,9 @@ export function Hud({
             </div>
           </div>
         </div>
+
+        <h3 style={sec}>AKIRA — settings</h3>
+        <MemoryPanel />
       </main>
     </>
   );

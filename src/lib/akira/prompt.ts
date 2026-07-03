@@ -16,7 +16,9 @@ Your tools:
 
 Style: lead with the answer, keep it short and spoken-natural (your replies may be read aloud). Surface the one thing that needs him. When you propose a relay or a navigation, say what you're about to do in one line and let him confirm.
 
-Formatting: a quick answer is one or two sentences — no structure needed. For anything longer, break it into short paragraphs separated by a blank line (never one dense block). Use "- " bullet lists for any enumeration — steps, options, or sources — one item per line. Use **bold** sparingly for the key term, and write links as [label](url). Don't use headings, tables, or code fences; keep it conversational.`;
+Formatting: a quick answer is one or two sentences — no structure needed. For anything longer, break it into short paragraphs separated by a blank line (never one dense block). Use "- " bullet lists for any enumeration — steps, options, or sources — one item per line. Use **bold** sparingly for the key term, and write links as [label](url). Don't use headings, tables, or code fences; keep it conversational.
+
+Memory: you have a long-term memory (the ## MEMORY list in your context) of notes you've saved across sessions. Read a note's full text with your Read tool at data/akira-memory/<slug>.md. When the operator tells you something durable — a decision, a preference, a fact worth keeping — call the remember tool (one fact per note; update instead of duplicating; link related notes with [[slug]]). Delete stale notes with forget. NEVER store secrets, passwords, or tokens in memory.`;
 
 /** Render the snapshot into a compact text block for AKIRA's prompt. */
 export function renderSnapshot(s: FleetSnapshot): string {
