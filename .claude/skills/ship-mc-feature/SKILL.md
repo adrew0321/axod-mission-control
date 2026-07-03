@@ -41,9 +41,12 @@ straight to `main`). Verify `pnpm test` + `pnpm exec tsc --noEmit` green before 
 ## Phase 4 — Release (project-specific)
 `main` is release-only; releases are `dev`→`main` merges with a version bump + tag.
 
-1. Bump the version in BOTH `package.json` (`"version"`) and
-   `src/app/api/health/route.ts` (`version: '…'`). Pick the bump: patch for fixes,
-   minor for features.
+1. Bump the version in BOTH `package.json` (`"version"`) and `src/lib/version.ts`
+   (`APP_VERSION`). Keep them equal. `src/lib/version.ts` is the single in-app
+   source of truth — `/api/health` AND the HUD topbar both read `APP_VERSION`, so
+   never hardcode a version string in a component or route again (that's how the
+   topbar drifted to a stale v1.10.13 on the v1.11.0 release). Pick the bump:
+   patch for fixes, minor for features.
 2. Commit the bump on `dev`.
 3. Merge `dev`→`main` via a THROWAWAY worktree (don't switch the live checkout's branch):
    ```bash
