@@ -69,3 +69,39 @@ test('isLongReply: a bullet list is long', () => {
 test('isLongReply: a single very long paragraph is long', () => {
   assert.equal(isLongReply('word '.repeat(60)), true);
 });
+
+test('parses a fenced code block as its own block', () => {
+  const blocks = parseReply('Run this:\n\n```\npnpm exec playwright install\n```\n\nThen retry.');
+  assert.equal(blocks.length, 3);
+  assert.equal(blocks[0].type, 'paragraph');
+  assert.deepEqual(blocks[1], { type: 'code', value: 'pnpm exec playwright install' });
+  assert.equal(blocks[2].type, 'paragraph');
+});
+
+test('a code fence with a language label still captures just the code', () => {
+  const blocks = parseReply('```bash\nls -la\n```');
+  assert.deepEqual(blocks, [{ type: 'code', value: 'ls -la' }]);
+});
+
+test('a multi-line code block keeps its internal blank lines', () => {
+  const blocks = parseReply('```\nline1\n\nline2\n```');
+  assert.deepEqual(blocks, [{ type: 'code', value: 'line1\n\nline2' }]);
+});
+
+test('parses inline code spans', () => {
+  const blocks = parseReply('use the `Read` tool');
+  assert.deepEqual(blocks[0].type === 'paragraph' && blocks[0].spans, [
+    { type: 'text', value: 'use the ' },
+    { type: 'code', value: 'Read' },
+    { type: 'text', value: ' tool' },
+  ]);
+});
+
+test('isLongReply: a code block makes it long (renders left)', () => {
+  assert.equal(isLongReply('```\nls\n```'), true);
+});
+
+test('stripMarkdown drops code fences and inline backticks for clean speech', () => {
+  assert.equal(stripMarkdown('```\nls -la\n```'), 'ls -la');
+  assert.equal(stripMarkdown('use the `Read` tool'), 'use the Read tool');
+});
