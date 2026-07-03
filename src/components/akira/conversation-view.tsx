@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { parseReply, isLongReply, type Inline } from "@/lib/akira/format";
 import type { Turn } from "@/lib/akira/turns";
 
@@ -77,13 +77,16 @@ export function ConversationStream({
   liveReply,
   thinking,
   dim,
+  expanded,
+  onToggle,
 }: {
   turns: Turn[];
   liveReply: string;
   thinking: boolean;
   dim: boolean;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const showLive = liveReply.length > 0;
   const showThinking = thinking && !showLive;
@@ -97,18 +100,13 @@ export function ConversationStream({
     if (el && expanded) el.scrollTop = el.scrollHeight; // pin to newest when open
   }, [turns, liveReply, thinking, expanded]);
 
-  // Collapse automatically when a new turn starts (fresh answer becomes the focus).
-  useEffect(() => {
-    if (showLive || showThinking) setExpanded(false);
-  }, [showLive, showThinking]);
-
   if (turns.length === 0 && !showLive && !showThinking) return null;
 
   return (
     <div ref={ref} style={{ ...streamStyle, opacity: dim ? 0 : 1, ...(expanded ? expandedScroll : null) }}>
       {expanded ? (
         <>
-          <button type="button" style={cueBtn} onClick={() => setExpanded(false)}>⌄ collapse</button>
+          <button type="button" style={cueBtn} onClick={onToggle}>⌄ collapse</button>
           {turns.map((t, i) =>
             t.role === "you" ? <YouTurn key={i} t={t} /> : <AkiraTurn key={i} content={t.content} at={t.at} />,
           )}
@@ -118,7 +116,7 @@ export function ConversationStream({
       ) : (
         <>
           {historyCount > 0 && (
-            <button type="button" style={cueBtn} onClick={() => setExpanded(true)}>
+            <button type="button" style={cueBtn} onClick={onToggle}>
               ⌃ earlier ({historyCount})
             </button>
           )}
