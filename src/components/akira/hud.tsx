@@ -53,6 +53,11 @@ export function Hud({
   const [mode, setMode] = useState<OrbMode>("idle");
   const [reply, setReply] = useState("");
   const [turns, setTurns] = useState<Turn[]>(initialTurns ?? []);
+  // Live companion presence (the SSR prop is a snapshot that can't see the SSE
+  // handler's registry, so poll a route handler that can). Also drives the topbar.
+  const [companionLive, setCompanionLive] = useState(companionOnline);
+  // History drawer: hidden by default; opening it reclaims hero space (below).
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
   const [gate, setGate] = useState<{ ref: string; reason: string } | null>(null);
@@ -87,6 +92,26 @@ export function Hud({
   useEffect(() => {
     localStorage.setItem("akira_voice", voiceOn ? "1" : "0");
   }, [voiceOn]);
+
+  // Poll live companion presence so the topbar dot lights up when it connects.
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/companion/status", { cache: "no-store" });
+        const j = await r.json();
+        if (alive) setCompanionLive(!!j.online);
+      } catch {
+        /* keep last known state */
+      }
+    };
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     const tick = () => {
@@ -137,6 +162,7 @@ export function Hud({
   const runTurn = useCallback((instruction?: string) => {
     setReply("");
     liveReplyRef.current = "";
+    setHistoryOpen(false); // a fresh answer becomes the focus; tuck history away
     lastActivityRef.current = Date.now();
     setIdleStage(0);
     spokenBuffer.current = "";
@@ -277,6 +303,7 @@ export function Hud({
     setMode("thinking");
     setReply("");
     liveReplyRef.current = "";
+    setHistoryOpen(false);
     const res = await fetch("/api/akira/relay/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -342,8 +369,8 @@ export function Hud({
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
-        <span style={{ ...meta, color: companionOnline ? "#37d39b" : "#56657a", marginRight: 10 }}>
-          {companionOnline ? "laptop ●" : "laptop ○"}
+        <span style={{ ...meta, color: companionLive ? "#37d39b" : "#56657a", marginRight: 10 }}>
+          {companionLive ? "laptop ●" : "laptop ○"}
         </span>
         <span style={meta}>{clock}</span>
       </div>
@@ -369,13 +396,18 @@ export function Hud({
             transition: "transform 1.4s cubic-bezier(.4,0,.2,1)",
           }}
         >
-          <Orb mode={mode} size={320} />
+          {/* Shrink the actual size (not a transform) when history is open so the
+              thread reclaims real vertical space and the input never collides. */}
+          <Orb mode={mode} size={historyOpen ? 132 : 320} />
         </div>
         <div
           style={{
             ...greetLine,
-            opacity: idleStage >= 1 ? 0 : 1,
-            transition: "opacity 1s ease",
+            opacity: idleStage >= 1 || historyOpen ? 0 : 1,
+            maxHeight: historyOpen ? 0 : 64,
+            marginTop: historyOpen ? 0 : -28,
+            overflow: "hidden",
+            transition: "opacity .5s ease, max-height .5s ease, margin-top .5s ease",
           }}
         >
           {greeting}, A&apos;Keem.
@@ -385,6 +417,8 @@ export function Hud({
           liveReply={reply}
           thinking={mode === "thinking"}
           dim={idleStage >= 1}
+          expanded={historyOpen}
+          onToggle={() => setHistoryOpen((v) => !v)}
         />
 
         {proposal && (
@@ -496,7 +530,7 @@ export function Hud({
         </form>
         </div>
 
-        <div style={{ ...scrollCue, opacity: idleStage >= 1 ? 0 : 1, transition: "opacity 1s ease" }}>
+        <div style={{ ...scrollCue, opacity: idleStage >= 1 || historyOpen ? 0 : 1, transition: "opacity 1s ease" }}>
           SCROLL INTO MISSION CONTROL
           <span style={chev} />
         </div>
