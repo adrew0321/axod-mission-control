@@ -75,12 +75,15 @@
         cursor: pointer; }
 
       /* ---------- ORB ---------- */
+      /* The orb is a drag region (reposition anywhere), but the inner core is
+         no-drag so a click on the center restores the panel — a drag region
+         swallows click events, so the core is the click target. */
       #orb { width: 118px; height: 118px; margin: 6px auto; position: relative;
-        display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-app-region: drag; }
+        display: flex; align-items: center; justify-content: center; cursor: grab; -webkit-app-region: drag; }
       #orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 2.5px solid #7fdcff;
         box-shadow: 0 0 26px rgba(127,220,255,.6), inset 0 0 22px rgba(127,220,255,.25); transition: .3s; }
       #orb.pending .ring { border-color: #ff5acf; box-shadow: 0 0 30px rgba(255,90,207,.7); }
-      #orb .core { width: 88px; height: 88px; border-radius: 50%;
+      #orb .core { width: 88px; height: 88px; border-radius: 50%; cursor: pointer; -webkit-app-region: no-drag;
         background: radial-gradient(circle at 40% 33%, #16466a, #06121d 72%);
         display: flex; flex-direction: column; align-items: center; justify-content: center; }
       #orb .a { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: #7fdcff; text-shadow: 0 0 12px rgba(127,220,255,.7); }
