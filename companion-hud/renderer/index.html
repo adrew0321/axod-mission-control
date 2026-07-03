@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent;
+        font-family: Inter, system-ui, sans-serif; color: #eaffff; overflow: hidden; user-select: none; }
+      .hidden { display: none !important; }
+
+      /* ---------- FULL PANEL ---------- */
+      #panel { width: 340px; margin: 8px auto; border-radius: 18px; overflow: hidden;
+        background: linear-gradient(180deg, rgba(11,20,33,.97), rgba(6,11,20,.98));
+        border: 1px solid rgba(127,220,255,.35);
+        box-shadow: 0 0 0 1px rgba(127,220,255,.08), 0 20px 60px rgba(0,0,0,.6), 0 0 40px rgba(127,220,255,.14); }
+      .head { padding: 15px 16px 12px; border-bottom: 1px solid rgba(127,220,255,.12);
+        position: relative; -webkit-app-region: drag; }
+      .title { font-size: 17px; font-weight: 800; letter-spacing: 1px; }
+      .title b { color: #7fdcff; text-shadow: 0 0 14px rgba(127,220,255,.6); }
+      .title small { font-weight: 500; font-size: 11px; letter-spacing: 1.5px; color: #5f7186; margin-left: 6px; }
+      .min { position: absolute; top: 13px; right: 13px; width: 24px; height: 24px; border-radius: 6px;
+        display: flex; align-items: center; justify-content: center; font-size: 14px; color: #8fb2c9;
+        border: 1px solid rgba(127,220,255,.18); background: rgba(127,220,255,.05); cursor: pointer;
+        -webkit-app-region: no-drag; }
+      .conn { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+      .live { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; letter-spacing: .6px; color: #56657a; }
+      .live i { width: 8px; height: 8px; border-radius: 50%; background: #46506a; }
+      #panel.connected .live { color: #37d39b; }
+      #panel.connected .live i { background: #37d39b; box-shadow: 0 0 9px #37d39b; }
+      .spacer { flex: 1; }
+      .timer .k { font-size: 9px; letter-spacing: 1.2px; color: #5f7186; text-transform: uppercase; text-align: right; }
+      .timer .v { font-size: 15px; font-family: ui-monospace, monospace; color: #cfe8f5; letter-spacing: 1px; text-align: right; }
+
+      .sec { margin: 12px; border: 1px solid rgba(127,220,255,.15); border-radius: 12px; padding: 11px 12px;
+        background: rgba(127,220,255,.025); }
+      .sec.gate { border-color: rgba(255,90,207,.4); background: rgba(255,90,207,.05); box-shadow: 0 0 20px rgba(255,90,207,.1); }
+      .sec-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+      .sec-h .t { font-size: 11px; letter-spacing: 1.4px; text-transform: uppercase; color: #8fb2c9; font-weight: 600; }
+      .sec-h .n { font-size: 11px; color: #7fdcff; border: 1px solid rgba(127,220,255,.3); border-radius: 20px; padding: 1px 8px; }
+
+      .presence { display: flex; align-items: center; gap: 11px; }
+      .avatar { width: 42px; height: 42px; border-radius: 11px; flex: none;
+        background: radial-gradient(circle at 35% 30%, #12405e, #071420);
+        border: 1.5px solid #7fdcff; box-shadow: 0 0 14px rgba(127,220,255,.35);
+        display: flex; align-items: center; justify-content: center; font-weight: 800; color: #7fdcff; font-size: 16px; }
+      .who { font-size: 14px; font-weight: 700; }
+      .role { font-size: 11px; color: #8092a5; }
+      .pstat { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #56657a; margin-top: 3px; }
+      .pstat i { width: 6px; height: 6px; border-radius: 50%; background: #46506a; }
+      #panel.connected .pstat { color: #37d39b; }
+      #panel.connected .pstat i { background: #37d39b; box-shadow: 0 0 6px #37d39b; }
+      .loc { font-size: 11px; color: #5f7186; font-family: ui-monospace, monospace; margin-top: 1px; }
+
+      .appr-item { font-size: 12px; padding-top: 10px; }
+      .appr-item:first-child { padding-top: 0; }
+      .appr-item + .appr-item { border-top: 1px solid rgba(255,90,207,.18); margin-top: 8px; }
+      .rsn { color: #ffd0f0; font-weight: 600; }
+      .tgt { color: #a9bccd; margin-top: 3px; }
+      .tgt b { color: #eaffff; }
+      .ts { color: #5f7186; font-family: ui-monospace, monospace; font-size: 10.5px; margin-top: 2px; }
+      .btns { display: flex; gap: 8px; margin-top: 10px; }
+      .btns button { flex: 1; padding: 7px 0; border-radius: 8px; font-size: 12px; font-weight: 700;
+        letter-spacing: .5px; cursor: pointer; font-family: inherit; background: transparent; }
+      .btns .deny { border: 1px solid rgba(255,90,207,.55); color: #ff8fdc; }
+      .btns .ok { border: 1px solid rgba(127,220,255,.6); color: #04121c; background: #7fdcff; }
+      .empty { font-size: 12px; color: #5f7186; }
+
+      .kv { display: flex; justify-content: space-between; font-size: 11.5px; padding: 3px 0; }
+      .kv .k { color: #8092a5; }
+      .kv .v { color: #cfe8f5; font-family: ui-monospace, monospace; }
+      .kv .v.ok { color: #37d39b; }
+
+      .foot { display: flex; padding: 11px 14px 14px; }
+      .stop { flex: 1; text-align: center; padding: 8px 0; border-radius: 9px; font-size: 12px; font-weight: 700;
+        letter-spacing: 1px; border: 1px solid rgba(255,90,207,.4); color: #ff8fdc; background: rgba(255,90,207,.06);
+        cursor: pointer; }
+
+      /* ---------- ORB ---------- */
+      #orb { width: 118px; height: 118px; margin: 6px auto; position: relative;
+        display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-app-region: drag; }
+      #orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 2.5px solid #7fdcff;
+        box-shadow: 0 0 26px rgba(127,220,255,.6), inset 0 0 22px rgba(127,220,255,.25); transition: .3s; }
+      #orb.pending .ring { border-color: #ff5acf; box-shadow: 0 0 30px rgba(255,90,207,.7); }
+      #orb .core { width: 88px; height: 88px; border-radius: 50%;
+        background: radial-gradient(circle at 40% 33%, #16466a, #06121d 72%);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #orb .a { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: #7fdcff; text-shadow: 0 0 12px rgba(127,220,255,.7); }
+      #orb .l { font-size: 8px; letter-spacing: 2px; color: #7a8ea0; }
+      #orb .dot { position: absolute; top: 14px; right: 20px; width: 12px; height: 12px; border-radius: 50%;
+        background: #46506a; border: 2px solid #06121d; }
+      #orb.connected .dot { background: #37d39b; box-shadow: 0 0 10px #37d39b; }
+    </style>
+  </head>
+  <body>
+    <!-- FULL PANEL -->
+    <div id="panel">
+      <div class="head">
+        <div class="title"><b>AKIRA</b><small>// LOCAL COMPANION</small></div>
+        <div class="min" id="minBtn" title="Minimize to orb">—</div>
+        <div class="conn">
+          <div class="live"><i></i><span id="connLabel">DISCONNECTED</span></div>
+          <div class="spacer"></div>
+          <div class="timer"><div class="k">Active session</div><div class="v" id="timer">00:00:00</div></div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-h"><div class="t">System presence</div></div>
+        <div class="presence">
+          <div class="avatar" id="avatar">A</div>
+          <div>
+            <div class="who" id="operator">Operator</div>
+            <div class="role">Operator</div>
+            <div class="pstat"><i></i><span id="onlineLabel">Companion offline</span></div>
+            <div class="loc" id="loc">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec" id="apprSec">
+        <div class="sec-h"><div class="t">Pending approvals</div><div class="n" id="apprCount">0</div></div>
+        <div id="apprList"></div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-h"><div class="t">Connection &amp; security</div></div>
+        <div class="kv"><span class="k">Token</span><span class="v" id="tokenAuth">waiting…</span></div>
+        <div class="kv"><span class="k">Transport</span><span class="v" id="transport">outbound-only</span></div>
+        <div class="kv"><span class="k">Browser profile</span><span class="v" id="profile">persistent · local</span></div>
+        <div class="kv"><span class="k">Sensitive domains</span><span class="v" id="domains">0 guarded</span></div>
+      </div>
+
+      <div class="foot"><div class="stop" id="stopBtn">■ STOP — abort all activity</div></div>
+    </div>
+
+    <!-- ORB -->
+    <div id="orb" class="hidden">
+      <div class="ring"></div>
+      <div class="dot"></div>
+      <div class="core"><div class="a">AKIRA</div><div class="l">LOCAL</div></div>
+    </div>
+
+    <script src="./hud.js"></script>
+  </body>
+</html>

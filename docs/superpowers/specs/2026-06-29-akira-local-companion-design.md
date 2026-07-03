@@ -1,6 +1,6 @@
 # AKIRA Local Companion — Design
 
-**Status:** Approved for planning (2026-06-29)
+**Status:** Implemented — 2026-06-30
 
 ## Goal
 
@@ -31,6 +31,10 @@ moving files laptop↔Mini are later slices.
   the hard gate is enforced by the Companion (the hands), not trusted to AKIRA.
 - **HUD:** approvals/confirmations surface in the AKIRA HUD as a **smooth**
   proposal-card interaction (no jarring layout jumps).
+
+> **Update (2026-07-02):** The native laptop HUD is specced separately in
+> [2026-07-02-akira-companion-hud-design.md](2026-07-02-akira-companion-hud-design.md)
+> and moves hard-gate approvals local (companion-held queue over a localhost bridge).
 
 ## Out of scope for v1 (named to prevent creep)
 
