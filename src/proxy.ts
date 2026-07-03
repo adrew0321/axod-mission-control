@@ -18,10 +18,16 @@ export const config = {
      *   - /login            (the login page itself)
      *   - /api/auth/*       (login + logout endpoints)
      *   - /api/health       (uptime monitoring; never gated)
+     *   - /api/companion/stream, /api/companion/result
+     *                       (the Local Companion authenticates with
+     *                        COMPANION_TOKEN, not a session cookie — it has no
+     *                        browser session, so the session gate would redirect
+     *                        its SSE connection to /login and it could never
+     *                        register. These routes self-authenticate the token.)
      *   - /_next/*          (Next.js static assets + RSC payloads)
      *   - /favicon.ico, sitemap.xml, robots.txt
      *   - any path that contains a "." (static files: .css, .js, .png, etc)
      */
-    '/((?!login$|api/auth/|api/health$|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
+    '/((?!login$|api/auth/|api/companion/(?:stream|result)$|api/health$|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
   ],
 };

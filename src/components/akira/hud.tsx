@@ -283,6 +283,11 @@ export function Hud({
     runTurn(instruction);
   }
 
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.href = "/login";
+  }
+
   function startMic() {
     setMode("listening");
     const rec = createRecognizer({
@@ -372,7 +377,14 @@ export function Hud({
         <span style={{ ...meta, color: companionLive ? "#37d39b" : "#56657a", marginRight: 10 }}>
           {companionLive ? "laptop ●" : "laptop ○"}
         </span>
-        <span style={meta}>{clock}</span>
+        <span style={{ ...meta, marginRight: 12 }}>{clock}</span>
+        <button type="button" onClick={logout} title="Sign out" aria-label="Sign out" style={logoutBtn}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </button>
       </div>
 
       {/* docked mini-orb (appears on scroll) */}
@@ -622,6 +634,11 @@ const topbar: React.CSSProperties = {
   backdropFilter: "blur(6px)",
 };
 const meta: React.CSSProperties = { color: "#6b7a8d", fontSize: 12, fontFamily: "ui-monospace, monospace" };
+const logoutBtn: React.CSSProperties = {
+  display: "grid", placeItems: "center", width: 28, height: 28, borderRadius: 7,
+  border: "1px solid rgba(127,220,255,.18)", background: "rgba(127,220,255,.05)",
+  color: "#8fb2c9", cursor: "pointer", padding: 0,
+};
 const hero: React.CSSProperties = {
   position: "relative", zIndex: 1, minHeight: "100vh",
   display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "70px 18px 40px",
