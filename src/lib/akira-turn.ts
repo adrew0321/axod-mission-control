@@ -14,6 +14,8 @@ import {
   AKIRA_RELAY,
   AKIRA_LIST_SESSIONS,
   AKIRA_GET_SESSION,
+  AKIRA_REMEMBER,
+  AKIRA_FORGET,
 } from './akira/tools';
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
@@ -99,6 +101,8 @@ export async function runAkiraTurn(
         AKIRA_RELAY,
         AKIRA_LIST_SESSIONS,
         AKIRA_GET_SESSION,
+        AKIRA_REMEMBER,
+        AKIRA_FORGET,
         ...BROWSER_TOOL_NAMES,
       ],
       signal: opts.signal,
