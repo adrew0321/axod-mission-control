@@ -1,5 +1,6 @@
 import { db } from '@/db/client';
 import { sql } from 'drizzle-orm';
+import { APP_VERSION } from '@/lib/version';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +22,7 @@ export async function GET() {
     ...(dbError ? { dbError } : {}),
     durationMs: Date.now() - startedAt,
     timestamp: new Date().toISOString(),
-    version: '1.11.0',
+    version: APP_VERSION,
   };
 
   return Response.json(body, { status: dbStatus === 'ok' ? 200 : 503 });
