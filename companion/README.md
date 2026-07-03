@@ -46,3 +46,23 @@ pnpm start
 
 You will see log output indicating that the Companion has connected to the Mini.
 The HUD top bar will now show "laptop ●" indicating that the browser tools are active.
+
+## The native HUD
+
+The Companion exposes a **localhost-only** WebSocket bridge (bound to `127.0.0.1`,
+random port) and writes `~/.akira-companion/bridge.json` (`{ port, token }`, mode
+600). The native HUD (`../companion-hud/`) reads that file and connects to it.
+
+When the HUD is connected, hard-gated actions (buy / pay / send / delete …) are
+**held locally** and you approve or deny them in the HUD — the Mini does not need
+to be reachable to resolve a gate. When the HUD is not running, the Companion
+falls back to the Mini approval path as before. `STOP` in the HUD aborts all
+activity and clears the queue.
+
+Optional env: `COMPANION_OPERATOR` sets the name shown in the HUD (default
+`Operator`).
+
+Run the HUD alongside the Companion:
+```bash
+cd ../companion-hud && pnpm install && pnpm start
+```
