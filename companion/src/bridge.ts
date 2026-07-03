@@ -37,7 +37,11 @@ export function startBridge(h: BridgeHandlers) {
       if (msg.type === 'hello') {
         if (msg.token === token) {
           authed.add(ws);
-          ws.send(JSON.stringify(buildState(h.getState())));
+          try {
+            ws.send(JSON.stringify(buildState(h.getState())));
+          } catch {
+            authed.delete(ws);
+          }
         } else {
           ws.close();
         }
