@@ -11,15 +11,17 @@ AKIRA has no memory beyond the last 24 turns of her thread — everything older 
 lost when a session ends. This feature gives her a persistent, **Obsidian-native
 Markdown vault** she reads into her prompt each turn and writes to in-the-moment
 via a scoped tool. The vault is a **private git repo** synced to the operator's
-laptop Obsidian app, and browsable through a private **Settings → Memory** view in
-Mission Control. It is never surfaced on the public-facing front door.
+laptop Obsidian app, and browsable through a **PIN-locked Settings section on the
+AKIRA front door** that stays collapsed until unlocked. Memory is never on screen
+until the operator deliberately unlocks it.
 
 ## Goals
 
 - AKIRA remembers durable facts/decisions/preferences/context across sessions.
 - The operator can browse/edit her memory in the **Obsidian app** (git-synced) and
-  view it in a **private Settings area** in Mission Control.
-- **Private by construction:** private repo, login-gated app, off the front door.
+  view it in a **PIN-locked Settings section** on the AKIRA front door.
+- **Private by construction:** private repo, login-gated app, and a PIN-locked
+  section that stays collapsed until deliberately unlocked.
 - **Model-agnostic:** plain Markdown + prompt-injection + git — no Claude-specific
   or embeddings dependency.
 
@@ -28,8 +30,10 @@ Mission Control. It is never surfaced on the public-facing front door.
 - Nightly auto-distillation of conversations into notes (a later Dreaming hook).
 - Encryption at rest (would break Obsidian browsing — see Security).
 - Semantic/vector search (retrieval is index-in-prompt + grep/read).
-- Creating/editing notes *from* Mission Control (v1 MC view is list/read/delete;
-  authoring happens via AKIRA's `remember` tool or the Obsidian app).
+- Creating/editing notes *from* the UI, and an in-app note-detail/body view (v1 grid
+  is list + forget; authoring is AKIRA's `remember` tool, full bodies via Obsidian).
+- A dashboard "Memory" view (the front-door locked section is v1; the existing nav
+  placeholder is left untouched and can reuse the same API later).
 
 ## Locked decisions
 
@@ -39,7 +43,8 @@ Mission Control. It is never surfaced on the public-facing front door.
 | Curation | **In-the-moment** — AKIRA writes via a scoped `remember` tool (no nightly job) |
 | Mutations | `remember` **upserts**; `forget` **deletes** — both in v1 |
 | At-rest | **Plaintext** in a private repo (keeps Obsidian browsable) |
-| UI home | **Settings → Memory** in Mission Control; **nothing on the front door** |
+| UI home | **PIN-locked Settings section on the AKIRA front door** — collapsed until unlocked, drops open to a memory grid |
+| Unlock | **Server-verified PIN**; memory data isn't fetched until the PIN checks out; re-locks on collapse/leave/idle |
 
 ## Architecture
 
@@ -54,7 +59,7 @@ Mission Control. It is never surfaced on the public-facing front door.
   │  data/akira-memory/  (git checkout; gitignored by app) │
   │    · AKIRA reads INDEX into her prompt each turn        │
   │    · `remember`/`forget` tools write notes (vault-only) │
-  │    · Settings → Memory view lists/reads/deletes         │
+  │    · PIN-locked front-door section: list / forget       │
   └───────────────────────────────────────────────────────┘
 ```
 
@@ -106,17 +111,39 @@ facts/decisions/preferences (not transient chatter), keep one fact per note, lin
 related notes with `[[…]]`, update instead of duplicating, and **never store
 secrets/passwords/tokens**.
 
-## Mission Control: Settings → Memory (private)
+## AKIRA front door: PIN-locked Settings section
 
-- A new **Settings** area in the dashboard (`/dashboard`), with **Memory** as its
-  first section. Navigated-to on purpose; auth-gated by the existing session proxy.
-- The Memory view **lists** notes (type chip + title + description, newest first),
-  lets you **read** a note's body, and **delete** one (calls `forget`).
-- **API (session-gated route handlers):** `GET /api/memory` (list),
-  `GET /api/memory/[slug]` (read), `DELETE /api/memory/[slug]` (delete → regenerate
-  index + commit/push). These are route handlers so they're covered by the session
-  proxy (they are NOT companion token routes — do not exempt them).
-- **Front door:** unchanged — no memory card, no count, nothing.
+Memory's only UI surface is a **Settings** section in the front door's Mission
+Control scroll area (below the overnight brief). It is **collapsed and locked by
+default** — nothing sensitive renders until the operator unlocks it.
+
+- **Locked state:** a `Settings` panel showing only "Locked — memory & sensitive
+  info" and a **PIN** entry. No memory data is fetched or present in the page.
+- **Unlock:** the PIN is sent to the server, **verified server-side** (constant-time
+  compare against `AKIRA_MEMORY_PIN` from the Mini's `.env`, with a small attempt
+  limiter). Only on success
+  does the client fetch the memory list. So notes never sit in the page/network until
+  unlocked.
+- **Unlocked state:** the panel drops open to a **memory grid** — columns
+  **Type / Note / Updated**, one row per note (type chip, title + one-line
+  description, timestamp, and a `×` to **forget**), plus **Open in Obsidian** and a
+  **Lock** button.
+- **Re-locks** automatically on collapse, navigating away/reload, or after a short
+  idle — memory is only visible while actively being viewed.
+- **Reading full bodies** is via the Obsidian app in v1 (the grid shows the
+  description); an in-app note-detail view is a fast-follow.
+
+**API (session-gated route handlers; PIN-gated in the body):**
+- `POST /api/memory` `{ pin }` → verify session **and** PIN → return the note list
+  (frontmatter only). Wrong PIN → 401 (attempt-limited).
+- `DELETE /api/memory/[slug]` `{ pin }` → verify session + PIN → `forget` (delete →
+  regenerate index → commit/push).
+These are ordinary route handlers, covered by the session proxy (NOT companion
+token routes — do not exempt them from the proxy).
+
+The existing dashboard "Memory" nav placeholder ([nav-sections.ts]) is left as-is
+for now; the front-door locked section is the v1 home. (A fuller dashboard view can
+reuse the same API later.)
 
 ## Components (small, focused, testable)
 
@@ -131,7 +158,11 @@ secrets/passwords/tokens**.
 - **`remember`/`forget`** wired into `src/lib/akira/tools.ts` (pure arg-validation
   in `tool-actions` where practical); added to `extraAllowedTools` in `akira-turn.ts`.
 - **`prompt.ts` / `akira-turn.ts`** — `## MEMORY` injection + the pre-turn pull.
-- **Settings/Memory** view components + the three `/api/memory` route handlers.
+- **`src/lib/akira/memory/pin.ts`** — pure: `verifyPin(input, secret)` (constant-time)
+  + a tiny attempt limiter. Unit-tested.
+- **Front-door Settings section** in `hud.tsx` (locked panel → PIN → memory grid,
+  re-lock on collapse/idle) + the `POST /api/memory` and `DELETE /api/memory/[slug]`
+  route handlers.
 
 ## Error handling
 
@@ -151,8 +182,11 @@ secrets/passwords/tokens**.
   scoped to that one repo** (write). No public surface.
 - **Login-gated** — the app (front door, dashboard, `/api/memory/*`) all sit behind
   the session proxy; only the authenticated operator reaches memory.
-- **Off the front door** — memory lives only in the private Settings area, so it
-  never appears on the landing page / in screenshots / screen-shares.
+- **PIN-locked & collapsed by default** — memory sits in a Settings section on the
+  front door but stays locked; the data is not fetched or rendered until the
+  server-verified PIN succeeds, and it re-locks on collapse/leave/idle. So it never
+  appears in casual view / screenshots / screen-shares. The PIN is a second factor
+  on top of the session login.
 - **Plaintext** (chosen over encryption to keep Obsidian browsing) — the private
   repo + login gate is the boundary; protects against everything short of a
   GitHub-account or Mini-disk compromise.
@@ -165,7 +199,8 @@ secrets/passwords/tokens**.
   `safeSlug` path-guard (reject `..`, absolute, empty), `buildIndex` ordering/format.
 - **Manual/integration:** git clone/pull/push on the Mini; `remember`/`forget`
   end-to-end (AKIRA writes → note appears → Obsidian pulls it); prompt injection
-  (she recalls across a fresh session); Settings → Memory list/read/delete.
+  (she recalls across a fresh session); the front-door locked section
+  (wrong PIN rejected, right PIN → grid, forget works, re-lock on collapse/idle).
 
 ## One-time setup (ops, human-run — documented in the plan)
 
@@ -173,7 +208,9 @@ secrets/passwords/tokens**.
 2. On the Mini: generate a **deploy key**, add it to the repo (write access), clone
    to `data/akira-memory`, set the checkout's git identity to `AKIRA`.
 3. App repo `.gitignore`: add `data/akira-memory/`.
-4. Laptop: clone the repo, open in Obsidian, enable the **Git plugin** (auto-pull).
+4. Set **`AKIRA_MEMORY_PIN`** in the Mini's `.env` (the unlock PIN for the Settings
+   section). Optional `AKIRA_MEMORY_DIR` / `AKIRA_MEMORY_PULL_MS`.
+5. Laptop: clone the repo, open in Obsidian, enable the **Git plugin** (auto-pull).
 
 ## Conventions
 
