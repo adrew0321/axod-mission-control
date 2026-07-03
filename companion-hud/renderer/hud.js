@@ -1,10 +1,8 @@
-const params = new URLSearchParams(location.search);
-const PORT = params.get('port');
-const TOKEN = params.get('token');
-
 let ws = null;
 let state = null;
-let minimized = false;
+let PORT = null;
+let TOKEN = null;
+let reconnectTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const panel = $('panel');
@@ -82,7 +80,6 @@ function render() {
 }
 
 function setMinimized(m) {
-  minimized = m;
   panel.classList.toggle('hidden', m);
   orb.classList.toggle('hidden', !m);
   const [w, h] = m ? ORB_SIZE : PANEL_SIZE;
@@ -94,16 +91,39 @@ orb.onclick = () => setMinimized(false);
 $('stopBtn').onclick = () => send({ type: 'stop' });
 
 function connect() {
-  if (!PORT) return;
+  if (!PORT) return; // no bridge yet — wait for a hud.onBridge push
   ws = new WebSocket(`ws://127.0.0.1:${PORT}`);
   ws.onopen = () => send({ type: 'hello', token: TOKEN });
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'state') { state = msg; render(); }
   };
-  ws.onclose = () => { state = null; render(); setTimeout(connect, 1500); };
+  ws.onclose = () => {
+    state = null;
+    render();
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, 1500);
+  };
   ws.onerror = () => ws.close();
 }
 
-connect();
+// Main pushes the bridge { port, token } whenever bridge.json first appears or
+// changes (a Companion restart mints fresh creds). Reconnect to the latest
+// creds so the HUD self-heals no matter the start order.
+function applyBridge(bridge) {
+  if (!bridge) return; // Companion offline — keep retrying the existing creds
+  if (bridge.port === PORT && bridge.token === TOKEN) return; // unchanged
+  PORT = bridge.port;
+  TOKEN = bridge.token;
+  clearTimeout(reconnectTimer);
+  if (ws) {
+    ws.onclose = null; // don't let the stale socket schedule a reconnect to old creds
+    try { ws.close(); } catch {}
+    ws = null;
+  }
+  connect();
+}
+
+if (window.hud && window.hud.onBridge) window.hud.onBridge(applyBridge);
+
 render();

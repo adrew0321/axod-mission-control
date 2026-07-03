@@ -6,7 +6,7 @@ collapses from a full glass panel to a draggable orb.
 
 ## How it works
 
-The HUD reads `~/.akira-companion/bridge.json` (written by the Companion) to find
+The HUD watches `~/.akira-companion/bridge.json` (written by the Companion) for
 the localhost bridge port + token, connects over a `127.0.0.1` WebSocket, and:
 
 - renders live **presence** (operator, host, current task, session timer),
@@ -26,11 +26,14 @@ node node_modules/electron/install.js
 
 ## Run
 
-Start the Companion first (`cd ../companion && pnpm start`), then:
-
 ```bash
 pnpm start
 ```
+
+Start order doesn't matter — the HUD watches for `bridge.json` and connects as
+soon as the Companion is up, and reconnects automatically if the Companion
+restarts (it mints fresh creds each start). Typically you'll run the Companion
+(`cd ../companion && pnpm start`) alongside it.
 
 The orb's dot turns green when the Companion's link to the Mini is up, and glows
 magenta when an approval is waiting. Drag the header/orb to reposition; click
