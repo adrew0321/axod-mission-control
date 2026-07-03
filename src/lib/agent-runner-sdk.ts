@@ -87,6 +87,10 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
   const cwd = workingDir && existsSync(workingDir) ? workingDir : process.cwd();
 
   let fullText = '';
+  // When the agent interleaves text with tool calls, its text arrives as
+  // separate blocks with no separator ("…clocks." + "Now let me…" = "clocks.Now").
+  // Insert a paragraph break before the first text after a tool call.
+  let pendingBreak = false;
   // Correlate tool_result blocks (which carry only tool_use_id) back to the
   // tool name, so consumers can tell which results were Bash commands.
   const toolNames = new Map<string, string>();
@@ -114,8 +118,12 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
       if (message.type === 'stream_event') {
         const event = message.event;
         if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-          const text = event.delta.text;
+          let text = event.delta.text;
           if (text) {
+            if (pendingBreak && fullText.trim() && !fullText.endsWith('\n')) {
+              text = '\n\n' + text;
+            }
+            pendingBreak = false;
             fullText += text;
             yield { type: 'token', content: text };
           }
@@ -135,6 +143,7 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
                 const tu = block as { id?: string; name?: string; input?: unknown };
                 if (tu.name) {
                   if (tu.id) toolNames.set(tu.id, tu.name);
+                  pendingBreak = true; // break before the next text block
                   yield {
                     type: 'tool',
                     name: tu.name,

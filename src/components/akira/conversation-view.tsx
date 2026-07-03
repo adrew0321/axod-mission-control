@@ -9,7 +9,11 @@ export function ReplyBody({ text }: { text: string }) {
   return (
     <>
       {blocks.map((b, i) =>
-        b.type === "list" ? (
+        b.type === "code" ? (
+          <pre key={i} style={codeBlock}>
+            <code>{b.value}</code>
+          </pre>
+        ) : b.type === "list" ? (
           <ul key={i} style={replyList}>
             {b.items.map((item, j) => (
               <li key={j} style={replyLi}>
@@ -29,6 +33,7 @@ export function ReplyBody({ text }: { text: string }) {
 }
 function renderSpan(s: Inline, i: number) {
   if (s.type === "bold") return <strong key={i} style={{ color: "#eaffff", fontWeight: 700 }}>{s.value}</strong>;
+  if (s.type === "code") return <code key={i} style={inlineCode}>{s.value}</code>;
   if (s.type === "link")
     return (
       <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" style={replyLink}>
@@ -209,6 +214,28 @@ function akiraBlock(long: boolean): React.CSSProperties {
     fontSize: 15.5,
   };
 }
+const codeBlock: React.CSSProperties = {
+  margin: "0 0 12px",
+  padding: "10px 12px",
+  background: "rgba(4,10,18,.75)",
+  border: "1px solid rgba(127,220,255,.18)",
+  borderRadius: 10,
+  overflowX: "auto",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSize: 12.5,
+  lineHeight: 1.55,
+  color: "#a9e6ff",
+  whiteSpace: "pre",
+  textAlign: "left",
+};
+const inlineCode: React.CSSProperties = {
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSize: "0.9em",
+  padding: "1px 5px",
+  borderRadius: 5,
+  background: "rgba(127,220,255,.1)",
+  color: "#a9e6ff",
+};
 const replyPara: React.CSSProperties = { margin: "0 0 12px", lineHeight: 1.7, whiteSpace: "pre-line" };
 const replyList: React.CSSProperties = { margin: "0 0 12px", padding: 0, listStyle: "none", display: "grid", gap: 6 };
 const replyLi: React.CSSProperties = { display: "flex", alignItems: "flex-start", lineHeight: 1.6 };
