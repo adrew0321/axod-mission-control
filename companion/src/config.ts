@@ -7,6 +7,7 @@ export interface CompanionConfig {
   token: string;
   profileDir: string;
   sensitiveDomains: string[];
+  operator: string;
 }
 
 export function loadConfig(): CompanionConfig {
@@ -16,5 +17,6 @@ export function loadConfig(): CompanionConfig {
   const profileDir = process.env.COMPANION_PROFILE ?? join(homedir(), '.akira-companion', 'profile');
   const sensitiveDomains = (process.env.COMPANION_SENSITIVE ?? '')
     .split(',').map((s) => s.trim()).filter(Boolean);
-  return { miniUrl, token, profileDir, sensitiveDomains };
+  const operator = process.env.COMPANION_OPERATOR ?? 'Operator';
+  return { miniUrl, token, profileDir, sensitiveDomains, operator };
 }

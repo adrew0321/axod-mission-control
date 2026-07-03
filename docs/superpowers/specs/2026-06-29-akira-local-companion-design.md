@@ -32,6 +32,10 @@ moving files laptop↔Mini are later slices.
 - **HUD:** approvals/confirmations surface in the AKIRA HUD as a **smooth**
   proposal-card interaction (no jarring layout jumps).
 
+> **Update (2026-07-02):** The native laptop HUD is specced separately in
+> [2026-07-02-akira-companion-hud-design.md](2026-07-02-akira-companion-hud-design.md)
+> and moves hard-gate approvals local (companion-held queue over a localhost bridge).
+
 ## Out of scope for v1 (named to prevent creep)
 
 - Launching native apps; moving files laptop↔Mini — next Companion slices.

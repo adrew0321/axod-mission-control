@@ -1,7 +1,11 @@
 import type { Command, Result } from './protocol';
 import type { CompanionConfig } from './config';
 
-export function connect(cfg: CompanionConfig, onCommand: (cmd: Command) => void) {
+export function connect(
+  cfg: CompanionConfig,
+  onCommand: (cmd: Command) => void,
+  onStatus?: (connected: boolean) => void,
+) {
   let stopped = false;
   let controller: AbortController | null = null;
 
@@ -23,6 +27,7 @@ export function connect(cfg: CompanionConfig, onCommand: (cmd: Command) => void)
         });
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
         console.log('[companion] connected to', cfg.miniUrl);
+        onStatus?.(true);
         const reader = res.body.getReader();
         const dec = new TextDecoder();
         let buf = '';
@@ -40,6 +45,7 @@ export function connect(cfg: CompanionConfig, onCommand: (cmd: Command) => void)
           }
         }
       } catch (e) {
+        onStatus?.(false);
         if (!stopped) console.error('[companion] stream error, retrying:', (e as Error).message);
       }
       if (!stopped) await new Promise((r) => setTimeout(r, 3000)); // backoff
