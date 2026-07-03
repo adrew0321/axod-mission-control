@@ -113,6 +113,8 @@ const conn = connect(
       currentTask = 'idle';
       bridge.push();
       await conn.postResult(result);
+    }).catch((err) => {
+      console.error('[companion] command chain error:', err);
     });
   },
   (up) => {

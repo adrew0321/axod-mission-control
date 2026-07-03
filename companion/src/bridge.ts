@@ -30,6 +30,10 @@ export function startBridge(h: BridgeHandlers) {
     console.log(`[companion] HUD bridge listening on 127.0.0.1:${port}`);
   });
 
+  wss.on('error', (err) => {
+    console.error('[companion] HUD bridge error:', err);
+  });
+
   wss.on('connection', (ws) => {
     ws.on('message', (data) => {
       const msg = parseClientMsg(data.toString());
