@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { margin: 0; height: 100%; background: transparent;
+        font-family: Inter, system-ui, sans-serif; color: #eaffff; overflow: hidden; }
+      #orb { width: 118px; height: 118px; margin: 6px auto; position: relative;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
+        -webkit-app-region: drag; }
+      #orb .ring { position: absolute; inset: 0; border-radius: 50%; border: 2.5px solid #7fdcff;
+        box-shadow: 0 0 26px rgba(127,220,255,.6), inset 0 0 22px rgba(127,220,255,.25);
+        transition: border-color .3s, box-shadow .3s; }
+      #orb.pending .ring { border-color: #ff5acf; box-shadow: 0 0 30px rgba(255,90,207,.7); }
+      #orb .core { width: 88px; height: 88px; border-radius: 50%;
+        background: radial-gradient(circle at 40% 33%, #16466a, #06121d 72%);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; }
+      #orb .a { font-size: 16px; font-weight: 800; letter-spacing: 1px; color: #7fdcff;
+        text-shadow: 0 0 12px rgba(127,220,255,.7); }
+      #orb .l { font-size: 8px; letter-spacing: 2px; color: #7a8ea0; }
+      #orb .dot { position: absolute; top: 14px; right: 20px; width: 12px; height: 12px;
+        border-radius: 50%; background: #46506a; border: 2px solid #06121d; }
+      #orb.connected .dot { background: #37d39b; box-shadow: 0 0 10px #37d39b; }
+    </style>
+  </head>
+  <body>
+    <div id="orb">
+      <div class="ring"></div>
+      <div class="dot"></div>
+      <div class="core"><div class="a">AKIRA</div><div class="l">LOCAL</div></div>
+    </div>
+    <script src="./hud.js"></script>
+  </body>
+</html>
