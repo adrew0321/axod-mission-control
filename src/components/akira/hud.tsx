@@ -6,6 +6,7 @@ import type { FleetSnapshot } from "@/lib/fleet-snapshot";
 import { speak, createRecognizer, voiceSupport } from "@/lib/voice/speech";
 import { splitSentences } from "@/lib/voice/chunk";
 import { stripMarkdown } from "@/lib/akira/format";
+import { APP_VERSION } from "@/lib/version";
 import { ConversationStream } from "./conversation-view";
 import type { Turn } from "@/lib/akira/turns";
 
@@ -337,7 +338,7 @@ export function Hud({
 
       <div style={topbar}>
         <span style={{ fontWeight: 700, letterSpacing: 2.5, fontSize: 14, color: "#7fdcff" }}>AKIRA</span>
-        <span style={meta}>v1.10.13</span>
+        <span style={meta}>v{APP_VERSION}</span>
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#37d39b", boxShadow: "0 0 8px #37d39b" }} />
         <span style={meta}>online</span>
         <span style={{ flex: 1 }} />
