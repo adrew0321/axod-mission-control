@@ -20,6 +20,7 @@ import {
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
+import { indexText, gitPullDebounced } from './akira/memory/store';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
 import { isOnline as companionOnline } from '@/lib/companion/registry';
@@ -73,8 +74,21 @@ export async function runAkiraTurn(
     );
 
     const snapshot = await getFleetSnapshotLive();
+
+    gitPullDebounced(); // pick up the operator's Obsidian edits (debounced, best-effort)
+    let memoryBlock = '';
+    try {
+      const idx = indexText();
+      memoryBlock = idx
+        ? `\n\n## MEMORY\nNotes you've saved (read one with your Read tool at data/akira-memory/<slug>.md):\n${idx}`
+        : `\n\n## MEMORY\n(empty — save durable facts with the remember tool)`;
+    } catch {
+      memoryBlock = '';
+    }
+
     const prompt =
       buildAkiraPrompt(snapshot, roster, transcript, agentLabels) +
+      memoryBlock +
       `\n\n## LAPTOP COMPANION\n${companionOnline()
         ? 'The laptop companion is CONNECTED — you may use browser_navigate/read/type/click. Work read→act→read. State the task and let the operator approve before starting; never retry a gated (blocked) action — wait for approval.'
         : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
