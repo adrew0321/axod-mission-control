@@ -62,6 +62,11 @@ function render() {
   panel.classList.toggle('connected', connected);
   orb.classList.toggle('connected', connected);
   orb.classList.toggle('pending', pending);
+  $('apprSec').classList.toggle('gate', pending); // magenta accent only when something is waiting
+
+  const authed = !!state?.security?.tokenAuthed;
+  $('tokenAuth').textContent = authed ? 'authenticated ✓' : 'waiting…';
+  $('tokenAuth').classList.toggle('ok', authed);
 
   if (state) {
     const p = state.presence;
@@ -75,7 +80,6 @@ function render() {
     $('profile').textContent = state.security.profile;
     $('domains').textContent = `${state.security.sensitiveCount} guarded`;
     renderApprovals(queue);
-    $('apprSec').classList.toggle('hidden', false);
   }
 }
 

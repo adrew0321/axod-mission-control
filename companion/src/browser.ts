@@ -85,11 +85,21 @@ export function createBrowser(cfg: CompanionConfig) {
     }
   }
 
+  // Host of the current page, best-effort ('' if unknown) — used to label a
+  // held gate with the site the action targets.
+  function currentHost(): string {
+    try {
+      return page && !page.isClosed() ? new URL(page.url()).host : '';
+    } catch {
+      return '';
+    }
+  }
+
   async function close() {
     await ctx?.close().catch(() => {});
     ctx = null;
     page = null;
   }
 
-  return { execute, close };
+  return { execute, close, currentHost };
 }

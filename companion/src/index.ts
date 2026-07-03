@@ -87,7 +87,7 @@ async function runWithGate(cmd: Command): Promise<Result> {
     id: cmd.id,
     reason: result.reason ?? 'irreversible action',
     target: cmd.ref ?? cmd.url ?? '',
-    host: '',
+    host: browser.currentHost(),
     requestedAt: Date.now(),
   };
   queue.enqueue(gate);

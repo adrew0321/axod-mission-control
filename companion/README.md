@@ -57,7 +57,9 @@ When the HUD is connected, hard-gated actions (buy / pay / send / delete …) ar
 **held locally** and you approve or deny them in the HUD — the Mini does not need
 to be reachable to resolve a gate. When the HUD is not running, the Companion
 falls back to the Mini approval path as before. `STOP` in the HUD aborts all
-activity and clears the queue.
+activity and clears the queue: it denies every held gate and closes the browser.
+It is not a hard kill-switch — the Companion stays connected to the Mini, so the
+next command it receives relaunches the browser and resumes.
 
 Optional env: `COMPANION_OPERATOR` sets the name shown in the HUD (default
 `Operator`).
