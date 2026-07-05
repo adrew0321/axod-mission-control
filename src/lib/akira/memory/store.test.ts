@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { listNotes, readNote, writeNote, deleteNote, indexText } from './store';
@@ -25,6 +25,17 @@ test('writeNote upsert preserves created and does not duplicate', () => {
     assert.equal(b.created, a.created);
     assert.equal(b.description, 'second');
     assert.equal(listNotes(dir).length, 1);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('listNotes ignores stray .md files without frontmatter (e.g. a README)', () => {
+  const dir = vault();
+  try {
+    writeNote({ title: 'Real', description: 'r', type: 'fact', body: 'r' }, dir);
+    writeFileSync(join(dir, 'README.md'), '# Notes\n\njust prose, not a memory');
+    const list = listNotes(dir);
+    assert.equal(list.length, 1);
+    assert.equal(list[0].title, 'Real');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { slugify, safeSlug, serializeNote, parseNote, buildIndex, type Note } from './note';
+import { slugify, safeSlug, serializeNote, parseNote, buildIndex, isNoteFile, type Note } from './note';
 
 const note = (p: Partial<Note>): Note => ({
   slug: 'x', title: 'X', description: 'a note', type: 'fact',
@@ -30,6 +30,23 @@ test('parseNote tolerates a file with no frontmatter', () => {
   const parsed = parseNote('loose', 'just body');
   assert.equal(parsed.body, 'just body');
   assert.equal(parsed.title, 'loose');
+});
+
+test('isNoteFile is true only for files with a frontmatter block', () => {
+  assert.equal(isNoteFile(serializeNote(note({}))), true);
+  assert.equal(isNoteFile('---\ntitle: x\n---\nbody'), true);
+  assert.equal(isNoteFile('# A README\n\njust prose'), false);
+  assert.equal(isNoteFile('no frontmatter here'), false);
+  assert.equal(isNoteFile('---\nunterminated frontmatter'), false);
+});
+
+test('serializeNote strips newlines from frontmatter fields (never corrupts the block)', () => {
+  const md = serializeNote(note({ title: 'Line one\nLine two', description: 'a\r\nb' }));
+  assert.match(md, /^---\ntitle: Line one Line two\ndescription: a b\n/);
+  // still parses cleanly — the body is intact and the frontmatter didn't leak
+  const parsed = parseNote('x', md);
+  assert.equal(parsed.title, 'Line one Line two');
+  assert.equal(parsed.body, 'body');
 });
 
 test('buildIndex lists notes newest-first as wikilinks', () => {
