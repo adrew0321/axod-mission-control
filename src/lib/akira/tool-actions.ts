@@ -10,6 +10,8 @@ export const AKIRA_OPEN = 'mcp__akira__open';
 export const AKIRA_RELAY = 'mcp__akira__relay';
 export const AKIRA_LIST_SESSIONS = 'mcp__akira__list_sessions';
 export const AKIRA_GET_SESSION = 'mcp__akira__get_session_detail';
+export const AKIRA_REMEMBER = 'mcp__akira__remember';
+export const AKIRA_FORGET = 'mcp__akira__forget';
 
 export interface AkiraToolContext {
   emit: (e: { type: string; [k: string]: unknown }) => void;

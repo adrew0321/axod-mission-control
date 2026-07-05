@@ -14,6 +14,7 @@ import {
   openHandler,
   relayHandler,
 } from './tool-actions';
+import { writeNote, deleteNote, gitCommitPush, vaultReady } from '@/lib/akira/memory/store';
 
 export {
   AKIRA_SERVER_NAME,
@@ -22,6 +23,8 @@ export {
   AKIRA_RELAY,
   AKIRA_LIST_SESSIONS,
   AKIRA_GET_SESSION,
+  AKIRA_REMEMBER,
+  AKIRA_FORGET,
 } from './tool-actions';
 export type { AkiraToolContext } from './tool-actions';
 
@@ -106,7 +109,37 @@ export function createAkiraServer(ctx: AkiraToolContext) {
     (a) => getSessionDetailHandler(a),
   );
 
-  const base = [navigate, open, relay, listSessions, getSession];
+  const remember = tool(
+    'remember',
+    "Save a durable fact/decision/preference to your long-term memory so you recall it in future sessions. Use for things worth keeping — not transient chatter. NEVER store secrets, passwords, or tokens. Updates the note if the slug already exists.",
+    {
+      title: z.string().min(1).describe('Short title (also the default slug).'),
+      description: z.string().min(1).describe('One-line summary shown in your memory index.'),
+      type: z.enum(['fact', 'preference', 'project', 'decision', 'reference']),
+      body: z.string().min(1).describe('The note in Markdown. Link related notes with [[slug]].'),
+      slug: z.string().optional().describe('Optional explicit slug to update an existing note.'),
+    },
+    async (a) => {
+      if (!vaultReady()) return err("Memory isn't configured on this server yet.");
+      const note = writeNote(a);
+      gitCommitPush(`remember: ${note.title}`);
+      return ok(`Remembered "${note.title}" (${note.slug}).`);
+    },
+  );
+
+  const forget = tool(
+    'forget',
+    'Delete a note from your long-term memory by its slug.',
+    { slug: z.string().min(1).describe('The slug of the note to delete.') },
+    async (a) => {
+      if (!vaultReady()) return err("Memory isn't configured on this server yet.");
+      if (!deleteNote(a.slug)) return err(`No memory note "${a.slug}".`);
+      gitCommitPush(`forget: ${a.slug}`);
+      return ok(`Forgot "${a.slug}".`);
+    },
+  );
+
+  const base = [navigate, open, relay, listSessions, getSession, remember, forget];
   const tools = isOnline() ? [...base, ...browserToolDefs(ctx)] : base;
 
   return createSdkMcpServer({
