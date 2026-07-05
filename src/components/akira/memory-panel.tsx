@@ -14,12 +14,13 @@ export function MemoryPanel() {
   const [notes, setNotes] = useState<Note[] | null>(null); // null = locked
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [forgetMsg, setForgetMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const pinRef = useRef(""); // held only while unlocked, for delete calls
   const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function lock() {
-    setNotes(null); setOpen(false); setPin(""); setError(""); pinRef.current = "";
+    setNotes(null); setOpen(false); setPin(""); setError(""); setForgetMsg(""); pinRef.current = "";
     if (relockTimer.current) clearTimeout(relockTimer.current);
   }
   function armRelock() {
@@ -44,11 +45,17 @@ export function MemoryPanel() {
 
   async function forget(slug: string) {
     armRelock();
-    const r = await fetch(`/api/memory/${encodeURIComponent(slug)}`, {
-      method: "DELETE", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pin: pinRef.current }),
-    });
-    if (r.ok) setNotes((ns) => (ns ?? []).filter((n) => n.slug !== slug));
+    setForgetMsg("");
+    try {
+      const r = await fetch(`/api/memory/${encodeURIComponent(slug)}`, {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinRef.current }),
+      });
+      if (r.ok) setNotes((ns) => (ns ?? []).filter((n) => n.slug !== slug));
+      else setForgetMsg(r.status === 429 ? "Locked out — try again in a minute." : "Couldn't forget that note.");
+    } catch {
+      setForgetMsg("Couldn't reach the server.");
+    }
   }
 
   const unlocked = notes !== null;
@@ -79,8 +86,15 @@ export function MemoryPanel() {
         <div style={{ padding: "4px 6px 10px" }}>
           <div style={memTop}>
             <span style={{ ...meta, color: "#7fdcff", letterSpacing: 1.5 }}>◉ MEMORY</span>
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-              <a href="#" style={lnk}>Open in Obsidian ↗</a>
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+              {forgetMsg && <span style={{ ...meta, color: "#ff8fdc" }}>{forgetMsg}</span>}
+              <a
+                href="obsidian://open?vault=akira-memory"
+                title="Opens the akira-memory vault in the Obsidian app (if installed)"
+                style={lnk}
+              >
+                Open in Obsidian ↗
+              </a>
               <button onClick={lock} style={relockBtn}>🔒 Lock</button>
             </div>
           </div>
