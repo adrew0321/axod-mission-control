@@ -3,8 +3,9 @@
 // against a temp dir. Only server code imports it (routes, akira-turn, tools).
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { parseNote, serializeNote, buildIndex, safeSlug, type Note } from './note';
+import { createSerialQueue } from './serial';
 
 export function vaultDir(): string {
   return process.env.AKIRA_MEMORY_DIR || join(process.cwd(), 'data', 'akira-memory');
@@ -69,19 +70,31 @@ export function indexText(dir = vaultDir()): string {
   return buildIndex(listNotes(dir));
 }
 
-// --- git: best-effort, never throws into a turn ---
-function git(dir: string, args: string[]): void {
-  try {
-    execFileSync('git', ['-C', dir, ...args], { stdio: 'ignore', timeout: 15_000 });
-  } catch {
-    /* offline / no remote / no repo — non-fatal */
+// --- git: best-effort, ASYNC + serialized. Never blocks the event loop (which
+// serves the HUD, scheduler, and Discord poller) on network I/O, and never runs
+// two git ops on one repo at once. Fire-and-forget: callers don't await.
+const gitQueues = new Map<string, (t: () => Promise<unknown>) => void>();
+function gitQueue(dir: string): (t: () => Promise<unknown>) => void {
+  let q = gitQueues.get(dir);
+  if (!q) {
+    q = createSerialQueue();
+    gitQueues.set(dir, q);
   }
+  return q;
+}
+function gitAsync(dir: string, args: string[]): Promise<void> {
+  return new Promise((res) => {
+    // Best-effort: resolve on completion OR error (offline / no remote / conflict).
+    execFile('git', ['-C', dir, ...args], { timeout: 15_000 }, () => res());
+  });
 }
 export function gitCommitPush(message: string, dir = vaultDir()): void {
   if (!existsSync(join(dir, '.git'))) return;
-  git(dir, ['add', '-A']);
-  git(dir, ['-c', 'user.name=AKIRA', '-c', 'user.email=akira@axod', 'commit', '-m', message]);
-  git(dir, ['push']);
+  gitQueue(dir)(async () => {
+    await gitAsync(dir, ['add', '-A']);
+    await gitAsync(dir, ['-c', 'user.name=AKIRA', '-c', 'user.email=akira@axod', 'commit', '-m', message]);
+    await gitAsync(dir, ['push']);
+  });
 }
 let lastPull = 0;
 export function gitPullDebounced(dir = vaultDir()): void {
@@ -89,5 +102,5 @@ export function gitPullDebounced(dir = vaultDir()): void {
   const ms = Number(process.env.AKIRA_MEMORY_PULL_MS ?? 60_000);
   if (Date.now() - lastPull < ms) return;
   lastPull = Date.now();
-  git(dir, ['pull', '--ff-only']);
+  gitQueue(dir)(() => gitAsync(dir, ['pull', '--ff-only']));
 }
