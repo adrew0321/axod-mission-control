@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
-import { parseNote, serializeNote, buildIndex, safeSlug, type Note } from './note';
+import { parseNote, serializeNote, buildIndex, safeSlug, isNoteFile, type Note } from './note';
 import { createSerialQueue } from './serial';
 
 export function vaultDir(): string {
@@ -20,10 +20,14 @@ function notePath(dir: string, slug: string): string {
 }
 export function listNotes(dir = vaultDir()): Note[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((f) => f.endsWith('.md') && f !== 'INDEX.md')
-    .map((f) => parseNote(f.replace(/\.md$/, ''), readFileSync(join(dir, f), 'utf8')))
-    .sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));
+  const notes: Note[] = [];
+  for (const f of readdirSync(dir)) {
+    if (!f.endsWith('.md') || f === 'INDEX.md') continue;
+    const md = readFileSync(join(dir, f), 'utf8');
+    if (!isNoteFile(md)) continue; // stray file a user dropped in the vault — not a memory
+    notes.push(parseNote(f.replace(/\.md$/, ''), md));
+  }
+  return notes.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));
 }
 export function readNote(slug: string, dir = vaultDir()): Note | null {
   const s = safeSlug(slug);

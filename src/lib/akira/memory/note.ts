@@ -21,17 +21,27 @@ export function safeSlug(s: string): string | null {
   return x.length ? x : null;
 }
 
+/** Collapse newlines so a value can never break out of its single frontmatter line. */
+const oneLine = (s: string): string => s.replace(/[\r\n]+/g, ' ').trim();
+
 export function serializeNote(n: Note): string {
   return [
     '---',
-    `title: ${n.title}`,
-    `description: ${n.description}`,
-    `type: ${n.type}`,
+    `title: ${oneLine(n.title)}`,
+    `description: ${oneLine(n.description)}`,
+    `type: ${oneLine(n.type)}`,
     `created: ${n.created}`,
     `updated: ${n.updated}`,
     '---',
     n.body,
   ].join('\n');
+}
+
+/** True only for files that carry a real frontmatter block — so stray .md files
+ *  a user drops in the vault (a README, loose notes) aren't parsed as memories. */
+export function isNoteFile(md: string): boolean {
+  const lines = md.split('\n');
+  return lines[0] === '---' && lines.indexOf('---', 1) > 0;
 }
 
 export function parseNote(slug: string, md: string): Note {
