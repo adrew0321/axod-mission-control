@@ -54,7 +54,7 @@ export function MemoryPanel() {
   const unlocked = notes !== null;
   return (
     <div style={panel} onMouseMove={unlocked ? armRelock : undefined}>
-      <div style={head} onClick={() => unlocked && setOpen((o) => !o)}>
+      <div style={head} onClick={() => unlocked && lock()} title={unlocked ? "Lock" : undefined}>
         <span style={{ color: unlocked ? "#37d39b" : "#ffb84d" }}>{unlocked ? "🔓" : "🔒"}</span>
         <span style={{ fontWeight: 700, color: "#eaffff" }}>Settings</span>
         <span style={{ marginLeft: "auto", ...meta }}>
