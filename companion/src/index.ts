@@ -4,6 +4,8 @@ import { connect } from './connection';
 import { createBrowser } from './browser';
 import { createGateQueue, type PendingGate } from './gate-queue';
 import { startBridge } from './bridge';
+import { ingestRepo } from './ingest';
+import type { IngestState } from './bridge-protocol';
 import type { Command, Result } from './protocol';
 
 const GATE_TIMEOUT_MS = 120_000; // un-actioned gates auto-deny after 2 min
@@ -15,6 +17,7 @@ const queue = createGateQueue();
 const startedAt = Date.now();
 let connected = false;
 let currentTask = 'idle';
+let ingestState: IngestState = { phase: 'idle' };
 
 // id → resolver for the exec chain awaiting an operator decision
 const resolvers = new Map<string, (d: 'approved' | 'denied') => void>();
@@ -46,16 +49,35 @@ const bridge = startBridge({
       profile: 'persistent · local',
       sensitiveCount: cfg.sensitiveDomains.length,
     },
+    ingest: ingestState,
   }),
   onApprove: (id) => decide(id, 'approved'),
   onDeny: (id) => decide(id, 'denied'),
   onStop: () => stopAll(),
+  onIngest: (path) => { void runIngest(path); },
 });
 
 function decide(id: string, d: 'approved' | 'denied'): void {
   if (!queue.remove(id)) return;
   resolvers.get(id)?.(d);
   resolvers.delete(id);
+  bridge.push();
+}
+
+async function runIngest(path: string): Promise<void> {
+  ingestState = { phase: 'bundling' };
+  bridge.push();
+  console.log('[companion] ingest start:', path);
+  try {
+    const { projectId, name } = await ingestRepo(cfg, path, {
+      onPhase: (phase) => { ingestState = { phase }; bridge.push(); },
+    });
+    ingestState = { phase: 'done', projectName: name, projectId };
+    console.log('[companion] ingest done:', projectId);
+  } catch (e) {
+    ingestState = { phase: 'error', error: e instanceof Error ? e.message : String(e) };
+    console.error('[companion] ingest error:', ingestState.error);
+  }
   bridge.push();
 }
 
