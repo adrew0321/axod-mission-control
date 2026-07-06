@@ -21,6 +21,13 @@ test('deriveIngestMeta defaults an empty branch to main', () => {
   assert.deepEqual(deriveIngestMeta('/home/a/TEI/App', ''), { name: 'App', branch: 'main' });
 });
 
+test('deriveIngestMeta normalises Windows backslash paths', () => {
+  assert.deepEqual(deriveIngestMeta('C:\\TEI\\Applications.Employer', 'main'), {
+    name: 'Applications.Employer',
+    branch: 'main',
+  });
+});
+
 test('isGitRepo is false for a plain dir, true for a git repo', () => {
   const plain = tmp('mc-plain-');
   assert.equal(isGitRepo(plain), false);

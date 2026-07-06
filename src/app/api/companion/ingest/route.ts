@@ -11,7 +11,8 @@ import { streamToFileWithCap, cloneBundleIntoProject } from '@/lib/companion/ing
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const MAX_BYTES = Number(process.env.COMPANION_INGEST_MAX_BYTES ?? 1_000_000_000);
+const parsedMax = Number(process.env.COMPANION_INGEST_MAX_BYTES);
+const MAX_BYTES = Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : 1_000_000_000;
 
 export async function POST(req: Request) {
   const token = req.headers.get('x-companion-token');
