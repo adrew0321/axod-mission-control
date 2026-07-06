@@ -17,23 +17,47 @@ export async function streamToFileWithCap(
 ): Promise<number> {
   const out = createWriteStream(destPath);
   const reader = stream.getReader();
+
+  // The WriteStream emits 'error' on its own channel (failed open, EMFILE, disk
+  // full, etc.) — separate from the write()-callback promises below. Without a
+  // listener, that event crashes the process instead of rejecting this
+  // function's promise. Turn it into a promise we can race against every await
+  // point in the read/write loop.
+  let streamErr: unknown;
+  const errorPromise = new Promise<never>((_resolve, reject) => {
+    out.on('error', (e) => {
+      streamErr = e;
+      reject(e);
+    });
+  });
+  errorPromise.catch(() => {}); // avoid an unhandled-rejection warning if never raced
+
   let total = 0;
   try {
     for (;;) {
-      const { value, done } = await reader.read();
+      const { value, done } = await Promise.race([reader.read(), errorPromise]);
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
         throw new RangeError('bundle exceeds size limit');
       }
-      await new Promise<void>((res, rej) => out.write(value, (e) => (e ? rej(e) : res())));
+      await Promise.race([
+        new Promise<void>((res, rej) => out.write(value, (e) => (e ? rej(e) : res()))),
+        errorPromise,
+      ]);
     }
-    await new Promise<void>((res, rej) => out.end((e?: Error) => (e ? rej(e) : res())));
+    await Promise.race([
+      new Promise<void>((res, rej) => out.end((e?: Error) => (e ? rej(e) : res()))),
+      errorPromise,
+    ]);
     return total;
   } catch (e) {
+    // Signal the source to stop (an oversized/failed upload shouldn't keep
+    // streaming into the void), then clean up the partial destination file.
+    await reader.cancel(e).catch(() => {});
     out.destroy();
     await rm(destPath, { force: true });
-    throw e;
+    throw e ?? streamErr;
   }
 }
 

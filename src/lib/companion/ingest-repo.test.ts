@@ -33,6 +33,14 @@ test('streamToFileWithCap throws and cleans up when over the cap', async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+test('streamToFileWithCap rejects (does not crash the process) on a write-stream error', async () => {
+  const dir = tmp('mc-cap-');
+  const dest = join(dir, 'nope', 'out.bin'); // parent dir does not exist -> open() fails
+  await assert.rejects(() => streamToFileWithCap(streamOf([1, 2, 3]), dest, 100));
+  assert.equal(existsSync(dest), false);
+  rmSync(dir, { recursive: true, force: true });
+});
+
 test('cloneBundleIntoProject clones the bundle and removes origin (DevOps isolation)', async () => {
   const work = tmp('mc-src-');
   // Build a source repo with a fake DevOps origin, then bundle it.
