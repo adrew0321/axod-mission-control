@@ -6,15 +6,9 @@ import path from 'node:path';
 
 const execFileAsync = promisify(execFile);
 import { cookies } from 'next/headers';
-import { db } from '@/db/client';
-import { projects } from '@/db/schema';
 import { SESSION_COOKIE, verifySession, cookieOptions } from '@/lib/auth';
-import {
-  ACTIVE_PROJECT_COOKIE,
-  slugifyProjectId,
-  validateNewProjectInput,
-} from '@/lib/projects';
-import { getOrCreateActiveSession } from '@/lib/active-project';
+import { ACTIVE_PROJECT_COOKIE, validateNewProjectInput } from '@/lib/projects';
+import { registerProject } from '@/lib/register-project';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -61,23 +55,13 @@ export async function POST(req: Request) {
     }
   }
 
-  const base = slugifyProjectId(body.name!) || 'project';
-  const existing = await db.select({ id: projects.id }).from(projects);
-  const taken = new Set(existing.map((p) => p.id));
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-
-  const now = new Date();
-  await db.insert(projects).values({
-    id,
-    name: body.name!.trim(),
-    repo_path: repoPath,
-    github_url: body.githubUrl?.trim() || null,
-    default_branch: body.defaultBranch?.trim() || 'dev',
-    created_at: now,
+  const { projectId: id } = await registerProject({
+    name: body.name!,
+    repoPath,
+    defaultBranch: body.defaultBranch,
+    githubUrl: body.githubUrl,
   });
 
-  await getOrCreateActiveSession(id);
   jar.set(ACTIVE_PROJECT_COOKIE, id, cookieOptions());
   return Response.json({ ok: true, projectId: id });
 }
