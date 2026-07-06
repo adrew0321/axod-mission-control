@@ -1,4 +1,5 @@
 import 'server-only';
+import { eq } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { projects } from '@/db/schema';
 import { pickProjectId } from '@/lib/projects';
@@ -25,6 +26,13 @@ export async function registerProject(input: {
     default_branch: input.defaultBranch?.trim() || 'dev',
     created_at: new Date(),
   });
-  await getOrCreateActiveSession(projectId);
+  try {
+    await getOrCreateActiveSession(projectId);
+  } catch (e) {
+    // Keep registration atomic: if session creation fails, don't leave an
+    // orphan projects row pointing at a repo the caller is about to clean up.
+    await db.delete(projects).where(eq(projects.id, projectId));
+    throw e;
+  }
   return { projectId };
 }

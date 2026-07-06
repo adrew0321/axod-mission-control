@@ -55,6 +55,9 @@ function escapeHtml(s) {
 }
 
 function renderIngest(ing) {
+  const busy = !!ing && (ing.phase === 'bundling' || ing.phase === 'uploading');
+  const btn = $('ingestBtn');
+  if (btn) btn.classList.toggle('busy', busy); // dim + block while a send is running
   const el = $('ingestStatus');
   if (!el) return;
   el.classList.remove('err', 'ok');
@@ -107,6 +110,8 @@ orb.onclick = () => setMinimized(false);
 $('stopBtn').onclick = () => send({ type: 'stop' });
 $('ingestBtn').onclick = async () => {
   if (!window.hud || !window.hud.pickFolder) return;
+  const phase = state?.ingest?.phase;
+  if (phase === 'bundling' || phase === 'uploading') return; // already running — ignore the click
   const path = await window.hud.pickFolder();
   if (path) send({ type: 'ingest', path });
 };

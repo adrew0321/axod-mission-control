@@ -65,6 +65,10 @@ function decide(id: string, d: 'approved' | 'denied'): void {
 }
 
 async function runIngest(path: string): Promise<void> {
+  if (ingestState.phase === 'bundling' || ingestState.phase === 'uploading') {
+    console.log('[companion] ingest already in progress; ignoring:', path);
+    return; // one at a time — a double-click must not interleave ingestState
+  }
   ingestState = { phase: 'bundling' };
   bridge.push();
   console.log('[companion] ingest start:', path);

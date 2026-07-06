@@ -144,8 +144,11 @@ laptop repo → `git bundle --all` (temp) → HTTP POST bytes → Mini temp file
 
 - Companion: non-directory / no `.git` / `git bundle` failure → `ingest:error` with a readable
   reason; no partial upload.
-- Mini: bad token → 401; oversize / low disk → 413; slug collision → 409; clone or `.git`
-  verification failure → 400 and remove the half-written `data/ingested/<slug>/` and temp file.
+- Mini: bad token → 401; oversize (cap exceeded) → 413; disk full (`ENOSPC`) → 507; slug
+  collision → 409; clone or `.git` verification failure → 400 and remove the half-written
+  `data/ingested/<slug>/` and temp file.
+- `registerProject` is atomic: if session creation fails after the row insert, the row is
+  rolled back so no orphan project remains.
 - Temp bundle is always cleaned up (success or failure) on both sides.
 
 ## Testing

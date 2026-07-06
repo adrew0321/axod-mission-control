@@ -53,6 +53,9 @@ export async function POST(req: Request) {
     if (e instanceof RangeError) {
       return Response.json({ error: 'bundle too large' }, { status: 413 });
     }
+    if (e && typeof e === 'object' && (e as { code?: string }).code === 'ENOSPC') {
+      return Response.json({ error: 'not enough disk space on the Mini' }, { status: 507 });
+    }
     return Response.json(
       { error: `ingest failed: ${e instanceof Error ? e.message : String(e)}` },
       { status: 400 },
