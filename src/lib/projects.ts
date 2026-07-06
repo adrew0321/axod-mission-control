@@ -44,3 +44,12 @@ export function validateNewProjectInput(
   if (!input.repoPath || !input.repoPath.trim()) return { ok: false, error: 'Repo path is required.' };
   return { ok: true };
 }
+
+/** Pick a unique project id from a name: slugify, then append -2, -3… on collision. */
+export function pickProjectId(name: string, existingIds: string[]): string {
+  const base = slugifyProjectId(name) || 'project';
+  const taken = new Set(existingIds);
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
+}

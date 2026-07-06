@@ -13,6 +13,7 @@ export interface BridgeHandlers {
   onApprove: (id: string) => void;
   onDeny: (id: string) => void;
   onStop: () => void;
+  onIngest: (path: string) => void;
 }
 
 export const BRIDGE_FILE = join(homedir(), '.akira-companion', 'bridge.json');
@@ -55,6 +56,7 @@ export function startBridge(h: BridgeHandlers) {
       if (msg.type === 'approve') h.onApprove(msg.id);
       else if (msg.type === 'deny') h.onDeny(msg.id);
       else if (msg.type === 'stop') h.onStop();
+      else if (msg.type === 'ingest') h.onIngest(msg.path);
     });
     ws.on('close', () => authed.delete(ws));
     ws.on('error', () => authed.delete(ws));

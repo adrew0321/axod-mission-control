@@ -4,6 +4,7 @@ import {
   resolveActiveProject,
   slugifyProjectId,
   validateNewProjectInput,
+  pickProjectId,
 } from './projects';
 
 const P = [{ id: 'axod-creative' }, { id: 'mission-control' }];
@@ -31,4 +32,18 @@ test('validateNewProjectInput requires name and repoPath', () => {
   assert.deepEqual(validateNewProjectInput({ name: 'X', repoPath: '/p' }), { ok: true });
   assert.equal(validateNewProjectInput({ name: '', repoPath: '/p' }).ok, false);
   assert.equal(validateNewProjectInput({ name: 'X', repoPath: '  ' }).ok, false);
+});
+
+test('pickProjectId slugifies the name when unused', () => {
+  assert.equal(pickProjectId('Applications.Employer', []), 'applications-employer');
+});
+
+test('pickProjectId appends -2, -3 on collision', () => {
+  const taken = ['applications-employer'];
+  assert.equal(pickProjectId('Applications.Employer', taken), 'applications-employer-2');
+  assert.equal(pickProjectId('Applications.Employer', ['applications-employer', 'applications-employer-2']), 'applications-employer-3');
+});
+
+test('pickProjectId falls back to "project" for an empty slug', () => {
+  assert.equal(pickProjectId('...', []), 'project');
 });

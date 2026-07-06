@@ -1,6 +1,8 @@
 # AKIRA Project Ingestion — Slice 1 (laptop → Mini)
 
-**Status:** Approved design (2026-07-06)
+**Status:** Approved design (2026-07-06). Slice 1 implemented on branch
+`worktree-akira-project-ingestion` (2026-07-06), pending merge to `dev` — not yet released or
+deployed.
 **Feature:** Hand the AKIRA Local Companion a local git repo; it lands on the Mini as a
 registered Mission Control project that Sage and the specialists can work on — without the
 Mini ever touching the operator's employer DevOps.

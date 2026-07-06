@@ -69,6 +69,13 @@
       .kv .v { color: #cfe8f5; font-family: ui-monospace, monospace; }
       .kv .v.ok { color: #37d39b; }
 
+      .ingest-btn { text-align: center; padding: 9px 0; border-radius: 9px; font-size: 12px; font-weight: 700;
+        letter-spacing: .4px; border: 1px solid rgba(127,220,255,.5); color: #7fdcff; background: rgba(127,220,255,.06);
+        cursor: pointer; -webkit-app-region: no-drag; }
+      .ingest-status { font-size: 11px; color: #8fb2c9; margin-top: 8px; min-height: 14px; font-family: ui-monospace, monospace; }
+      .ingest-status.err { color: #ff8fdc; }
+      .ingest-status.ok { color: #37d39b; }
+
       .foot { display: flex; padding: 11px 14px 14px; }
       .stop { flex: 1; text-align: center; padding: 8px 0; border-radius: 9px; font-size: 12px; font-weight: 700;
         letter-spacing: 1px; border: 1px solid rgba(255,90,207,.4); color: #ff8fdc; background: rgba(255,90,207,.06);
@@ -130,6 +137,12 @@
         <div class="kv"><span class="k">Transport</span><span class="v" id="transport">outbound-only</span></div>
         <div class="kv"><span class="k">Browser profile</span><span class="v" id="profile">persistent · local</span></div>
         <div class="kv"><span class="k">Sensitive domains</span><span class="v" id="domains">0 guarded</span></div>
+      </div>
+
+      <div class="sec">
+        <div class="sec-h"><div class="t">Projects</div></div>
+        <div class="ingest-btn" id="ingestBtn">＋ Send a project to AKIRA</div>
+        <div class="ingest-status" id="ingestStatus"></div>
       </div>
 
       <div class="foot"><div class="stop" id="stopBtn">■ STOP — abort all activity</div></div>

@@ -17,10 +17,18 @@ export interface Security {
   sensitiveCount: number;
 }
 
+export interface IngestState {
+  phase: 'idle' | 'bundling' | 'uploading' | 'done' | 'error';
+  projectName?: string;
+  projectId?: string;
+  error?: string;
+}
+
 export interface StateSnapshot {
   presence: Presence;
   queue: PendingGate[];
   security: Security;
+  ingest: IngestState;
 }
 
 export interface StateMsg extends StateSnapshot {
@@ -31,10 +39,11 @@ export type ClientMsg =
   | { type: 'hello'; token: string }
   | { type: 'approve'; id: string }
   | { type: 'deny'; id: string }
-  | { type: 'stop' };
+  | { type: 'stop' }
+  | { type: 'ingest'; path: string };
 
 export function buildState(s: StateSnapshot): StateMsg {
-  return { type: 'state', presence: s.presence, queue: s.queue, security: s.security };
+  return { type: 'state', presence: s.presence, queue: s.queue, security: s.security, ingest: s.ingest };
 }
 
 export function parseClientMsg(raw: string): ClientMsg | null {
@@ -55,6 +64,8 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return typeof m.id === 'string' ? { type: 'deny', id: m.id } : null;
     case 'stop':
       return { type: 'stop' };
+    case 'ingest':
+      return typeof m.path === 'string' && m.path ? { type: 'ingest', path: m.path } : null;
     default:
       return null;
   }

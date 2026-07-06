@@ -54,6 +54,17 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
+function renderIngest(ing) {
+  const el = $('ingestStatus');
+  if (!el) return;
+  el.classList.remove('err', 'ok');
+  if (!ing || ing.phase === 'idle') { el.textContent = ''; return; }
+  if (ing.phase === 'bundling') { el.textContent = 'Bundling repo…'; return; }
+  if (ing.phase === 'uploading') { el.textContent = 'Uploading to AKIRA…'; return; }
+  if (ing.phase === 'done') { el.classList.add('ok'); el.textContent = `Sent "${ing.projectName}" → ${ing.projectId}`; return; }
+  if (ing.phase === 'error') { el.classList.add('err'); el.textContent = `Failed: ${ing.error || 'unknown error'}`; return; }
+}
+
 function render() {
   const connected = !!state?.presence?.connected;
   const queue = state?.queue ?? [];
@@ -80,6 +91,7 @@ function render() {
     $('profile').textContent = state.security.profile;
     $('domains').textContent = `${state.security.sensitiveCount} guarded`;
     renderApprovals(queue);
+    renderIngest(state.ingest);
   }
 }
 
@@ -93,6 +105,11 @@ function setMinimized(m) {
 $('minBtn').onclick = () => setMinimized(true);
 orb.onclick = () => setMinimized(false);
 $('stopBtn').onclick = () => send({ type: 'stop' });
+$('ingestBtn').onclick = async () => {
+  if (!window.hud || !window.hud.pickFolder) return;
+  const path = await window.hud.pickFolder();
+  if (path) send({ type: 'ingest', path });
+};
 
 function connect() {
   if (!PORT) return; // no bridge yet — wait for a hud.onBridge push
