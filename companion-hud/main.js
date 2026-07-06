@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { homedir } = require('node:os');
@@ -65,6 +65,11 @@ ipcMain.on('hud:resize', (e, { width, height }) => {
   if (!win) return;
   const [x, y] = win.getPosition();
   win.setBounds({ x, y, width, height });
+});
+
+ipcMain.handle('hud:pick-folder', async () => {
+  const r = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  return r.canceled || r.filePaths.length === 0 ? null : r.filePaths[0];
 });
 
 app.whenReady().then(() => {
