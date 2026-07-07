@@ -29,9 +29,16 @@ export async function registerProject(input: {
   try {
     await getOrCreateActiveSession(projectId);
   } catch (e) {
-    // Keep registration atomic: if session creation fails, don't leave an
-    // orphan projects row pointing at a repo the caller is about to clean up.
-    await db.delete(projects).where(eq(projects.id, projectId));
+    // Compensating cleanup: don't leave an orphan projects row pointing at a
+    // repo the caller is about to rm. Best-effort — a cleanup failure must never
+    // mask the original error (`e`). A real db.transaction() would be better but
+    // is constrained by the synchronous better-sqlite3 driver + this function
+    // being shared/async; tracked as a separate refactor.
+    try {
+      await db.delete(projects).where(eq(projects.id, projectId));
+    } catch {
+      /* swallow cleanup failure; the original error below is what matters */
+    }
     throw e;
   }
   return { projectId };
