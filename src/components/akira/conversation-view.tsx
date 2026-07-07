@@ -102,13 +102,16 @@ export function ConversationStream({
 
   useEffect(() => {
     const el = ref.current;
-    if (el && expanded) el.scrollTop = el.scrollHeight; // pin to newest when open
+    // Pin to newest when history is open, or while a reply is actively streaming
+    // (collapsed) so a long reply follows the latest line instead of stalling at
+    // the top. Once streaming ends the final reply renders from the top to read.
+    if (el && (expanded || liveReply)) el.scrollTop = el.scrollHeight;
   }, [turns, liveReply, thinking, expanded]);
 
   if (turns.length === 0 && !showLive && !showThinking) return null;
 
   return (
-    <div ref={ref} style={{ ...streamStyle, opacity: dim ? 0 : 1, ...(expanded ? expandedScroll : null) }}>
+    <div ref={ref} style={{ ...streamStyle, opacity: dim ? 0 : 1, ...(expanded ? expandedScroll : collapsedScroll) }}>
       {expanded ? (
         <>
           <button type="button" style={cueBtn} onClick={onToggle}>⌄ collapse</button>
@@ -152,6 +155,12 @@ const streamStyle: React.CSSProperties = {
   transition: "opacity .8s ease",
 };
 const expandedScroll: React.CSSProperties = { maxHeight: "50vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+// Collapsed (single current reply): bound it too so a long reply scrolls inside
+// its own region instead of growing the hero past 100vh and shoving the input +
+// "scroll into Mission Control" cue off-screen. Short replies render naturally
+// (content below the cap = no scrollbar). Smaller cap than expanded because the
+// orb is at full size when history is closed.
+const collapsedScroll: React.CSSProperties = { maxHeight: "40vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
 const cueBtn: React.CSSProperties = {
   alignSelf: "center",
   background: "transparent",
