@@ -8,7 +8,7 @@
     "start": "electron ."
   },
   "devDependencies": {
-    "electron": "^33.2.0"
+    "electron": "^43.1.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["electron"]

@@ -49,17 +49,22 @@ export async function POST(req: Request) {
     const { projectId } = await registerProject({ name, repoPath: destDir, defaultBranch: branch });
     return Response.json({ ok: true, projectId });
   } catch (e) {
+    const code = (e as { code?: string }).code;
+    const msg = e instanceof Error ? e.message : String(e);
+    // Lost a slug race: another ingest registered this id between our pre-check
+    // and the insert (the id is the projects PK). The existing project owns
+    // destDir, so return 409 WITHOUT removing it.
+    if (code?.startsWith('SQLITE_CONSTRAINT') || /UNIQUE constraint failed/i.test(msg)) {
+      return Response.json({ error: `Project "${slug}" already exists.` }, { status: 409 });
+    }
     await rm(destDir, { recursive: true, force: true }).catch(() => {});
     if (e instanceof RangeError) {
       return Response.json({ error: 'bundle too large' }, { status: 413 });
     }
-    if (e && typeof e === 'object' && (e as { code?: string }).code === 'ENOSPC') {
+    if (code === 'ENOSPC') {
       return Response.json({ error: 'not enough disk space on the Mini' }, { status: 507 });
     }
-    return Response.json(
-      { error: `ingest failed: ${e instanceof Error ? e.message : String(e)}` },
-      { status: 400 },
-    );
+    return Response.json({ error: `ingest failed: ${msg}` }, { status: 400 });
   } finally {
     await rm(bundlePath, { force: true }).catch(() => {});
   }
