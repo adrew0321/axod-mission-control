@@ -1,6 +1,7 @@
 import 'server-only';
 import { existsSync } from 'node:fs';
 import { query, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
+import { withExecutionDiscipline } from './agent-discipline';
 
 export type AgentEvent =
   | { type: 'token'; content: string }
@@ -101,7 +102,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
       options: {
         cwd,
         model: model ?? 'claude-opus-4-7',
-        ...(systemPrompt ? { systemPrompt } : {}),
+        // Every agent (Sage + all specialists) gets the shared execution
+        // discipline appended here — one chokepoint, so no agent is missed.
+        ...((p) => (p ? { systemPrompt: p } : {}))(withExecutionDiscipline(systemPrompt)),
         includePartialMessages: true,
         // `tools` is the built-in capability set the model can see; `allowedTools`
         // is what auto-runs (no permission round-trip → no hang). MCP tools are
