@@ -621,13 +621,14 @@ export default function MissionControl({
       // primary streaming bubble (tokens append to it) but clear its content; drop
       // the extra bubbles this turn created (dispatch + post-dispatch).
       const resetLiveTurn = () => {
+        const staleIds = clientBubbleIds.filter((id) => id !== streamingId);
         currentPrimaryId = streamingId;
         dispatchStreamId = null;
         pendingNewSageBubble = false;
         clientBubbleIds.length = 1; // keep [streamingId]
         setMessages((prev) =>
           prev
-            .filter((m) => m.id === streamingId || !m.id.startsWith("dispatch_"))
+            .filter((m) => !staleIds.includes(m.id))
             .map((m) =>
               m.id === streamingId ? { ...m, content: "", dispatch: undefined } : m,
             ),
