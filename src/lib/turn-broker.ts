@@ -21,7 +21,11 @@ interface TurnState {
 }
 
 const realTimers: BrokerTimers = {
-  setTimeout: (cb, ms) => setTimeout(cb, ms),
+  setTimeout: (cb, ms) => {
+    const t = setTimeout(cb, ms);
+    (t as { unref?: () => void }).unref?.();
+    return t;
+  },
   clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
 };
 
