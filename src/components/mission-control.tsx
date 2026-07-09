@@ -823,11 +823,6 @@ export default function MissionControl({
             setIsTyping(true);
           } else if (evt.type === "error") {
             setSendError(evt.message ?? "Agent error");
-            es.close();
-            esRef.current = null;
-            setIsTyping(false);
-            setWorkingAgents([]);
-            setAgentActivity({});
           } else if (evt.type === "persisted" || evt.type === "skipped") {
             es.close();
             esRef.current = null;
