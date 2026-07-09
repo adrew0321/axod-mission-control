@@ -8,7 +8,7 @@ export type AgentEvent =
   | { type: 'tool'; name: string; input?: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; content: string; isError: boolean }
   | { type: 'done'; fullText: string; costUsd?: number; tokensIn?: number; tokensOut?: number }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; fatal: boolean };
 
 export interface RunAgentOptions {
   prompt: string;
@@ -134,7 +134,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
       } else if (message.type === 'assistant') {
         if (message.error) {
           // auth_failed | rate_limit | billing_error | model_not_found | etc.
-          yield { type: 'error', message: `agent error: ${message.error}` };
+          // Non-fatal: the SDK stream continues after this, so a subscriber must
+          // NOT close on it (see isTerminalTurnEvent).
+          yield { type: 'error', message: `agent error: ${message.error}`, fatal: false };
         } else {
           // Surface each tool the agent invokes so the UI can show live activity
           // ("Reading X", "Editing Y", "Running …"). tool_use blocks carry the
@@ -192,13 +194,15 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
           };
         } else {
           const detail = 'errors' in message && message.errors?.length ? `: ${message.errors.join('; ')}` : '';
-          yield { type: 'error', message: `agent ended (${message.subtype})${detail}` };
+          // Fatal: a non-success result means the agent turn ended.
+          yield { type: 'error', message: `agent ended (${message.subtype})${detail}`, fatal: true };
         }
       }
     }
   } catch (err) {
     // AbortError is expected when the operator stops generation — not a failure.
     if (err instanceof Error && err.name === 'AbortError') return;
-    yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
+    // Fatal: a thrown error ends the generator, so the turn is over.
+    yield { type: 'error', message: err instanceof Error ? err.message : String(err), fatal: true };
   }
 }

@@ -70,5 +70,5 @@ test("non-Bash tool_result events are ignored", () => {
 test("token, done, and error events are ignored", () => {
   assert.equal(toTerminalEvent({ type: "token", content: "hi" }, "sage"), null);
   assert.equal(toTerminalEvent({ type: "done", fullText: "" }, "sage"), null);
-  assert.equal(toTerminalEvent({ type: "error", message: "x" }, "sage"), null);
+  assert.equal(toTerminalEvent({ type: "error", message: "x", fatal: true }, "sage"), null);
 });
