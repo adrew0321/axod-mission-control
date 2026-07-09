@@ -18,7 +18,8 @@ export const config = {
      *   - /login            (the login page itself)
      *   - /api/auth/*       (login + logout endpoints)
      *   - /api/health       (uptime monitoring; never gated)
-     *   - /api/companion/stream, /api/companion/result, /api/companion/ingest
+     *   - /api/companion/stream, /api/companion/result, /api/companion/ingest,
+     *     /api/companion/writeback, /api/companion/writeback/list
      *                       (the Local Companion authenticates with
      *                        COMPANION_TOKEN, not a session cookie — it has no
      *                        browser session, so the session gate would redirect
@@ -28,6 +29,6 @@ export const config = {
      *   - /favicon.ico, sitemap.xml, robots.txt
      *   - any path that contains a "." (static files: .css, .js, .png, etc)
      */
-    '/((?!login$|api/auth/|api/companion/(?:stream|result|ingest)$|api/health$|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
+    '/((?!login$|api/auth/|api/companion/(?:stream|result|ingest|writeback(?:/list)?)$|api/health$|_next/|favicon\\.ico|sitemap\\.xml|robots\\.txt|.*\\..*).*)',
   ],
 };
