@@ -1,0 +1,61 @@
+import { mkdir, rm, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
+import { eq } from 'drizzle-orm';
+import { db } from '@/db/client';
+import { sessions, projects } from '@/db/schema';
+import { ensureWorktree, commitWorktreeEdits } from '@/lib/worktree';
+import { countCommitsAhead, countChangedFiles, createSessionBundle } from '@/lib/companion/writeback-repo';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function POST(req: Request) {
+  const token = req.headers.get('x-companion-token');
+  if (!process.env.COMPANION_TOKEN || token !== process.env.COMPANION_TOKEN) {
+    return new Response('Unauthorized', { status: 401 });
+  }
+
+  const sessionId = new URL(req.url).searchParams.get('sessionId')?.trim();
+  if (!sessionId) return Response.json({ error: 'sessionId is required' }, { status: 400 });
+
+  const session = await db.select().from(sessions).where(eq(sessions.id, sessionId)).limit(1).then((r) => r[0]);
+  if (!session?.project_id) return Response.json({ error: 'session not found' }, { status: 400 });
+
+  const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
+  const ingestedRoot = join(process.cwd(), 'data', 'ingested');
+  if (!project?.repo_path || !project.repo_path.startsWith(ingestedRoot)) {
+    return Response.json({ error: 'not a companion-ingested project' }, { status: 400 });
+  }
+
+  const base = session.base_branch ?? project.default_branch ?? 'dev';
+  const branch = `mc/${sessionId}`;
+  const tmpDir = join(ingestedRoot, '.tmp');
+  const bundlePath = join(tmpDir, `${bytesToHex(randomBytes(6))}.bundle`);
+
+  try {
+    await ensureWorktree(sessionId, project.repo_path, base);
+    await commitWorktreeEdits(sessionId, project.repo_path);
+
+    const commits = await countCommitsAhead(project.repo_path, base, branch);
+    if (commits === 0) return Response.json({ error: 'nothing to write back' }, { status: 409 });
+    const files = await countChangedFiles(project.repo_path, base, branch);
+
+    await mkdir(tmpDir, { recursive: true });
+    await createSessionBundle(project.repo_path, base, branch, bundlePath);
+    const bytes = await readFile(bundlePath); // bundles are small (delta only)
+
+    return new Response(bytes as unknown as BodyInit, {
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'x-wb-branch': branch,
+        'x-wb-commits': String(commits),
+        'x-wb-files': String(files),
+      },
+    });
+  } catch (e) {
+    return Response.json({ error: `writeback failed: ${e instanceof Error ? e.message : String(e)}` }, { status: 500 });
+  } finally {
+    await rm(bundlePath, { force: true }).catch(() => {});
+  }
+}
