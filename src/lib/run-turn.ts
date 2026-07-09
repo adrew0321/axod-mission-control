@@ -46,7 +46,7 @@ export async function runSessionTurn(
     .limit(1)
     .then((r) => r[0]);
   if (!session) {
-    emit({ type: 'error', message: 'session not found' });
+    emit({ type: 'error', message: 'session not found', fatal: true });
     return { status: 'error', reason: 'session not found' };
   }
 
@@ -101,13 +101,13 @@ export async function runSessionTurn(
     const lastUserMessage = [...conversation].reverse().find((m) => m.role === 'user');
 
     if (resolveTurnInput(opts.instruction, Boolean(lastUserMessage)).kind === 'none') {
-      emit({ type: 'error', message: 'no prompt to respond to' });
+      emit({ type: 'error', message: 'no prompt to respond to', fatal: true });
       return { status: 'error', reason: 'no prompt to respond to' };
     }
     // lastUserMessage is now guaranteed (instruction was inserted, or one existed).
 
     if (!session.project_id) {
-      emit({ type: 'error', message: 'session has no project — cannot run a turn' });
+      emit({ type: 'error', message: 'session has no project — cannot run a turn', fatal: true });
       return { status: 'error', reason: 'no project' };
     }
     const project = await db
@@ -166,7 +166,7 @@ export async function runSessionTurn(
     // one, abort the turn — do not fall back to repo_path or process.cwd() (the live
     // app dir). The lease is released by the finally below.
     if (!project?.repo_path) {
-      emit({ type: 'error', message: 'no repo configured for this project — cannot run a turn' });
+      emit({ type: 'error', message: 'no repo configured for this project — cannot run a turn', fatal: true });
       return { status: 'error', reason: 'no repo_path' };
     }
     let workingDir: string;
@@ -179,7 +179,7 @@ export async function runSessionTurn(
       emit({ type: 'worktree', path: wt.path, branch: wt.branch });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      emit({ type: 'error', message: `could not prepare an isolated worktree: ${message}` });
+      emit({ type: 'error', message: `could not prepare an isolated worktree: ${message}`, fatal: true });
       return { status: 'error', reason: `worktree failed: ${message}` };
     }
 
@@ -256,7 +256,7 @@ export async function runSessionTurn(
     emit({ type: 'persisted' });
     return { status: 'completed' };
   } catch (err) {
-    emit({ type: 'error', message: err instanceof Error ? err.message : String(err) });
+    emit({ type: 'error', message: err instanceof Error ? err.message : String(err), fatal: true });
     return { status: 'error', reason: err instanceof Error ? err.message : String(err) };
   } finally {
     clearTimeout(timer);

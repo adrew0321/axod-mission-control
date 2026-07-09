@@ -645,6 +645,7 @@ export default function MissionControl({
             type: string;
             content?: string;
             message?: string;
+            fatal?: boolean;
             approvalId?: string;
             toolName?: string;
             toolInput?: unknown;
@@ -821,9 +822,12 @@ export default function MissionControl({
           } else if (evt.type === "approval_resolved") {
             // Re-show the thinking indicator once the operator has decided.
             setIsTyping(true);
-          } else if (evt.type === "error") {
+          } else if (evt.type === "error" && !evt.fatal) {
+            // Non-fatal (rate_limit, etc.): the turn keeps running. Surface the
+            // message but stay subscribed so we still get the eventual result.
             setSendError(evt.message ?? "Agent error");
-          } else if (evt.type === "persisted" || evt.type === "skipped") {
+          } else if (evt.type === "error" || evt.type === "persisted" || evt.type === "skipped") {
+            if (evt.type === "error") setSendError(evt.message ?? "Agent error");
             es.close();
             esRef.current = null;
             setIsTyping(false);

@@ -3,6 +3,7 @@ import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { runSessionTurn } from '@/lib/run-turn';
 import { startTurn, subscribe } from '@/lib/turn-broker';
 import { startSseStream } from '@/lib/sse-stream';
+import { isTerminalTurnEvent } from '@/lib/turn-events';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         controller,
         signal: req.signal,
         subscribe: (emit) => subscribe(sessionId, emit),
-        closeOn: (e) => e.type === 'persisted' || e.type === 'error' || e.type === 'skipped',
+        // Close only on a TERMINAL event. A non-fatal error (rate_limit, etc.) is
+        // emitted mid-turn and must NOT detach the client while the turn runs on.
+        closeOn: isTerminalTurnEvent,
       });
     },
   });
