@@ -5,7 +5,9 @@ import { createBrowser } from './browser';
 import { createGateQueue, type PendingGate } from './gate-queue';
 import { startBridge } from './bridge';
 import { ingestRepo } from './ingest';
-import type { IngestState } from './bridge-protocol';
+import { getLedgerEntry } from './ledger';
+import { downloadAndApply, fetchWritebackList } from './writeback';
+import type { IngestState, WritebackState } from './bridge-protocol';
 import type { Command, Result } from './protocol';
 
 const GATE_TIMEOUT_MS = 120_000; // un-actioned gates auto-deny after 2 min
@@ -18,6 +20,7 @@ const startedAt = Date.now();
 let connected = false;
 let currentTask = 'idle';
 let ingestState: IngestState = { phase: 'idle' };
+let writebackState: WritebackState = { phase: 'idle' };
 
 // id → resolver for the exec chain awaiting an operator decision
 const resolvers = new Map<string, (d: 'approved' | 'denied') => void>();
@@ -50,11 +53,14 @@ const bridge = startBridge({
       sensitiveCount: cfg.sensitiveDomains.length,
     },
     ingest: ingestState,
+    writeback: writebackState,
   }),
   onApprove: (id) => decide(id, 'approved'),
   onDeny: (id) => decide(id, 'denied'),
   onStop: () => stopAll(),
   onIngest: (path) => { void runIngest(path); },
+  onWritebackList: () => { void runWritebackList(); },
+  onWriteback: (projectId, sessionId) => { void runWriteback(projectId, sessionId); },
 });
 
 function decide(id: string, d: 'approved' | 'denied'): void {
@@ -81,6 +87,42 @@ async function runIngest(path: string): Promise<void> {
   } catch (e) {
     ingestState = { phase: 'error', error: e instanceof Error ? e.message : String(e) };
     console.error('[companion] ingest error:', ingestState.error);
+  }
+  bridge.push();
+}
+
+async function runWritebackList(): Promise<void> {
+  writebackState = { ...writebackState, phase: 'listing' };
+  bridge.push();
+  try {
+    const projects = await fetchWritebackList(cfg);
+    writebackState = { phase: 'idle', projects };
+  } catch (e) {
+    writebackState = { phase: 'error', error: e instanceof Error ? e.message : String(e) };
+  }
+  bridge.push();
+}
+
+async function runWriteback(projectId: string, sessionId: string): Promise<void> {
+  const busy = writebackState.phase === 'downloading' || writebackState.phase === 'verifying' || writebackState.phase === 'applying';
+  if (busy) return; // one at a time
+  const entry = await getLedgerEntry(projectId);
+  if (!entry) {
+    writebackState = { ...writebackState, phase: 'error', error: 'unknown project on this laptop — re-ingest it first' };
+    bridge.push();
+    return;
+  }
+  writebackState = { ...writebackState, phase: 'downloading', error: undefined };
+  bridge.push();
+  try {
+    const { branch, commits, files } = await downloadAndApply(
+      cfg,
+      { sessionId, localPath: entry.localPath },
+      { onPhase: (phase) => { writebackState = { ...writebackState, phase }; bridge.push(); } },
+    );
+    writebackState = { ...writebackState, phase: 'done', branch, commits, files };
+  } catch (e) {
+    writebackState = { ...writebackState, phase: 'error', error: e instanceof Error ? e.message : String(e) };
   }
   bridge.push();
 }
