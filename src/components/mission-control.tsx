@@ -440,8 +440,12 @@ export default function MissionControl({
   const esRef = useRef<EventSource | null>(null);
 
   function handleStop() {
-    esRef.current?.close();
+    const es = esRef.current;
     esRef.current = null;
+    // The turn now outlives the SSE connection, so closing the stream no longer
+    // stops it — abort it explicitly server-side.
+    fetch(`/api/sessions/${session.id}/stop`, { method: "POST" }).catch(() => {});
+    es?.close();
     setIsTyping(false);
     setWorkingAgents([]);
     setAgentActivity({});
@@ -609,6 +613,32 @@ export default function MissionControl({
 
       const es = new EventSource(`/api/sessions/${session.id}/stream`);
       esRef.current = es;
+
+      let reconnectAttempts = 0;
+      const MAX_RECONNECTS = 5;
+      // Every (re)connect replays the broker's full buffer, so reset the live
+      // bubbles first and let the replay rebuild them deterministically. Keep the
+      // primary streaming bubble (tokens append to it) but clear its content; drop
+      // the extra bubbles this turn created (dispatch + post-dispatch).
+      const resetLiveTurn = () => {
+        const staleIds = clientBubbleIds.filter((id) => id !== streamingId);
+        currentPrimaryId = streamingId;
+        dispatchStreamId = null;
+        pendingNewSageBubble = false;
+        clientBubbleIds.length = 1; // keep [streamingId]
+        setMessages((prev) =>
+          prev
+            .filter((m) => !staleIds.includes(m.id))
+            .map((m) =>
+              m.id === streamingId ? { ...m, content: "", dispatch: undefined } : m,
+            ),
+        );
+      };
+      es.onopen = () => {
+        reconnectAttempts = 0;
+        resetLiveTurn();
+      };
+
       es.onmessage = (ev) => {
         try {
           const evt = JSON.parse(ev.data) as {
@@ -793,7 +823,7 @@ export default function MissionControl({
             setIsTyping(true);
           } else if (evt.type === "error") {
             setSendError(evt.message ?? "Agent error");
-          } else if (evt.type === "persisted") {
+          } else if (evt.type === "persisted" || evt.type === "skipped") {
             es.close();
             esRef.current = null;
             setIsTyping(false);
@@ -812,11 +842,17 @@ export default function MissionControl({
         }
       };
       es.onerror = () => {
-        es.close();
-        setIsTyping(false);
-        setWorkingAgents([]);
-        setAgentActivity({});
-        setSendError((prev) => prev ?? "Stream disconnected");
+        reconnectAttempts += 1;
+        if (reconnectAttempts > MAX_RECONNECTS) {
+          es.close();
+          esRef.current = null;
+          setIsTyping(false);
+          setWorkingAgents([]);
+          setAgentActivity({});
+          setSendError((prev) => prev ?? "Stream disconnected");
+        }
+        // else: leave the EventSource open — the browser auto-reconnects, the
+        // broker replays, and onopen resets + rebuilds. The turn keeps running.
       };
     } catch (err) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
