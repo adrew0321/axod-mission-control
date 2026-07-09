@@ -24,11 +24,32 @@ export interface IngestState {
   error?: string;
 }
 
+export interface WritebackSession {
+  sessionId: string;
+  sessionName: string;
+  changed: boolean;
+  fileCount: number;
+}
+export interface WritebackProject {
+  projectId: string;
+  projectName: string;
+  sessions: WritebackSession[];
+}
+export interface WritebackState {
+  phase: 'idle' | 'listing' | 'verifying' | 'downloading' | 'applying' | 'done' | 'error';
+  projects?: WritebackProject[];
+  branch?: string;
+  commits?: number;
+  files?: number;
+  error?: string;
+}
+
 export interface StateSnapshot {
   presence: Presence;
   queue: PendingGate[];
   security: Security;
   ingest: IngestState;
+  writeback: WritebackState;
 }
 
 export interface StateMsg extends StateSnapshot {
@@ -40,10 +61,12 @@ export type ClientMsg =
   | { type: 'approve'; id: string }
   | { type: 'deny'; id: string }
   | { type: 'stop' }
-  | { type: 'ingest'; path: string };
+  | { type: 'ingest'; path: string }
+  | { type: 'writeback:list' }
+  | { type: 'writeback'; projectId: string; sessionId: string };
 
 export function buildState(s: StateSnapshot): StateMsg {
-  return { type: 'state', presence: s.presence, queue: s.queue, security: s.security, ingest: s.ingest };
+  return { type: 'state', presence: s.presence, queue: s.queue, security: s.security, ingest: s.ingest, writeback: s.writeback };
 }
 
 export function parseClientMsg(raw: string): ClientMsg | null {
@@ -66,6 +89,12 @@ export function parseClientMsg(raw: string): ClientMsg | null {
       return { type: 'stop' };
     case 'ingest':
       return typeof m.path === 'string' && m.path ? { type: 'ingest', path: m.path } : null;
+    case 'writeback:list':
+      return { type: 'writeback:list' };
+    case 'writeback':
+      return typeof m.projectId === 'string' && m.projectId && typeof m.sessionId === 'string' && m.sessionId
+        ? { type: 'writeback', projectId: m.projectId, sessionId: m.sessionId }
+        : null;
     default:
       return null;
   }
