@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { upsertLedger } from './ledger';
 
 const execFileAsync = promisify(execFile);
 
@@ -64,6 +65,11 @@ export async function ingestRepo(
     if (!res.ok || !json?.projectId) {
       throw new Error(json?.error ?? `ingest failed (${res.status})`);
     }
+    await upsertLedger(json.projectId, {
+      localPath: repoPath,
+      name: meta.name,
+      ingestedAt: new Date().toISOString(),
+    });
     return { projectId: json.projectId, name: meta.name };
   } finally {
     await rm(work, { recursive: true, force: true }).catch(() => {});
