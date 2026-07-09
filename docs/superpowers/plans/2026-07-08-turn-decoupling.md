@@ -830,3 +830,15 @@ Use superpowers:finishing-a-development-branch to merge the feature branch into 
 **2. Placeholder scan:** No TBD/TODO; every code step has complete code and exact commands. The one conditional in Task 6 Step 1 (`activeSessionId` vs `session.id`) gives an exact resolution rule (match the EventSource URL identifier), not a vague instruction. ✅
 
 **3. Type consistency:** `SseEvent`/`BrokerEvent` share `{ type: string; [k: string]: unknown }` (structurally assignable where the route wires `subscribe(sessionId, emit)`); `startSseStream`'s `subscribe: (emit, close) => () => void` matches both the companion adapter (Task 2) and the route (Task 4); `startTurn(sessionId, run, opts?)` / `subscribe` / `abort` signatures match their call sites in Tasks 4-5; `HEARTBEAT_MS`/`RETENTION_MS` are the spec's values. ✅
+
+---
+
+## Post-merge follow-ups (found during execution)
+
+**1. `error` is NOT always terminal — non-fatal SDK errors need a distinct signal (release-hardening).**
+Task 6 Step 3 mandated the client `error` branch call `es.close()` "since error is terminal." That premise is incomplete: `agent-runner-sdk.ts:137` yields `{type:'error'}` mid-stream for transient SDK conditions (`auth_failed | rate_limit | billing_error | model_not_found`) **without** ending the turn (the generator keeps going and can still reach `persisted`). `EventSource.close()` is permanent (no browser auto-reconnect), so the plan's code permanently detached the UI from a still-running turn and risked transcript corruption on a follow-up send.
+- **Shipped (client-only) fix:** the `error` branch now only `setSendError(...)` — no `es.close()`/reset. Removes the instant permanent detach.
+- **Residual (not yet fixed):** the `/stream` route's `closeOn` still fires on *any* `error`, and the broker replay buffer is never truncated, so every reconnect replays from the start, re-hits the stale non-fatal `error`, and the server closes again — the client still gives up after `MAX_RECONNECTS` (~15s) on a non-fatal error while the turn runs on unseen.
+- **Full fix:** add a `fatal: boolean` discriminator to error events in `agent-runner-sdk.ts`, thread it through `run-turn.ts`, and scope BOTH the route `closeOn` and the client to close only on `fatal`; optionally stop/trim replay past a terminal event. Do before release if non-fatal SDK errors prove common in practice.
+
+**2. Minor test-coverage gaps (turn-broker):** no test exercises restart-after-finish-before-retention, nor the `run` REJECT path through `finish()` (both correct by inspection). Worth two small tests before the broker gains more load-bearing callers.
