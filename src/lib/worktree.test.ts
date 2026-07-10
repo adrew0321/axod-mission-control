@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ensureWorktree, removeWorktree, isWorktreeValid, mergeWorktree } from './worktree';
+import { ensureWorktree, removeWorktree, isWorktreeValid, mergeWorktree, commitWorktreeEdits } from './worktree';
 
 const exec = promisify(execFile);
 
@@ -161,6 +161,32 @@ test('ensureWorktree heals a hollow dir (no .git) by removing and recreating', a
     assert.equal(await isWorktreeValid(wtPath), true);
   } finally {
     await removeWorktree('sess_hollow', repo).catch(() => {});
+    await cleanup(repo, root);
+  }
+});
+
+test('commitWorktreeEdits commits loose edits and is a no-op on a clean tree', async () => {
+  const repo = await makeRepo();
+  const root = await freshWorktreeRoot();
+  const sessionId = 'sess_commitloose';
+  try {
+    const wt = await ensureWorktree(sessionId, repo, 'dev');
+
+    // No edits yet -> no commit.
+    assert.equal(await commitWorktreeEdits(sessionId, repo), false);
+
+    // Make an edit -> it commits.
+    await writeFile(path.join(wt.path, 'new.txt'), 'hello');
+    assert.equal(await commitWorktreeEdits(sessionId, repo), true);
+
+    // Clean again -> no-op.
+    assert.equal(await commitWorktreeEdits(sessionId, repo), false);
+
+    // The commit is on mc/<sessionId>, ahead of dev.
+    const { stdout: ahead } = await exec('git', ['-C', repo, 'rev-list', '--count', `dev..mc/${sessionId}`]);
+    assert.equal(ahead.trim(), '1');
+  } finally {
+    await removeWorktree(sessionId, repo).catch(() => {});
     await cleanup(repo, root);
   }
 });

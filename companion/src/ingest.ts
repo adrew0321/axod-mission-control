@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { upsertLedger } from './ledger';
 
 const execFileAsync = promisify(execFile);
 
@@ -63,6 +64,25 @@ export async function ingestRepo(
     const json = (await res.json().catch(() => null)) as { projectId?: string; error?: string } | null;
     if (!res.ok || !json?.projectId) {
       throw new Error(json?.error ?? `ingest failed (${res.status})`);
+    }
+    // The Mini already has the project; a failure to record the LOCAL ledger must
+    // not be reported as an ingest failure (Mini ingest is create-only, so a
+    // "re-ingest" retry would 409 and leave the project unreachable from here).
+    // Preserve success and log the projectId + localPath so the operator can
+    // hand-repair ~/.akira-companion/ingest-ledger.json.
+    try {
+      await upsertLedger(json.projectId, {
+        localPath: repoPath,
+        name: meta.name,
+        ingestedAt: new Date().toISOString(),
+      });
+    } catch (ledgerErr) {
+      console.error(
+        `[companion] ingest: project ${json.projectId} was saved on AKIRA, but writing the ` +
+          `local ledger failed — writeback to this laptop needs a manual ledger entry ` +
+          `(projectId=${json.projectId}, localPath=${repoPath}):`,
+        ledgerErr,
+      );
     }
     return { projectId: json.projectId, name: meta.name };
   } finally {

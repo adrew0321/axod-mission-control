@@ -68,6 +68,45 @@ function renderIngest(ing) {
   if (ing.phase === 'error') { el.classList.add('err'); el.textContent = `Failed: ${ing.error || 'unknown error'}`; return; }
 }
 
+function renderWriteback(wb) {
+  const list = $('wbList');
+  const status = $('wbStatus');
+  if (!list) return;
+  const projects = (wb && wb.projects) || [];
+  list.innerHTML = '';
+  if (projects.length === 0) {
+    list.innerHTML = '<div class="empty">No ingested projects yet.</div>';
+  }
+  for (const p of projects) {
+    const head = document.createElement('div');
+    head.className = 'kv';
+    head.innerHTML = `<span class="k">${escapeHtml(p.projectName)}</span><span class="v"></span>`;
+    list.appendChild(head);
+    for (const s of p.sessions) {
+      const row = document.createElement('div');
+      row.className = 'appr-item';
+      const badge = s.changed ? `changed · ${s.fileCount} file${s.fileCount === 1 ? '' : 's'}` : 'no changes';
+      row.innerHTML =
+        `<div class="tgt"><b>${escapeHtml(s.sessionName)}</b></div>` +
+        `<div class="ts">${escapeHtml(badge)}</div>` +
+        `<div class="btns"><button class="ok" ${s.changed ? '' : 'disabled style="opacity:.4;cursor:default"'}>Bring to laptop</button></div>`;
+      const btn = row.querySelector('button');
+      if (s.changed) btn.onclick = () => send({ type: 'writeback', projectId: p.projectId, sessionId: s.sessionId });
+      list.appendChild(row);
+    }
+  }
+  if (!status) return;
+  status.classList.remove('err', 'ok');
+  const phase = wb && wb.phase;
+  if (!wb || phase === 'idle') { status.textContent = ''; }
+  else if (phase === 'listing') { status.textContent = 'Loading sessions…'; }
+  else if (phase === 'downloading') { status.textContent = 'Downloading changes…'; }
+  else if (phase === 'verifying') { status.textContent = 'Verifying…'; }
+  else if (phase === 'applying') { status.textContent = 'Applying to your repo…'; }
+  else if (phase === 'done') { status.classList.add('ok'); status.textContent = `Updated ${wb.branch} (+${wb.commits} commit${wb.commits === 1 ? '' : 's'})`; }
+  else if (phase === 'error') { status.classList.add('err'); status.textContent = `Failed: ${wb.error || 'unknown error'}`; }
+}
+
 function render() {
   const connected = !!state?.presence?.connected;
   const queue = state?.queue ?? [];
@@ -95,6 +134,7 @@ function render() {
     $('domains').textContent = `${state.security.sensitiveCount} guarded`;
     renderApprovals(queue);
     renderIngest(state.ingest);
+    renderWriteback(state.writeback);
   }
 }
 
@@ -115,6 +155,9 @@ $('ingestBtn').onclick = async () => {
   const path = await window.hud.pickFolder();
   if (path) send({ type: 'ingest', path });
 };
+
+const wbRefresh = $('wbRefresh');
+if (wbRefresh) wbRefresh.onclick = () => send({ type: 'writeback:list' });
 
 function connect() {
   if (!PORT) return; // no bridge yet — wait for a hud.onBridge push
