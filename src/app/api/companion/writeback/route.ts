@@ -6,6 +6,10 @@ import { db } from '@/db/client';
 import { sessions, projects } from '@/db/schema';
 import { ensureWorktree, commitWorktreeEdits } from '@/lib/worktree';
 import { countCommitsAhead, countChangedFiles, createSessionBundle } from '@/lib/companion/writeback-repo';
+import { isLeaseHeld } from '@/lib/turn-lease';
+
+// Mirror run-turn's DEFAULT_MAX_DURATION_MS so lease staleness matches the runner.
+const TURN_MAX_DURATION_MS = 600_000;
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +30,16 @@ export async function POST(req: Request) {
   const ingestedRoot = join(process.cwd(), 'data', 'ingested');
   if (!project?.repo_path || !project.repo_path.startsWith(ingestedRoot)) {
     return Response.json({ error: 'not a companion-ingested project' }, { status: 400 });
+  }
+
+  // Don't bundle a worktree a live turn is actively editing — mirror run-turn's
+  // running_since lease so writeback can't snapshot mid-edit state or collide on
+  // git's index lock (which would spuriously 500 the in-flight turn).
+  if (isLeaseHeld(session.running_since ?? null, Date.now(), TURN_MAX_DURATION_MS)) {
+    return Response.json(
+      { error: 'a turn is running for this session — try again once it finishes' },
+      { status: 409 },
+    );
   }
 
   const base = session.base_branch ?? project.default_branch ?? 'dev';
