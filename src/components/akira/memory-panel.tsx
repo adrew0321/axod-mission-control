@@ -6,7 +6,7 @@ type Note = { slug: string; title: string; description: string; type: string; up
 const RELOCK_MS = 120_000; // auto-lock after 2 min idle
 
 const chipColor: Record<string, string> = {
-  project: "#37d39b", preference: "#ff5acf", fact: "#7fdcff", decision: "#ffb84d", reference: "#8fb2c9",
+  project: "#37d39b", preference: "#ff5acf", fact: "#7fdcff", decision: "#ffb84d", reference: "#8fb2c9", lesson: "#b98cff",
 };
 
 export function MemoryPanel() {
@@ -16,11 +16,14 @@ export function MemoryPanel() {
   const [error, setError] = useState("");
   const [forgetMsg, setForgetMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [soul, setSoul] = useState("");
+  const [soulMsg, setSoulMsg] = useState("");
   const pinRef = useRef(""); // held only while unlocked, for delete calls
   const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function lock() {
     setNotes(null); setOpen(false); setPin(""); setError(""); setForgetMsg(""); pinRef.current = "";
+    setSoul(""); setSoulMsg("");
     if (relockTimer.current) clearTimeout(relockTimer.current);
   }
   function armRelock() {
@@ -37,10 +40,23 @@ export function MemoryPanel() {
         body: JSON.stringify({ pin }),
       });
       if (!r.ok) { setError(r.status === 429 ? "Too many attempts." : "Wrong PIN."); return; }
-      const { notes } = await r.json();
-      pinRef.current = pin; setNotes(notes); setOpen(true); setPin(""); armRelock();
+      const data = await r.json();
+      pinRef.current = pin; setNotes(data.notes); setSoul(data.soul ?? ""); setOpen(true); setPin(""); armRelock();
     } catch { setError("Couldn't reach the server."); }
     finally { setBusy(false); }
+  }
+
+  async function saveSoul(reset = false) {
+    armRelock(); setSoulMsg("");
+    try {
+      const r = await fetch("/api/memory/soul", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reset ? { pin: pinRef.current, reset: true } : { pin: pinRef.current, soul }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) { setSoul(data.soul ?? soul); setSoulMsg(reset ? "Reset to default." : "Saved."); }
+      else setSoulMsg(r.status === 429 ? "Locked out — try again in a minute." : (data.error ?? "Couldn't save."));
+    } catch { setSoulMsg("Couldn't reach the server."); }
   }
 
   async function forget(slug: string) {
@@ -84,6 +100,21 @@ export function MemoryPanel() {
 
       {unlocked && open && (
         <div style={{ padding: "4px 6px 10px" }}>
+          <div style={memTop}>
+            <span style={{ ...meta, color: "#ff5acf", letterSpacing: 1.5 }}>◉ SOUL</span>
+            <span style={{ marginLeft: "auto", ...meta, color: "#8fb2c9" }}>{soulMsg}</span>
+          </div>
+          <textarea
+            value={soul}
+            onChange={(e) => { setSoul(e.target.value); armRelock(); }}
+            spellCheck={false}
+            style={{ width: "100%", minHeight: 120, resize: "vertical", borderRadius: 8, border: "1px solid #1c2c3d",
+              background: "#0a1626", color: "#e6edf3", padding: 10, fontFamily: "ui-monospace, monospace", fontSize: 12, outline: "none" }}
+          />
+          <div style={{ display: "flex", gap: 8, margin: "8px 0 14px" }}>
+            <button onClick={() => saveSoul(false)} style={unlockBtn}>Save soul</button>
+            <button onClick={() => saveSoul(true)} style={relockBtn}>Reset to default</button>
+          </div>
           <div style={memTop}>
             <span style={{ ...meta, color: "#7fdcff", letterSpacing: 1.5 }}>◉ MEMORY</span>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
