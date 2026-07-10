@@ -2,6 +2,8 @@ import 'server-only';
 import { db } from '@/db/client';
 import { agents, sessions } from '@/db/schema';
 import { AKIRA_AGENT, AKIRA_SESSION_ID } from './agent';
+import { vaultReady } from './memory/store';
+import { seedSoulIfMissing } from './memory/soul';
 
 export { AKIRA_AGENT, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './agent';
 
@@ -31,4 +33,6 @@ export async function ensureAkiraThread(): Promise<void> {
       archived_at: null,
     })
     .onConflictDoNothing();
+
+  if (vaultReady()) seedSoulIfMissing();
 }
