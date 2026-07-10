@@ -111,11 +111,11 @@ export function createAkiraServer(ctx: AkiraToolContext) {
 
   const remember = tool(
     'remember',
-    "Save a durable fact/decision/preference to your long-term memory so you recall it in future sessions. Use for things worth keeping — not transient chatter. NEVER store secrets, passwords, or tokens. Updates the note if the slug already exists.",
+    "Save a durable note to your long-term memory. Use type 'lesson' when you learn something about HOW to serve A'Keem better (a preference in how he wants things done, a recurring correction, a working-style rule) — lessons steer your future behavior. Use fact/preference/decision/reference for things you recall. NEVER store secrets, passwords, or tokens. Updates the note if the slug already exists.",
     {
       title: z.string().min(1).describe('Short title (also the default slug).'),
       description: z.string().min(1).describe('One-line summary shown in your memory index.'),
-      type: z.enum(['fact', 'preference', 'project', 'decision', 'reference']),
+      type: z.enum(['fact', 'preference', 'project', 'decision', 'reference', 'lesson']),
       body: z.string().min(1).describe('The note in Markdown. Link related notes with [[slug]].'),
       slug: z.string().optional().describe('Optional explicit slug to update an existing note.'),
     },

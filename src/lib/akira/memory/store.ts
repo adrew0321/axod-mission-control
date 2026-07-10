@@ -66,12 +66,41 @@ export function deleteNote(slug: string, dir = vaultDir()): boolean {
   writeIndex(dir);
   return true;
 }
+// Lessons are injected in full as guidance (see lessonsText) — keep them OUT of
+// the recall index so they steer rather than double-appear.
+function nonLessonNotes(dir: string): Note[] {
+  return listNotes(dir).filter((n) => n.type !== 'lesson');
+}
+
 export function writeIndex(dir = vaultDir()): void {
   if (!existsSync(dir)) return;
-  writeFileSync(join(dir, 'INDEX.md'), buildIndex(listNotes(dir)) + '\n');
+  writeFileSync(join(dir, 'INDEX.md'), buildIndex(nonLessonNotes(dir)) + '\n');
 }
 export function indexText(dir = vaultDir()): string {
-  return buildIndex(listNotes(dir));
+  return buildIndex(nonLessonNotes(dir));
+}
+
+/**
+ * Full bodies of the newest lesson notes, as an injectable guidance block.
+ * Bounded by BOTH a note count and a char budget (whichever hits first) so
+ * AKIRA's context stays lean. Empty string when there are no lessons.
+ */
+export function lessonsText(
+  dir = vaultDir(),
+  opts: { maxNotes?: number; maxChars?: number } = {},
+): string {
+  const maxNotes = opts.maxNotes ?? 20;
+  const maxChars = opts.maxChars ?? 4096;
+  const lessons = listNotes(dir).filter((n) => n.type === 'lesson'); // listNotes is newest-first
+  const blocks: string[] = [];
+  let chars = 0;
+  for (const n of lessons.slice(0, maxNotes)) {
+    const block = `### ${n.title}\n${n.body.trim()}`;
+    if (chars + block.length > maxChars && blocks.length > 0) break;
+    blocks.push(block);
+    chars += block.length;
+  }
+  return blocks.join('\n\n');
 }
 
 // --- git: best-effort, ASYNC + serialized. Never blocks the event loop (which
