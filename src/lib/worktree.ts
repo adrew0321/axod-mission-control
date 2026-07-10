@@ -301,6 +301,26 @@ async function worktreeForBranch(repoPath: string, branch: string): Promise<stri
 }
 
 /**
+ * Commit any uncommitted edits in a session's worktree onto its branch
+ * (mc/<sessionId>), excluding node_modules. Returns true if it committed, false
+ * when the tree was already clean. Shared by mergeWorktree and the writeback route.
+ */
+export async function commitWorktreeEdits(sessionId: string, repoPath: string): Promise<boolean> {
+  const wtPath = sessionWorktreePath(sessionId);
+  const branch = sessionBranch(sessionId);
+  const { stdout: status } = await exec('git', ['-C', wtPath, 'status', '--porcelain']);
+  if (!status.trim()) return false;
+  await exec('git', ['-C', wtPath, 'reset', '-q', '--', 'node_modules']).catch(() => {}); // drop any pre-staged node_modules
+  await exec('git', ['-C', wtPath, 'add', '-A', '--', '.', ':!node_modules']); // stage everything except node_modules
+  await exec('git', [
+    '-c', 'user.email=mc@axodcreative.com',
+    '-c', 'user.name=Mission Control',
+    '-C', wtPath, 'commit', '-m', `mission-control: ${branch}`,
+  ]);
+  return true;
+}
+
+/**
  * Apply a session's work to the project's base branch. Commits any loose edits on
  * mc/<sessionId>, then merges that branch into baseBranch.
  *
@@ -322,16 +342,7 @@ export async function mergeWorktree(
   const branch = sessionBranch(sessionId);
 
   // 1. Commit any uncommitted edits in the worktree so the branch carries them.
-  const { stdout: status } = await exec('git', ['-C', wtPath, 'status', '--porcelain']);
-  if (status.trim()) {
-    await exec('git', ['-C', wtPath, 'reset', '-q', '--', 'node_modules']).catch(() => {}); // drop any pre-staged node_modules
-    await exec('git', ['-C', wtPath, 'add', '-A', '--', '.', ':!node_modules']); // stage everything except node_modules
-    await exec('git', [
-      '-c', 'user.email=mc@axodcreative.com',
-      '-c', 'user.name=Mission Control',
-      '-C', wtPath, 'commit', '-m', `mission-control: ${branch}`,
-    ]);
-  }
+  await commitWorktreeEdits(sessionId, repoPath);
 
   // 2. Merge into the base WITHOUT disturbing the operator's working tree. If the base
   //    is already checked out somewhere, merge there; otherwise spin up a temp worktree.

@@ -7,6 +7,7 @@ const snap: StateSnapshot = {
   queue: [],
   security: { tokenAuthed: true, transport: 'outbound-only', profile: 'persistent · local', sensitiveCount: 2 },
   ingest: { phase: 'idle' },
+  writeback: { phase: 'idle' },
 };
 
 test('buildState tags the snapshot as a state message', () => {
@@ -43,4 +44,27 @@ test('parseClientMsg accepts an ingest message with a path', () => {
 
 test('parseClientMsg rejects an ingest message with no path', () => {
   assert.equal(parseClientMsg('{"type":"ingest"}'), null);
+});
+
+test("parseClientMsg accepts writeback:list", () => {
+  assert.deepEqual(parseClientMsg(JSON.stringify({ type: 'writeback:list' })), { type: 'writeback:list' });
+});
+test("parseClientMsg accepts a well-formed writeback", () => {
+  assert.deepEqual(
+    parseClientMsg(JSON.stringify({ type: 'writeback', projectId: 'app', sessionId: 'sess_1' })),
+    { type: 'writeback', projectId: 'app', sessionId: 'sess_1' },
+  );
+});
+test("parseClientMsg rejects a writeback missing ids", () => {
+  assert.equal(parseClientMsg(JSON.stringify({ type: 'writeback', projectId: 'app' })), null);
+  assert.equal(parseClientMsg(JSON.stringify({ type: 'writeback', sessionId: 's' })), null);
+});
+test("buildState carries the writeback block", () => {
+  const s = buildState({
+    presence: { connected: false, operator: 'A', host: 'h', uptimeSec: 0, task: 'idle' },
+    queue: [], security: { tokenAuthed: true, transport: 'outbound-only', profile: 'p', sensitiveCount: 0 },
+    ingest: { phase: 'idle' },
+    writeback: { phase: 'idle' },
+  });
+  assert.equal(s.writeback.phase, 'idle');
 });

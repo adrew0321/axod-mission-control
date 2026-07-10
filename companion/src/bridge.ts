@@ -14,6 +14,8 @@ export interface BridgeHandlers {
   onDeny: (id: string) => void;
   onStop: () => void;
   onIngest: (path: string) => void;
+  onWritebackList: () => void;
+  onWriteback: (projectId: string, sessionId: string) => void;
 }
 
 export const BRIDGE_FILE = join(homedir(), '.akira-companion', 'bridge.json');
@@ -57,6 +59,8 @@ export function startBridge(h: BridgeHandlers) {
       else if (msg.type === 'deny') h.onDeny(msg.id);
       else if (msg.type === 'stop') h.onStop();
       else if (msg.type === 'ingest') h.onIngest(msg.path);
+      else if (msg.type === 'writeback:list') h.onWritebackList();
+      else if (msg.type === 'writeback') h.onWriteback(msg.projectId, msg.sessionId);
     });
     ws.on('close', () => authed.delete(ws));
     ws.on('error', () => authed.delete(ws));
