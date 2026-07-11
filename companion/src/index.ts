@@ -21,6 +21,7 @@ let connected = false;
 let currentTask = 'idle';
 let ingestState: IngestState = { phase: 'idle' };
 let writebackState: WritebackState = { phase: 'idle' };
+let writebackBusy = false; // synchronous in-flight guard (set before any await)
 
 // id → resolver for the exec chain awaiting an operator decision
 const resolvers = new Map<string, (d: 'approved' | 'denied') => void>();
@@ -104,17 +105,20 @@ async function runWritebackList(): Promise<void> {
 }
 
 async function runWriteback(projectId: string, sessionId: string): Promise<void> {
-  const busy = writebackState.phase === 'downloading' || writebackState.phase === 'verifying' || writebackState.phase === 'applying';
-  if (busy) return; // one at a time
-  const entry = await getLedgerEntry(projectId);
-  if (!entry) {
-    writebackState = { ...writebackState, phase: 'error', error: 'unknown project on this laptop — re-ingest it first' };
-    bridge.push();
-    return;
-  }
-  writebackState = { ...writebackState, phase: 'downloading', error: undefined };
-  bridge.push();
+  // Claim the slot SYNCHRONOUSLY before the first await, so a rapid double-fire
+  // can't both pass the guard while getLedgerEntry is pending (the old phase-based
+  // check raced across that await).
+  if (writebackBusy) return; // one at a time
+  writebackBusy = true;
   try {
+    const entry = await getLedgerEntry(projectId);
+    if (!entry) {
+      writebackState = { ...writebackState, phase: 'error', error: 'unknown project on this laptop — re-ingest it first' };
+      return;
+    }
+    writebackState = { ...writebackState, error: undefined };
+    // downloadAndApply drives the visible phases (downloading→verifying→applying);
+    // we no longer set 'downloading' here (that was a duplicate push).
     const { branch, commits, files } = await downloadAndApply(
       cfg,
       { sessionId, localPath: entry.localPath },
@@ -123,8 +127,10 @@ async function runWriteback(projectId: string, sessionId: string): Promise<void>
     writebackState = { ...writebackState, phase: 'done', branch, commits, files };
   } catch (e) {
     writebackState = { ...writebackState, phase: 'error', error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    writebackBusy = false;
+    bridge.push();
   }
-  bridge.push();
 }
 
 function stopAll(): void {

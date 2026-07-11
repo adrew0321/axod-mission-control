@@ -7,6 +7,7 @@ import { projects } from '@/db/schema';
 import { slugifyProjectId } from '@/lib/projects';
 import { registerProject } from '@/lib/register-project';
 import { streamToFileWithCap, cloneBundleIntoProject } from '@/lib/companion/ingest-repo';
+import { verifyCompanionToken } from '@/lib/companion/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,7 @@ const MAX_BYTES = Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : 1_00
 
 export async function POST(req: Request) {
   const token = req.headers.get('x-companion-token');
-  if (!process.env.COMPANION_TOKEN || token !== process.env.COMPANION_TOKEN) {
+  if (!verifyCompanionToken(token)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

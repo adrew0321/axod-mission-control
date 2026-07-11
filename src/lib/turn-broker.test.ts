@@ -109,3 +109,42 @@ test('subscribe to an unknown session emits a synthetic persisted', () => {
   assert.deepEqual(got, ['persisted']);
   off(); // no-op
 });
+
+test('a finished (retained) turn can be restarted before retention fires', async () => {
+  const ft = fakeTimers();
+  const d1 = deferredRun();
+  assert.deepEqual(startTurn('r1', d1.run, { timers: ft.timers }), { started: true });
+  d1.e()({ type: 'token', content: 'first' });
+  d1.finish();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(isRunning('r1'), false); // finished; state retained, retention timer pending
+
+  // Restart before retention fires → fresh turn (new buffer), and the OLD retention
+  // timer must have been cleared so it can't delete the new running state.
+  const d2 = deferredRun();
+  assert.deepEqual(startTurn('r1', d2.run, { timers: ft.timers }), { started: true });
+  assert.equal(isRunning('r1'), true);
+  ft.fire(); // the old retention timer (if not cleared) would delete state here
+  assert.equal(isRunning('r1'), true);
+
+  // The restart started from an empty buffer — a new subscriber sees only new events.
+  const got: string[] = [];
+  subscribe('r1', (ev) => got.push(ev.type));
+  d2.e()({ type: 'token', content: 'second' });
+  assert.deepEqual(got, ['token']); // not the retained 'first' from the previous turn
+  d2.finish();
+});
+
+test('a rejecting run still finishes: running flips false, then clears after retention', async () => {
+  const ft = fakeTimers();
+  startTurn('rj1', () => Promise.reject(new Error('boom')), { timers: ft.timers });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(isRunning('rj1'), false); // rejection routed to finish (the .then's 2nd arg)
+  assert.equal(abort('rj1'), false);     // not running → abort is a no-op
+  ft.fire();                             // retention timer → delete state
+  const got: string[] = [];
+  subscribe('rj1', (ev) => got.push(ev.type));
+  assert.deepEqual(got, ['persisted']);  // state gone → synthetic persisted
+});

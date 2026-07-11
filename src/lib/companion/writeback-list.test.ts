@@ -15,3 +15,11 @@ test('isIngestedRepo is false for null/empty', () => {
   assert.equal(isIngestedRepo(null, root), false);
   assert.equal(isIngestedRepo('', root), false);
 });
+test('isIngestedRepo is false for a sibling dir that merely shares the prefix', () => {
+  // The old startsWith check would wrongly accept "…/ingested-evil".
+  assert.equal(isIngestedRepo(root + '-evil', root), false);
+  assert.equal(isIngestedRepo(root + '-evil/repo', root), false);
+});
+test('isIngestedRepo accepts nested children under the root', () => {
+  assert.equal(isIngestedRepo(join(root, 'a', 'b'), root), true);
+});
