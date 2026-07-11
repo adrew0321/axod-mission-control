@@ -20,7 +20,9 @@ import {
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
-import { indexText, gitPullDebounced } from './akira/memory/store';
+import { indexText, gitPullDebounced, lessonsText } from './akira/memory/store';
+import { readSoul } from './akira/memory/soul';
+import { soulLessonsPreamble } from './akira/preamble';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
 import { isOnline as companionOnline } from '@/lib/companion/registry';
@@ -86,7 +88,15 @@ export async function runAkiraTurn(
       memoryBlock = '';
     }
 
+    let preamble = '';
+    try {
+      preamble = soulLessonsPreamble(readSoul(), lessonsText());
+    } catch {
+      preamble = soulLessonsPreamble(readSoul(), ''); // lessons unavailable — SOUL still leads
+    }
+
     const prompt =
+      preamble + '\n\n' +
       buildAkiraPrompt(snapshot, roster, transcript, agentLabels) +
       memoryBlock +
       `\n\n## LAPTOP COMPANION\n${companionOnline()

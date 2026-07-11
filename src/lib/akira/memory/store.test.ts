@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { listNotes, readNote, writeNote, deleteNote, indexText } from './store';
+import { listNotes, readNote, writeNote, deleteNote, indexText, lessonsText } from './store';
 
 const vault = () => mkdtempSync(join(tmpdir(), 'akira-mem-'));
 
@@ -50,4 +50,52 @@ test('deleteNote removes the note and refreshes the index', () => {
     assert.match(indexText(dir), /\[\[keep\]\]/);
     assert.doesNotMatch(indexText(dir), /\[\[gone\]\]/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('indexText excludes lesson notes; lessonsText returns them in full', () => {
+  const d = vault();
+  try {
+    writeNote({ title: 'Mini is UTC', description: 'clock', type: 'fact', body: 'The Mini runs UTC.' }, d);
+    writeNote({ title: 'Terse briefs', description: 'prefers terse', type: 'lesson', body: 'A’Keem wants the morning brief in 2 sentences.' }, d);
+
+    // buildIndex renders `[[slug]] — description`, not the title — so assert on
+    // the slug (indexText's real vocabulary), same convention as the deleteNote test above.
+    const idx = indexText(d);
+    assert.ok(idx.includes('[[mini-is-utc]]'));
+    assert.ok(!idx.includes('[[terse-briefs]]')); // lessons are NOT in the memory index
+
+    const lessons = lessonsText(d);
+    assert.ok(lessons.includes('A’Keem wants the morning brief in 2 sentences.')); // full body
+    assert.ok(!lessons.includes('The Mini runs UTC.')); // non-lessons excluded
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('lessonsText is empty when there are no lessons', () => {
+  const d = vault();
+  try {
+    writeNote({ title: 'x', description: 'y', type: 'fact', body: 'z' }, d);
+    assert.equal(lessonsText(d), '');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('lessonsText respects the note-count cap, newest first', () => {
+  const d = vault();
+  try {
+    for (let i = 0; i < 25; i++) {
+      writeNote({ title: `lesson ${i}`, description: `d${i}`, type: 'lesson', body: `body ${i}` }, d);
+    }
+    const out = lessonsText(d, { maxNotes: 5, maxChars: 100_000 });
+    assert.equal((out.match(/body \d+/g) ?? []).length, 5);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('lessonsText respects the char budget', () => {
+  const d = vault();
+  try {
+    for (let i = 0; i < 10; i++) {
+      writeNote({ title: `L${i}`, description: `d${i}`, type: 'lesson', body: 'x'.repeat(50) }, d);
+    }
+    const out = lessonsText(d, { maxNotes: 100, maxChars: 120 });
+    assert.ok(out.length <= 200); // stops well before all 10 (~500+ chars of bodies)
+  } finally { rmSync(d, { recursive: true, force: true }); }
 });

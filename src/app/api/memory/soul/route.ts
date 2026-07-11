@@ -2,13 +2,13 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { verifyPin } from '@/lib/akira/memory/pin';
 import { pinLimiter } from '@/lib/akira/memory/pin-limiter';
-import { listNotes, vaultReady } from '@/lib/akira/memory/store';
-import { readSoul } from '@/lib/akira/memory/soul';
+import { writeSoul, readSoul, DEFAULT_SOUL } from '@/lib/akira/memory/soul';
+import { gitCommitPush, vaultReady } from '@/lib/akira/memory/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: Request) {
+export async function PUT(req: Request) {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token || !(await verifySession(token))) {
@@ -17,15 +17,17 @@ export async function POST(req: Request) {
   if (!pinLimiter.allowed(Date.now())) {
     return Response.json({ error: 'Too many attempts — wait a minute.' }, { status: 429 });
   }
-  const { pin } = (await req.json().catch(() => ({}))) as { pin?: string };
+  const { pin, soul, reset } = (await req.json().catch(() => ({}))) as
+    { pin?: string; soul?: string; reset?: boolean };
   if (!verifyPin(String(pin ?? ''), process.env.AKIRA_MEMORY_PIN ?? '')) {
     pinLimiter.recordFailure(Date.now());
     return Response.json({ error: 'Wrong PIN' }, { status: 401 });
   }
   pinLimiter.recordSuccess();
-  if (!vaultReady()) return Response.json({ notes: [], soul: readSoul() });
-  const notes = listNotes().map(({ slug, title, description, type, updated }) => ({
-    slug, title, description, type, updated,
-  }));
-  return Response.json({ notes, soul: readSoul() });
+  if (!vaultReady()) return Response.json({ error: "Memory isn't configured on this server." }, { status: 400 });
+  const text = reset ? DEFAULT_SOUL : String(soul ?? '');
+  if (!text.trim()) return Response.json({ error: 'Soul cannot be empty.' }, { status: 400 });
+  writeSoul(text);
+  gitCommitPush('soul: update');
+  return Response.json({ ok: true, soul: readSoul() });
 }
