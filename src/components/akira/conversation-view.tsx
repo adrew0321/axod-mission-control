@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseReply, isLongReply, type Inline } from "@/lib/akira/format";
 import type { Turn } from "@/lib/akira/turns";
 
@@ -47,6 +47,40 @@ function fmtClock(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+const COLLAPSE_PX = 320; // ~10–12 lines before an AKIRA reply folds
+const FADE_MASK = "linear-gradient(180deg, #000 72%, transparent)";
+
+/** An AKIRA reply that clamps with a fade + "Show more" when it overflows. */
+function CollapsibleReply({ text }: { text: string }) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (el) setOverflows(el.scrollHeight > COLLAPSE_PX + 8);
+  }, [text]);
+  const clamped = overflows && !expanded;
+  return (
+    <div>
+      <div
+        ref={innerRef}
+        style={{
+          maxHeight: clamped ? COLLAPSE_PX : "none",
+          overflow: "hidden",
+          ...(clamped ? { WebkitMaskImage: FADE_MASK, maskImage: FADE_MASK } : {}),
+        }}
+      >
+        <ReplyBody text={text} />
+      </div>
+      {overflows && (
+        <button type="button" style={cueBtn} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "⌃ Show less" : "⌄ Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function YouTurn({ t }: { t: Turn }) {
   return (
     <div style={youRow}>
@@ -65,7 +99,7 @@ function AkiraTurn({ content, at }: { content: string; at?: number }) {
         AKIRA{at != null ? ` · ${fmtClock(at)}` : ""}
       </div>
       <div style={akiraBlock(isLongReply(content))}>
-        <ReplyBody text={content} />
+        <CollapsibleReply text={content} />
       </div>
     </div>
   );
@@ -136,7 +170,7 @@ export function ConversationStream({
             <div style={dots}>…</div>
           ) : tailIsAkira ? (
             <div style={akiraBlock(isLongReply(turns[turns.length - 1].content))}>
-              <ReplyBody text={turns[turns.length - 1].content} />
+              <CollapsibleReply text={turns[turns.length - 1].content} />
             </div>
           ) : null}
         </>
