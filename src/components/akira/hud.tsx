@@ -365,6 +365,8 @@ export function Hud({
   const projectsView = useInView<HTMLDivElement>();
   const briefView = useInView<HTMLDivElement>();
 
+  const conversationActive = turns.length > 0 || reply.length > 0 || mode === "thinking";
+
   return (
     <>
       <Constellation />
@@ -411,7 +413,7 @@ export function Hud({
         >
           {/* Shrink the actual size (not a transform) when history is open so the
               thread reclaims real vertical space and the input never collides. */}
-          <Orb mode={mode} size={historyOpen ? 132 : 320} />
+          <Orb mode={mode} size={historyOpen ? 132 : conversationActive ? 200 : 320} />
         </div>
         <div
           style={{

@@ -161,6 +161,16 @@ export const auth_sessions = sqliteTable('auth_sessions', {
   expires_at: integer('expires_at', { mode: 'timestamp' }).notNull(),
 });
 
+export const reflections = sqliteTable('reflections', {
+  id: text('id').primaryKey(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  status: text('status').notNull(),               // 'ok' | 'empty' | 'error'
+  lessons_before: integer('lessons_before').notNull().default(0),
+  lessons_after: integer('lessons_after').notNull().default(0),
+  soul_proposed: integer('soul_proposed').notNull().default(0), // 0/1
+  error: text('error'),
+});
+
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   project: one(projects, { fields: [sessions.project_id], references: [projects.id] }),
   messages: many(messages),

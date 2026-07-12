@@ -1,7 +1,7 @@
 // AKIRA's SOUL: her identity/voice/values as an editable vault doc, injected each
 // turn. A special vault file (NOT a memory note). Pure node fs so it unit-tests
 // against a temp dir. Model-agnostic: this is the portable persona substrate.
-import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { vaultDir } from './store';
 
@@ -43,4 +43,40 @@ export function writeSoul(text: string, dir: string = vaultDir()): void {
 export function seedSoulIfMissing(dir: string = vaultDir()): void {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
   if (!existsSync(soulPath(dir))) writeSoul(DEFAULT_SOUL, dir);
+}
+
+export const SOUL_PROPOSAL_FILE = 'SOUL.proposed.md';
+
+const oneLine = (s: string) => s.replace(/[\r\n]+/g, ' ').trim();
+
+export function writeSoulProposal(text: string, reason: string, dir: string = vaultDir()): void {
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  const doc = ['---', `reason: ${oneLine(reason)}`, `created: ${new Date().toISOString()}`, '---', text].join('\n');
+  const p = join(dir, SOUL_PROPOSAL_FILE);
+  const tmp = `${p}.tmp`;
+  writeFileSync(tmp, doc);
+  renameSync(tmp, p);
+}
+
+export function readSoulProposal(dir: string = vaultDir()): { text: string; reason: string; created: string } | null {
+  try {
+    const md = readFileSync(join(dir, SOUL_PROPOSAL_FILE), 'utf8');
+    const lines = md.split('\n');
+    if (lines[0] !== '---') return null;
+    const close = lines.indexOf('---', 1);
+    if (close < 0) return null;
+    const fm: Record<string, string> = {};
+    for (const l of lines.slice(1, close)) {
+      const i = l.indexOf(':');
+      if (i > 0) fm[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+    }
+    const text = lines.slice(close + 1).join('\n');
+    return text.trim() ? { text, reason: fm.reason ?? '', created: fm.created ?? '' } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSoulProposal(dir: string = vaultDir()): void {
+  try { rmSync(join(dir, SOUL_PROPOSAL_FILE)); } catch { /* already gone */ }
 }

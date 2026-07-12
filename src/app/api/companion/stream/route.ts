@@ -1,12 +1,13 @@
 import { registerCompanion } from '@/lib/companion/registry';
 import { startCompanionStream } from '@/lib/companion/stream-lifecycle';
+import { verifyCompanionToken } from '@/lib/companion/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const token = new URL(req.url).searchParams.get('token');
-  if (!process.env.COMPANION_TOKEN || token !== process.env.COMPANION_TOKEN) {
+  if (!verifyCompanionToken(token)) {
     return new Response('Unauthorized', { status: 401 });
   }
 

@@ -10,6 +10,7 @@ export interface FleetSnapshot {
   health: { verdict: 'pass' | 'fail' | 'unknown'; at: string | null };
   insights: { title: string; detail: string; ageMinutes: number }[];
   schedules: { projectId: string; title: string; nextRunAt: string | null }[];
+  soulProposal: { reason: string } | null;
   errors: string[];
 }
 
@@ -24,6 +25,7 @@ export function emptySnapshot(): FleetSnapshot {
     health: { verdict: 'unknown', at: null },
     insights: [],
     schedules: [],
+    soulProposal: null,
     errors: [],
   };
 }

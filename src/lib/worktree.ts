@@ -338,7 +338,6 @@ export async function mergeWorktree(
   repoPath: string,
   baseBranch: string,
 ): Promise<MergeResult> {
-  const wtPath = sessionWorktreePath(sessionId);
   const branch = sessionBranch(sessionId);
 
   // 1. Commit any uncommitted edits in the worktree so the branch carries them.

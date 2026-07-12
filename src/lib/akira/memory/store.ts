@@ -22,7 +22,7 @@ export function listNotes(dir = vaultDir()): Note[] {
   if (!existsSync(dir)) return [];
   const notes: Note[] = [];
   for (const f of readdirSync(dir)) {
-    if (!f.endsWith('.md') || f === 'INDEX.md') continue;
+    if (!f.endsWith('.md') || f === 'INDEX.md' || f === 'SOUL.md' || f === 'SOUL.proposed.md') continue;
     const md = readFileSync(join(dir, f), 'utf8');
     if (!isNoteFile(md)) continue; // stray file a user dropped in the vault — not a memory
     notes.push(parseNote(f.replace(/\.md$/, ''), md));

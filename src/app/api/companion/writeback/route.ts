@@ -6,6 +6,8 @@ import { db } from '@/db/client';
 import { sessions, projects } from '@/db/schema';
 import { ensureWorktree, commitWorktreeEdits } from '@/lib/worktree';
 import { countCommitsAhead, countChangedFiles, createSessionBundle } from '@/lib/companion/writeback-repo';
+import { isIngestedRepo } from '@/lib/companion/writeback-list';
+import { verifyCompanionToken } from '@/lib/companion/auth';
 import { isLeaseHeld } from '@/lib/turn-lease';
 
 // Mirror run-turn's DEFAULT_MAX_DURATION_MS so lease staleness matches the runner.
@@ -16,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
   const token = req.headers.get('x-companion-token');
-  if (!process.env.COMPANION_TOKEN || token !== process.env.COMPANION_TOKEN) {
+  if (!verifyCompanionToken(token)) {
     return new Response('Unauthorized', { status: 401 });
   }
 
@@ -28,7 +30,7 @@ export async function POST(req: Request) {
 
   const project = await db.select().from(projects).where(eq(projects.id, session.project_id)).limit(1).then((r) => r[0]);
   const ingestedRoot = join(process.cwd(), 'data', 'ingested');
-  if (!project?.repo_path || !project.repo_path.startsWith(ingestedRoot)) {
+  if (!project?.repo_path || !isIngestedRepo(project.repo_path, ingestedRoot)) {
     return Response.json({ error: 'not a companion-ingested project' }, { status: 400 });
   }
 

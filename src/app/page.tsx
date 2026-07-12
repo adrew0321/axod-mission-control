@@ -3,6 +3,8 @@ import { getRecentTurns, type Turn } from "@/lib/akira/history";
 import { Hud } from "@/components/akira/hud";
 import { isOnline } from "@/lib/companion/registry";
 
+export const metadata = { title: "AXOD — AKIRA" };
+
 export const dynamic = "force-dynamic";
 
 const HISTORY_LIMIT = 8; // shallow window on the front door; deep history lives in the dashboard
