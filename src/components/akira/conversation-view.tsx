@@ -91,7 +91,7 @@ function YouTurn({ t }: { t: Turn }) {
     </div>
   );
 }
-function AkiraTurn({ content, at }: { content: string; at?: number }) {
+function AkiraTurn({ content, at, live }: { content: string; at?: number; live?: boolean }) {
   return (
     <div>
       <div style={akiraLabel}>
@@ -99,7 +99,7 @@ function AkiraTurn({ content, at }: { content: string; at?: number }) {
         AKIRA{at != null ? ` · ${fmtClock(at)}` : ""}
       </div>
       <div style={akiraBlock(isLongReply(content))}>
-        <CollapsibleReply text={content} />
+        {live ? <ReplyBody text={content} /> : <CollapsibleReply text={content} />}
       </div>
     </div>
   );
@@ -152,7 +152,7 @@ export function ConversationStream({
           {turns.map((t, i) =>
             t.role === "you" ? <YouTurn key={i} t={t} /> : <AkiraTurn key={i} content={t.content} at={t.at} />,
           )}
-          {showLive && <AkiraTurn content={liveReply} />}
+          {showLive && <AkiraTurn content={liveReply} live />}
           {showThinking && <div style={dots}>…</div>}
         </>
       ) : (
