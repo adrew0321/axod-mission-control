@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { parseReply, isLongReply, type Inline } from "@/lib/akira/format";
 import type { Turn } from "@/lib/akira/turns";
 
@@ -47,6 +47,40 @@ function fmtClock(ms: number): string {
   return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+const COLLAPSE_PX = 320; // ~10–12 lines before an AKIRA reply folds
+const FADE_MASK = "linear-gradient(180deg, #000 72%, transparent)";
+
+/** An AKIRA reply that clamps with a fade + "Show more" when it overflows. */
+function CollapsibleReply({ text }: { text: string }) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [overflows, setOverflows] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    const el = innerRef.current;
+    if (el) setOverflows(el.scrollHeight > COLLAPSE_PX + 8);
+  }, [text]);
+  const clamped = overflows && !expanded;
+  return (
+    <div>
+      <div
+        ref={innerRef}
+        style={{
+          maxHeight: clamped ? COLLAPSE_PX : "none",
+          overflow: "hidden",
+          ...(clamped ? { WebkitMaskImage: FADE_MASK, maskImage: FADE_MASK } : {}),
+        }}
+      >
+        <ReplyBody text={text} />
+      </div>
+      {overflows && (
+        <button type="button" style={cueBtn} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? "⌃ Show less" : "⌄ Show more"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function YouTurn({ t }: { t: Turn }) {
   return (
     <div style={youRow}>
@@ -57,7 +91,7 @@ function YouTurn({ t }: { t: Turn }) {
     </div>
   );
 }
-function AkiraTurn({ content, at }: { content: string; at?: number }) {
+function AkiraTurn({ content, at, live }: { content: string; at?: number; live?: boolean }) {
   return (
     <div>
       <div style={akiraLabel}>
@@ -65,7 +99,7 @@ function AkiraTurn({ content, at }: { content: string; at?: number }) {
         AKIRA{at != null ? ` · ${fmtClock(at)}` : ""}
       </div>
       <div style={akiraBlock(isLongReply(content))}>
-        <ReplyBody text={content} />
+        {live ? <ReplyBody text={content} /> : <CollapsibleReply text={content} />}
       </div>
     </div>
   );
@@ -118,7 +152,7 @@ export function ConversationStream({
           {turns.map((t, i) =>
             t.role === "you" ? <YouTurn key={i} t={t} /> : <AkiraTurn key={i} content={t.content} at={t.at} />,
           )}
-          {showLive && <AkiraTurn content={liveReply} />}
+          {showLive && <AkiraTurn content={liveReply} live />}
           {showThinking && <div style={dots}>…</div>}
         </>
       ) : (
@@ -136,7 +170,7 @@ export function ConversationStream({
             <div style={dots}>…</div>
           ) : tailIsAkira ? (
             <div style={akiraBlock(isLongReply(turns[turns.length - 1].content))}>
-              <ReplyBody text={turns[turns.length - 1].content} />
+              <CollapsibleReply text={turns[turns.length - 1].content} />
             </div>
           ) : null}
         </>
@@ -147,20 +181,27 @@ export function ConversationStream({
 
 const streamStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: 680,
+  maxWidth: 720,
   margin: "8px auto 0",
   display: "flex",
   flexDirection: "column",
   gap: 14,
   transition: "opacity .8s ease",
+  border: "1px solid rgba(127,220,255,.12)",
+  background: "rgba(7,13,22,.45)",
+  borderRadius: 16,
+  padding: "16px 18px",
 };
-const expandedScroll: React.CSSProperties = { maxHeight: "50vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+const expandedScroll: React.CSSProperties = { maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" };
 // Collapsed (single current reply): bound it too so a long reply scrolls inside
 // its own region instead of growing the hero past 100vh and shoving the input +
 // "scroll into Mission Control" cue off-screen. Short replies render naturally
 // (content below the cap = no scrollbar). Smaller cap than expanded because the
-// orb is at full size when history is closed.
-const collapsedScroll: React.CSSProperties = { maxHeight: "40vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+// orb is at full size when history is closed. Held to 50vh (not 58) so that a
+// long reply streaming raw — before it folds — plus the orb + input + frame
+// chrome still fits under ~100vh on short (~900px) viewports, keeping the input
+// and "scroll into Mission Control" cue on-screen (v1.13.4).
+const collapsedScroll: React.CSSProperties = { maxHeight: "50vh", overflowY: "auto", overflowX: "hidden" };
 const cueBtn: React.CSSProperties = {
   alignSelf: "center",
   background: "transparent",
@@ -214,7 +255,7 @@ const akiraDot: React.CSSProperties = {
 };
 function akiraBlock(long: boolean): React.CSSProperties {
   return {
-    maxWidth: 640,
+    maxWidth: 680,
     width: "100%",
     margin: "0 auto",
     textAlign: long ? "left" : "center",
