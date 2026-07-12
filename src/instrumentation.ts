@@ -8,6 +8,8 @@ export async function register() {
     startScheduler();
     const { startDreaming } = await import('@/lib/dream');
     startDreaming();
+    const { startReflecting } = await import('@/lib/akira/reflect');
+    startReflecting();
     const { startDiscordBot } = await import('@/lib/discord-bot');
     startDiscordBot();
     const { startDiscordNotify } = await import('@/lib/discord-notify');

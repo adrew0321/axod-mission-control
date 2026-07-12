@@ -45,6 +45,7 @@ export function renderSnapshot(s: FleetSnapshot): string {
     `Scheduled today (${s.schedules.length}): ` +
       (s.schedules.map((sc) => `${sc.title}${sc.nextRunAt ? ` @ ${sc.nextRunAt}` : ''}`).join('; ') || 'none'),
   );
+  if (s.soulProposal) lines.push(`Soul proposal awaiting your review in Settings — reason: ${s.soulProposal.reason}`);
   if (s.errors.length) lines.push(`(unavailable: ${s.errors.join(', ')})`);
   return lines.join('\n');
 }

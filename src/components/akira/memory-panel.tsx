@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Note = { slug: string; title: string; description: string; type: string; updated: string };
+type SoulProposal = { text: string; reason: string; created: string };
 
 const RELOCK_MS = 120_000; // auto-lock after 2 min idle
 
@@ -18,12 +19,15 @@ export function MemoryPanel() {
   const [busy, setBusy] = useState(false);
   const [soul, setSoul] = useState("");
   const [soulMsg, setSoulMsg] = useState("");
+  const [soulProposal, setSoulProposal] = useState<SoulProposal | null>(null);
+  const [proposalMsg, setProposalMsg] = useState("");
+  const [proposalBusy, setProposalBusy] = useState(false);
   const pinRef = useRef(""); // held only while unlocked, for delete calls
   const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function lock() {
     setNotes(null); setOpen(false); setPin(""); setError(""); setForgetMsg(""); pinRef.current = "";
-    setSoul(""); setSoulMsg("");
+    setSoul(""); setSoulMsg(""); setSoulProposal(null); setProposalMsg("");
     if (relockTimer.current) clearTimeout(relockTimer.current);
   }
   function armRelock() {
@@ -41,7 +45,9 @@ export function MemoryPanel() {
       });
       if (!r.ok) { setError(r.status === 429 ? "Too many attempts." : "Wrong PIN."); return; }
       const data = await r.json();
-      pinRef.current = pin; setNotes(data.notes); setSoul(data.soul ?? ""); setOpen(true); setPin(""); armRelock();
+      pinRef.current = pin; setNotes(data.notes); setSoul(data.soul ?? "");
+      setSoulProposal(data.soulProposal ?? null);
+      setOpen(true); setPin(""); armRelock();
     } catch { setError("Couldn't reach the server."); }
     finally { setBusy(false); }
   }
@@ -57,6 +63,25 @@ export function MemoryPanel() {
       if (r.ok) { setSoul(data.soul ?? soul); setSoulMsg(reset ? "Reset to default." : "Saved."); }
       else setSoulMsg(r.status === 429 ? "Locked out — try again in a minute." : (data.error ?? "Couldn't save."));
     } catch { setSoulMsg("Couldn't reach the server."); }
+  }
+
+  async function resolveProposal(action: "approve" | "reject") {
+    if (!soulProposal) return;
+    armRelock(); setProposalMsg(""); setProposalBusy(true);
+    try {
+      const r = await fetch("/api/memory/soul", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinRef.current, action }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok) {
+        if (action === "approve") setSoul(data.soul ?? soulProposal.text);
+        setSoulProposal(null);
+      } else {
+        setProposalMsg(r.status === 429 ? "Locked out — try again in a minute." : (data.error ?? "Couldn't resolve proposal."));
+      }
+    } catch { setProposalMsg("Couldn't reach the server."); }
+    finally { setProposalBusy(false); }
   }
 
   async function forget(slug: string) {
@@ -100,6 +125,29 @@ export function MemoryPanel() {
 
       {unlocked && open && (
         <div style={{ padding: "4px 6px 10px" }}>
+          {soulProposal && (
+            <div style={{ border: "1px solid rgba(255,184,77,.35)", borderRadius: 10, background: "rgba(255,184,77,.06)", padding: "10px 10px 12px", margin: "0 0 14px" }}>
+              <div style={memTop}>
+                <span style={{ ...meta, color: "#ffb84d", letterSpacing: 1.5 }}>◉ SOUL PROPOSAL</span>
+                <span style={{ marginLeft: "auto", ...meta, color: "#8fb2c9" }}>{proposalMsg}</span>
+              </div>
+              <div style={{ ...meta, color: "#c9d6e3", padding: "2px 8px 10px" }}>{soulProposal.reason || "AKIRA proposed an update to her soul."}</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "0 8px" }}>
+                <div style={{ flex: "1 1 260px" }}>
+                  <div style={{ ...meta, fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Current</div>
+                  <pre style={diffBox}>{soul}</pre>
+                </div>
+                <div style={{ flex: "1 1 260px" }}>
+                  <div style={{ ...meta, fontSize: 9.5, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4, color: "#ffb84d" }}>Proposed</div>
+                  <pre style={diffBox}>{soulProposal.text}</pre>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, margin: "10px 8px 0" }}>
+                <button onClick={() => resolveProposal("approve")} disabled={proposalBusy} style={unlockBtn}>Approve</button>
+                <button onClick={() => resolveProposal("reject")} disabled={proposalBusy} style={relockBtn}>Reject</button>
+              </div>
+            </div>
+          )}
           <div style={memTop}>
             <span style={{ ...meta, color: "#ff5acf", letterSpacing: 1.5 }}>◉ SOUL</span>
             <span style={{ marginLeft: "auto", ...meta, color: "#8fb2c9" }}>{soulMsg}</span>
@@ -176,3 +224,4 @@ const th: React.CSSProperties = { ...meta, fontSize: 9.5, letterSpacing: 1.2, te
 const td: React.CSSProperties = { padding: "10px", borderBottom: "1px solid rgba(19,32,46,.6)", verticalAlign: "top" };
 const chip: React.CSSProperties = { fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase", borderRadius: 5, padding: "2px 7px", fontWeight: 700, whiteSpace: "nowrap" };
 const xBtn: React.CSSProperties = { background: "transparent", border: 0, color: "#5f7186", cursor: "pointer", fontSize: 16, lineHeight: "16px" };
+const diffBox: React.CSSProperties = { width: "100%", maxHeight: 160, overflow: "auto", margin: 0, borderRadius: 8, border: "1px solid #1c2c3d", background: "#0a1626", color: "#e6edf3", padding: 10, fontFamily: "ui-monospace, monospace", fontSize: 11.5, whiteSpace: "pre-wrap", wordBreak: "break-word" };

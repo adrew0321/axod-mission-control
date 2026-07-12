@@ -3,7 +3,7 @@ import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { verifyPin } from '@/lib/akira/memory/pin';
 import { pinLimiter } from '@/lib/akira/memory/pin-limiter';
 import { listNotes, vaultReady } from '@/lib/akira/memory/store';
-import { readSoul } from '@/lib/akira/memory/soul';
+import { readSoul, readSoulProposal } from '@/lib/akira/memory/soul';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,9 +23,9 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Wrong PIN' }, { status: 401 });
   }
   pinLimiter.recordSuccess();
-  if (!vaultReady()) return Response.json({ notes: [], soul: readSoul() });
+  if (!vaultReady()) return Response.json({ notes: [], soul: readSoul(), soulProposal: null });
   const notes = listNotes().map(({ slug, title, description, type, updated }) => ({
     slug, title, description, type, updated,
   }));
-  return Response.json({ notes, soul: readSoul() });
+  return Response.json({ notes, soul: readSoul(), soulProposal: readSoulProposal() });
 }
