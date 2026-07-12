@@ -197,8 +197,11 @@ const expandedScroll: React.CSSProperties = { maxHeight: "70vh", overflowY: "aut
 // its own region instead of growing the hero past 100vh and shoving the input +
 // "scroll into Mission Control" cue off-screen. Short replies render naturally
 // (content below the cap = no scrollbar). Smaller cap than expanded because the
-// orb is at full size when history is closed.
-const collapsedScroll: React.CSSProperties = { maxHeight: "58vh", overflowY: "auto", overflowX: "hidden" };
+// orb is at full size when history is closed. Held to 50vh (not 58) so that a
+// long reply streaming raw — before it folds — plus the orb + input + frame
+// chrome still fits under ~100vh on short (~900px) viewports, keeping the input
+// and "scroll into Mission Control" cue on-screen (v1.13.4).
+const collapsedScroll: React.CSSProperties = { maxHeight: "50vh", overflowY: "auto", overflowX: "hidden" };
 const cueBtn: React.CSSProperties = {
   alignSelf: "center",
   background: "transparent",
