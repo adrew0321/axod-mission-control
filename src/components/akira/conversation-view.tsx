@@ -158,13 +158,13 @@ const streamStyle: React.CSSProperties = {
   borderRadius: 16,
   padding: "16px 18px",
 };
-const expandedScroll: React.CSSProperties = { maxHeight: "70vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+const expandedScroll: React.CSSProperties = { maxHeight: "70vh", overflowY: "auto", overflowX: "hidden" };
 // Collapsed (single current reply): bound it too so a long reply scrolls inside
 // its own region instead of growing the hero past 100vh and shoving the input +
 // "scroll into Mission Control" cue off-screen. Short replies render naturally
 // (content below the cap = no scrollbar). Smaller cap than expanded because the
 // orb is at full size when history is closed.
-const collapsedScroll: React.CSSProperties = { maxHeight: "58vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+const collapsedScroll: React.CSSProperties = { maxHeight: "58vh", overflowY: "auto", overflowX: "hidden" };
 const cueBtn: React.CSSProperties = {
   alignSelf: "center",
   background: "transparent",
