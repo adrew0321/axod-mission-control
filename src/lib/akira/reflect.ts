@@ -8,7 +8,8 @@ import { isDreamDue } from '@/lib/dream-due';
 import { AKIRA_SESSION_ID } from './agent';
 import { readSoul } from './memory/soul';
 import { writeSoulProposal } from './memory/soul';
-import { listNotes, writeNote, deleteNote, gitCommitPush } from './memory/store';
+import { listNotes, readNote, writeNote, deleteNote, gitCommitPush } from './memory/store';
+import { safeSlug } from './memory/note';
 import { parseReflection } from './reflect-parse';
 import { planLessonReplace, type LessonNote } from './reflect-plan';
 
@@ -86,7 +87,12 @@ export async function runReflection(): Promise<RunReflectionResult> {
     const ops = planLessonReplace(lessons, out.lessons);
     if (ops) {
       for (const slug of ops.deletes) deleteNote(slug);
-      for (const w of ops.writes) writeNote({ title: w.title, description: w.description, type: 'lesson', body: w.body });
+      for (const w of ops.writes) {
+        const slug = safeSlug(w.title);
+        const existing = slug ? readNote(slug) : null;
+        if (existing && existing.type !== 'lesson') continue; // never clobber a non-lesson operator note
+        writeNote({ title: w.title, description: w.description, type: 'lesson', body: w.body });
+      }
       gitCommitPush(`reflect: distilled ${lessons.length}→${out.lessons.length} lessons`);
     }
 

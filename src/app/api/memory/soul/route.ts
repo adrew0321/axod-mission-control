@@ -48,6 +48,9 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Wrong PIN' }, { status: 401 });
   }
   pinLimiter.recordSuccess();
+  if (action !== 'approve' && action !== 'reject') {
+    return Response.json({ error: 'Invalid action' }, { status: 400 });
+  }
   const proposal = readSoulProposal();
   if (!proposal) return Response.json({ error: 'No pending proposal.' }, { status: 404 });
   if (action === 'approve') {
