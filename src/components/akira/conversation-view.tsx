@@ -147,20 +147,24 @@ export function ConversationStream({
 
 const streamStyle: React.CSSProperties = {
   width: "100%",
-  maxWidth: 680,
+  maxWidth: 720,
   margin: "8px auto 0",
   display: "flex",
   flexDirection: "column",
   gap: 14,
   transition: "opacity .8s ease",
+  border: "1px solid rgba(127,220,255,.12)",
+  background: "rgba(7,13,22,.45)",
+  borderRadius: 16,
+  padding: "16px 18px",
 };
-const expandedScroll: React.CSSProperties = { maxHeight: "50vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+const expandedScroll: React.CSSProperties = { maxHeight: "70vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
 // Collapsed (single current reply): bound it too so a long reply scrolls inside
 // its own region instead of growing the hero past 100vh and shoving the input +
 // "scroll into Mission Control" cue off-screen. Short replies render naturally
 // (content below the cap = no scrollbar). Smaller cap than expanded because the
 // orb is at full size when history is closed.
-const collapsedScroll: React.CSSProperties = { maxHeight: "40vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
+const collapsedScroll: React.CSSProperties = { maxHeight: "58vh", overflowY: "auto", overflowX: "hidden", paddingRight: 4 };
 const cueBtn: React.CSSProperties = {
   alignSelf: "center",
   background: "transparent",
@@ -214,7 +218,7 @@ const akiraDot: React.CSSProperties = {
 };
 function akiraBlock(long: boolean): React.CSSProperties {
   return {
-    maxWidth: 640,
+    maxWidth: 680,
     width: "100%",
     margin: "0 auto",
     textAlign: long ? "left" : "center",
