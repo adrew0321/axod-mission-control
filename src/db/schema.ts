@@ -171,6 +171,63 @@ export const reflections = sqliteTable('reflections', {
   error: text('error'),
 });
 
+export const task_classifications = sqliteTable('task_classifications', {
+  id: text('id').primaryKey(),
+  source_type: text('source_type').notNull(),         // 'relay' | 'dispatch' | 'schedule' | 'task_board'
+  source_ref: text('source_ref'),
+  session_id: text('session_id').references(() => sessions.id),
+  instruction: text('instruction').notNull(),
+  category: text('category').notNull(),               // 'research' | 'implement' | 'review' | 'design' | 'devops' | 'question' | 'other'
+  confidence: real('confidence').notNull(),
+  classifier_version: text('classifier_version').notNull(),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const routing_decisions = sqliteTable('routing_decisions', {
+  id: text('id').primaryKey(),
+  classification_id: text('classification_id').references(() => task_classifications.id).notNull(),
+  layer: text('layer').notNull(),                     // 'relay' | 'dispatch'
+  chosen_agent_id: text('chosen_agent_id').references(() => agents.id),
+  chosen_session_id: text('chosen_session_id').references(() => sessions.id),
+  alternatives: text('alternatives', { mode: 'json' }).$type<Array<{ agentId?: string; sessionId?: string; score: number }>>(),
+  rationale: text('rationale').notNull(),
+  score: real('score').notNull(),
+  operator_override: text('operator_override'),
+  outcome: text('outcome'),                            // 'approved' | 'rejected' | 'reworked' | 'aborted' | null
+  outcome_at: integer('outcome_at', { mode: 'timestamp' }),
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const routed_tasks = sqliteTable('routed_tasks', {
+  id: text('id').primaryKey(),
+  project_id: text('project_id').references(() => projects.id).notNull(),
+  target_session_id: text('target_session_id').references(() => sessions.id),
+  instruction: text('instruction').notNull(),
+  tier: text('tier').notNull(),                        // 'urgent' | 'scheduled' | 'backlog'
+  priority: integer('priority').notNull().default(0),
+  source_type: text('source_type').notNull(),          // 'operator' | 'schedule' | 'task_board' | 'dream' | 'router_followup'
+  source_ref: text('source_ref'),
+  depends_on: text('depends_on', { mode: 'json' }).$type<string[]>(),
+  status: text('status').notNull(),                    // 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
+  attempts: integer('attempts').notNull().default(0),
+  last_error: text('last_error'),
+  enqueued_at: integer('enqueued_at', { mode: 'timestamp' }).notNull(),
+  started_at: integer('started_at', { mode: 'timestamp' }),
+  finished_at: integer('finished_at', { mode: 'timestamp' }),
+});
+
+export const bottleneck_events = sqliteTable('bottleneck_events', {
+  id: text('id').primaryKey(),
+  kind: text('kind').notNull(),                        // 'proposal_aging' | 'turn_failure_cluster' | 'blocker_repeat' | 'cost_spike' | 'schedule_failing' | 'idle_session' | 'router_drift'
+  project_id: text('project_id').references(() => projects.id),
+  session_id: text('session_id').references(() => sessions.id),
+  detail: text('detail', { mode: 'json' }).$type<unknown>(),
+  severity: text('severity').notNull(),                 // 'info' | 'warn' | 'critical'
+  status: text('status').notNull(),                     // 'open' | 'ack' | 'resolved'
+  opened_at: integer('opened_at', { mode: 'timestamp' }).notNull(),
+  resolved_at: integer('resolved_at', { mode: 'timestamp' }),
+});
+
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   project: one(projects, { fields: [sessions.project_id], references: [projects.id] }),
   messages: many(messages),
