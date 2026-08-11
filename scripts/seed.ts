@@ -164,6 +164,9 @@ async function main() {
       system_prompt: SAGE_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
       color: 'from-cyan-400 to-blue-500',
+      effort: 'high',
+      max_turns: 30,
+      max_budget_usd: 3,
     },
     {
       id: 'atlas',
@@ -173,6 +176,9 @@ async function main() {
       system_prompt: ATLAS_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-blue-400 to-indigo-600',
+      effort: 'high',
+      max_turns: 40,
+      max_budget_usd: 3,
     },
     {
       id: 'echo',
@@ -182,6 +188,9 @@ async function main() {
       system_prompt: ECHO_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Bash'],
       color: 'from-violet-400 to-purple-600',
+      effort: 'medium',
+      max_turns: 15,
+      max_budget_usd: 3,
     },
     {
       id: 'nova',
@@ -191,6 +200,9 @@ async function main() {
       system_prompt: NOVA_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch'],
       color: 'from-emerald-400 to-teal-600',
+      effort: 'medium',
+      max_turns: 20,
+      max_budget_usd: 3,
     },
     {
       id: 'forge',
@@ -200,6 +212,9 @@ async function main() {
       system_prompt: FORGE_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-amber-400 to-orange-600',
+      effort: 'high',
+      max_turns: 40,
+      max_budget_usd: 3,
     },
     {
       id: 'pixel',
@@ -209,6 +224,9 @@ async function main() {
       system_prompt: PIXEL_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash', 'WebFetch'],
       color: 'from-pink-400 to-rose-600',
+      effort: 'medium',
+      max_turns: 30,
+      max_budget_usd: 3,
     },
     {
       id: 'akira',
@@ -218,6 +236,9 @@ async function main() {
       system_prompt: AKIRA_SYSTEM_PROMPT,
       tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
       color: 'from-sky-300 to-cyan-400',
+      effort: 'low',
+      max_turns: 15,
+      max_budget_usd: 3,
     },
   ];
   for (const row of agentRows) {
@@ -233,6 +254,9 @@ async function main() {
           system_prompt: row.system_prompt,
           tools_allowlist: row.tools_allowlist,
           color: row.color,
+          effort: row.effort,
+          max_turns: row.max_turns,
+          max_budget_usd: row.max_budget_usd,
         },
       });
   }

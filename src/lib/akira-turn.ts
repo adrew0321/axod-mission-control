@@ -4,6 +4,7 @@ import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { agents, messages, sessions } from '@/db/schema';
 import { runClaudeAgent } from './agent-runner-sdk';
+import { resolveCaps } from '@/lib/agent-caps';
 import { getFleetSnapshotLive } from './fleet-contributors';
 import { buildAkiraPrompt, AKIRA_SYSTEM_PROMPT } from './akira/prompt';
 import {
@@ -104,6 +105,7 @@ export async function runAkiraTurn(
         : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
 
     const akira = allAgents.find((a) => a.id === AKIRA_AGENT_ID);
+    const akiraCaps = resolveCaps(akira);
     const server = createAkiraServer({ emit });
 
     emit({ type: 'start' });
@@ -111,6 +113,8 @@ export async function runAkiraTurn(
     let costUsd: number | undefined;
     let tokensIn: number | undefined;
     let tokensOut: number | undefined;
+    let cacheReadTokens: number | undefined;
+    let cacheCreationTokens: number | undefined;
 
     for await (const event of runClaudeAgent({
       prompt,
@@ -118,6 +122,9 @@ export async function runAkiraTurn(
       model: akira?.model,
       systemPrompt: akira?.system_prompt ?? AKIRA_SYSTEM_PROMPT,
       allowedTools: akira?.tools_allowlist ?? undefined,
+      effort: akiraCaps.effort,
+      maxTurns: akiraCaps.maxTurns,
+      maxBudgetUsd: akiraCaps.maxBudgetUsd,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
       extraAllowedTools: [
         AKIRA_NAVIGATE,
@@ -137,6 +144,8 @@ export async function runAkiraTurn(
         costUsd = event.costUsd;
         tokensIn = event.tokensIn;
         tokensOut = event.tokensOut;
+        cacheReadTokens = event.cacheReadTokens;
+        cacheCreationTokens = event.cacheCreationTokens;
         if (!buffer && event.fullText) buffer = event.fullText;
       }
       if (event.type !== 'tool_result') emit(event);
@@ -151,6 +160,8 @@ export async function runAkiraTurn(
         content: buffer,
         token_count_in: tokensIn,
         token_count_out: tokensOut,
+        cache_read_tokens: cacheReadTokens,
+        cache_creation_tokens: cacheCreationTokens,
         cost_usd: costUsd,
         created_at: new Date(),
       });

@@ -76,6 +76,10 @@ export async function runReflection(): Promise<RunReflectionResult> {
       model: REFLECTOR_MODEL,
       systemPrompt: REFLECTOR_SYSTEM_PROMPT,
       allowedTools: ['Read', 'Glob', 'Grep'],
+      // Same shape as the Curator: one read-only pass over supplied context.
+      effort: 'medium',
+      maxTurns: 10,
+      maxBudgetUsd: 1,
     })) {
       if (ev.type === 'done') fullText = ev.fullText;
       else if (ev.type === 'error' && ev.fatal) throw new Error(ev.message);

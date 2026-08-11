@@ -5,6 +5,7 @@ import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { db } from '@/db/client';
 import { agents } from '@/db/schema';
 import { runClaudeAgent } from './agent-runner-sdk';
+import { resolveCaps, capNotice, type StoppedBy } from './agent-caps';
 import { toTerminalEvent } from './terminal-events';
 import { toPlanSnapshot, type PlanSnapshot } from './plan-events';
 
@@ -28,6 +29,8 @@ export interface DispatchTokenUsage {
   costUsd?: number;
   tokensIn?: number;
   tokensOut?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export interface DispatchContext {
@@ -109,9 +112,11 @@ export function createDispatchServer(ctx: DispatchContext) {
         task: args.task,
       });
 
+      const caps = resolveCaps(agent);
       let fullText = '';
       const usage: DispatchTokenUsage = {};
       let errored: string | undefined;
+      let stoppedBy: StoppedBy | undefined;
 
       for await (const event of runClaudeAgent({
         prompt: buildTaskPrompt(args.task, args.context),
@@ -120,6 +125,9 @@ export function createDispatchServer(ctx: DispatchContext) {
         systemPrompt: agent.system_prompt,
         allowedTools: agent.tools_allowlist ?? undefined,
         signal: ctx.signal,
+        effort: caps.effort,
+        maxTurns: caps.maxTurns,
+        maxBudgetUsd: caps.maxBudgetUsd,
       })) {
         const term = toTerminalEvent(event, agent.id);
         if (term) ctx.emit(term as unknown as { type: string; [k: string]: unknown });
@@ -137,6 +145,9 @@ export function createDispatchServer(ctx: DispatchContext) {
           usage.costUsd = event.costUsd;
           usage.tokensIn = event.tokensIn;
           usage.tokensOut = event.tokensOut;
+          usage.cacheReadTokens = event.cacheReadTokens;
+          usage.cacheCreationTokens = event.cacheCreationTokens;
+          stoppedBy = event.stoppedBy;
           if (!fullText && event.fullText) fullText = event.fullText;
         } else if (event.type === 'error') {
           errored = event.message;
@@ -144,13 +155,29 @@ export function createDispatchServer(ctx: DispatchContext) {
         }
       }
 
+      // A capped specialist did real work — surface it, clearly marked as
+      // incomplete. Silently returning partial output as if it were finished is
+      // exactly the failure the shared execution discipline exists to prevent.
+      const notice = stoppedBy
+        ? capNotice(
+            agent.name,
+            stoppedBy,
+            stoppedBy === 'max_turns' ? caps.maxTurns : caps.maxBudgetUsd,
+          )
+        : undefined;
+
+      const body =
+        fullText || (errored ? `${agent.name} failed: ${errored}` : `${agent.name} produced no output.`);
+      const result = notice ? `${notice}\n\n${body}` : body;
+
       if (fullText) {
-        await ctx.persistMessage(agent.id, fullText, usage);
+        await ctx.persistMessage(agent.id, result, usage);
+      }
+      if (notice) {
+        ctx.emit({ type: 'dispatch_error', agent_id: agent.id, message: notice });
       }
       ctx.emit({ type: 'dispatch_done', agent_id: agent.id, errored: Boolean(errored) });
 
-      const result =
-        fullText || (errored ? `${agent.name} failed: ${errored}` : `${agent.name} produced no output.`);
       return { content: [{ type: 'text', text: result }], isError: Boolean(errored) && !fullText };
     },
   );

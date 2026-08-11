@@ -19,6 +19,11 @@ export const agents = sqliteTable('agents', {
   system_prompt: text('system_prompt').notNull(),
   tools_allowlist: text('tools_allowlist', { mode: 'json' }).$type<string[]>(),
   color: text('color'),
+  // Per-agent execution caps. Nullable → src/lib/agent-caps.ts DEFAULT_CAPS
+  // applies. Kept in the DB (not code) so they can be retuned without a deploy.
+  effort: text('effort'),
+  max_turns: integer('max_turns'),
+  max_budget_usd: real('max_budget_usd'),
 });
 
 export const sessions = sqliteTable('sessions', {
@@ -53,6 +58,10 @@ export const messages = sqliteTable('messages', {
   token_count_in: integer('token_count_in'),
   token_count_out: integer('token_count_out'),
   cost_usd: real('cost_usd'),
+  // Cache accounting. Null on rows written before this migration — that is
+  // "not recorded", not "zero" (see src/lib/usage-rollup.ts recordedCount).
+  cache_read_tokens: integer('cache_read_tokens'),
+  cache_creation_tokens: integer('cache_creation_tokens'),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 

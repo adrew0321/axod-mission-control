@@ -32,6 +32,11 @@ export interface Session {
   costUsd: number;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  /** Messages in this session carrying any recorded usage. Zero → the UI shows
+   *  a dash rather than 0, so pre-instrumentation history doesn't read as free. */
+  usageRecordedCount: number;
   createdAt: string;
   clearedAt?: string | null;
 }
