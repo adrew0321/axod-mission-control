@@ -13,7 +13,15 @@ Cloud = source of truth; local data migrated once.
 
 ## Current state (2026-06-26) — LIVE
 
-The Mini (`mc-bridge`, `10.0.0.218`) is running **v1.8.0**, publicly reachable at
+> ⚠️ **The Mini's LAN address is DHCP and has moved** — it was `10.0.0.218`, and as of
+> 2026-08-11 it is **`10.0.0.219`** (Ethernet, `enp1s0f0`). Substitute the current address in
+> every `ssh akeem@…` command below. If SSH times out, the address has probably changed again:
+> check `arp -a` for an Apple OUI (`68:5b:35:…`) rather than assuming the box is down — the
+> cloudflared tunnel keeps `bridge.axodcreative.com` serving even when the Mini has no LAN
+> presence at all (e.g. when it is running on the iPhone USB tether, since its built-in WiFi is
+> dead). **Fix properly:** set a DHCP reservation on the router, or give it a static address.
+
+The Mini (`mc-bridge`, `10.0.0.218` → now `10.0.0.219`) is running **v1.8.0**, publicly reachable at
 **https://bridge.axodcreative.com** via a cloudflared **named tunnel** (`mc-bridge`, systemd
 boot service — see Phase 3). The full stack runs 24/7: app, Scheduler, nightly health-check,
 Dreaming, and the Discord bot (chat + notifications). Login: `adrew0321@gmail.com` (the
