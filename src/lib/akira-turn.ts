@@ -113,6 +113,8 @@ export async function runAkiraTurn(
     let costUsd: number | undefined;
     let tokensIn: number | undefined;
     let tokensOut: number | undefined;
+    let cacheReadTokens: number | undefined;
+    let cacheCreationTokens: number | undefined;
 
     for await (const event of runClaudeAgent({
       prompt,
@@ -142,6 +144,8 @@ export async function runAkiraTurn(
         costUsd = event.costUsd;
         tokensIn = event.tokensIn;
         tokensOut = event.tokensOut;
+        cacheReadTokens = event.cacheReadTokens;
+        cacheCreationTokens = event.cacheCreationTokens;
         if (!buffer && event.fullText) buffer = event.fullText;
       }
       if (event.type !== 'tool_result') emit(event);
@@ -156,6 +160,8 @@ export async function runAkiraTurn(
         content: buffer,
         token_count_in: tokensIn,
         token_count_out: tokensOut,
+        cache_read_tokens: cacheReadTokens,
+        cache_creation_tokens: cacheCreationTokens,
         cost_usd: costUsd,
         created_at: new Date(),
       });

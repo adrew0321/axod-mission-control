@@ -12,7 +12,7 @@ import { parseMention } from '@/lib/mention';
 import { savePlanSnapshot } from '@/lib/plans';
 import { toPlanSnapshot, type PlanSnapshot } from '@/lib/plan-events';
 import { LEASE_GRACE_MS, resolveTurnInput } from '@/lib/turn-lease';
-import { resolveCaps } from '@/lib/agent-caps';
+import { resolveCaps, capNotice, type StoppedBy } from '@/lib/agent-caps';
 
 const DEFAULT_MAX_DURATION_MS = 600_000;
 
@@ -148,6 +148,7 @@ export async function runSessionTurn(
     let tokensOut: number | undefined;
     let cacheReadTokens: number | undefined;
     let cacheCreationTokens: number | undefined;
+    let stoppedBy: StoppedBy | undefined;
 
     const flushPrimary = async (usage?: {
       costUsd?: number;
@@ -261,9 +262,16 @@ export async function runSessionTurn(
         tokensOut = event.tokensOut;
         cacheReadTokens = event.cacheReadTokens;
         cacheCreationTokens = event.cacheCreationTokens;
+        stoppedBy = event.stoppedBy;
         if (!primaryBuffer && event.fullText) primaryBuffer = event.fullText;
       }
       if (event.type !== 'tool_result') emit(event);
+    }
+
+    if (stoppedBy) {
+      const limit = stoppedBy === 'max_turns' ? primaryCaps.maxTurns : primaryCaps.maxBudgetUsd;
+      const notice = capNotice(primary?.name ?? 'The agent', stoppedBy, limit);
+      primaryBuffer = primaryBuffer.trim() ? `${notice}\n\n${primaryBuffer}` : notice;
     }
 
     await flushPrimary({ costUsd, tokensIn, tokensOut, cacheReadTokens, cacheCreationTokens });
