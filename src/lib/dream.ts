@@ -97,6 +97,11 @@ export async function runDream(): Promise<RunDreamResult> {
       model: CURATOR_MODEL,
       systemPrompt: CURATOR_SYSTEM_PROMPT,
       allowedTools: ['Read', 'Glob', 'Grep'], // read-only; the Curator works from the provided context
+      // Single-shot read-only pass over context we already assembled — it does
+      // not need deep reasoning or many turns.
+      effort: 'medium',
+      maxTurns: 10,
+      maxBudgetUsd: 1,
     })) {
       if (ev.type === 'done') fullText = ev.fullText;
       else if (ev.type === 'error') throw new Error(ev.message);

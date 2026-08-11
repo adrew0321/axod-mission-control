@@ -4,6 +4,7 @@ import { randomBytes, bytesToHex } from '@noble/hashes/utils.js';
 import { db } from '@/db/client';
 import { agents, messages, sessions } from '@/db/schema';
 import { runClaudeAgent } from './agent-runner-sdk';
+import { resolveCaps } from '@/lib/agent-caps';
 import { getFleetSnapshotLive } from './fleet-contributors';
 import { buildAkiraPrompt, AKIRA_SYSTEM_PROMPT } from './akira/prompt';
 import {
@@ -104,6 +105,7 @@ export async function runAkiraTurn(
         : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
 
     const akira = allAgents.find((a) => a.id === AKIRA_AGENT_ID);
+    const akiraCaps = resolveCaps(akira);
     const server = createAkiraServer({ emit });
 
     emit({ type: 'start' });
@@ -118,6 +120,9 @@ export async function runAkiraTurn(
       model: akira?.model,
       systemPrompt: akira?.system_prompt ?? AKIRA_SYSTEM_PROMPT,
       allowedTools: akira?.tools_allowlist ?? undefined,
+      effort: akiraCaps.effort,
+      maxTurns: akiraCaps.maxTurns,
+      maxBudgetUsd: akiraCaps.maxBudgetUsd,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
       extraAllowedTools: [
         AKIRA_NAVIGATE,
