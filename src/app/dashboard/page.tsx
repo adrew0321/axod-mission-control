@@ -14,6 +14,7 @@ import { getSkills } from "@/lib/skills-data";
 import { getSchedules } from "@/lib/schedules-data";
 import { getDreams } from "@/lib/dreams-data";
 import { getLatestPlanForSession } from "@/lib/plans";
+import { getUsageToday } from "@/lib/usage-data";
 
 export const dynamic = "force-dynamic";
 
@@ -108,11 +109,16 @@ export default async function DashboardPage() {
     .select({
       tokensIn: sql<number>`COALESCE(SUM(${messages.token_count_in}), 0)`,
       tokensOut: sql<number>`COALESCE(SUM(${messages.token_count_out}), 0)`,
+      cacheReadTokens: sql<number>`COALESCE(SUM(${messages.cache_read_tokens}), 0)`,
+      cacheCreationTokens: sql<number>`COALESCE(SUM(${messages.cache_creation_tokens}), 0)`,
       costUsd: sql<number>`COALESCE(SUM(${messages.cost_usd}), 0)`,
+      recordedCount: sql<number>`COUNT(${messages.token_count_in}) + COUNT(${messages.cache_read_tokens})`,
     })
     .from(messages)
     .where(eq(messages.session_id, currentSessionRow.id))
     .then((rows) => rows[0]);
+
+  const usageToday = await getUsageToday();
 
   const sageRow = teamRows.find((a) => a.id === "sage");
   const atlasWorking = messageRows.some((m) => m.agent_id === "atlas");
@@ -150,6 +156,9 @@ export default async function DashboardPage() {
     costUsd: Number(totals?.costUsd ?? 0),
     tokensIn: Number(totals?.tokensIn ?? 0),
     tokensOut: Number(totals?.tokensOut ?? 0),
+    cacheReadTokens: Number(totals?.cacheReadTokens ?? 0),
+    cacheCreationTokens: Number(totals?.cacheCreationTokens ?? 0),
+    usageRecordedCount: Number(totals?.recordedCount ?? 0),
     createdAt: currentSessionRow.created_at.toISOString(),
     clearedAt: currentSessionRow.cleared_at ? currentSessionRow.cleared_at.toISOString() : null,
   };
@@ -222,6 +231,7 @@ export default async function DashboardPage() {
       initialSchedules={initialSchedules}
       initialDreams={initialDreams}
       initialPlan={initialPlan}
+      usageToday={usageToday}
     />
   );
 }

@@ -56,6 +56,7 @@ import type { ScheduleRow } from "@/lib/schedules-data";
 import DreamingView from "@/components/dreaming-view";
 import type { DreamView } from "@/lib/dreams-data";
 import MemoryView from "@/components/memory-view";
+import { type UsageTotals } from "@/lib/usage-rollup";
 
 export interface MissionControlProps {
   team: Agent[];
@@ -72,6 +73,7 @@ export interface MissionControlProps {
   initialSchedules: ScheduleRow[];
   initialDreams: DreamView[];
   initialPlan: PlanSnapshot | null;
+  usageToday: UsageTotals;
 }
 
 // Per-speaker accent + low-opacity bubble tint for the conversation thread.
@@ -270,6 +272,7 @@ export default function MissionControl({
   initialSchedules,
   initialDreams,
   initialPlan,
+  usageToday,
 }: MissionControlProps) {
   const router = useRouter();
   const [team] = useState<Agent[]>(initialTeam);
@@ -938,6 +941,35 @@ export default function MissionControl({
             <div className="flex gap-1.5 items-center bg-[#161c25]/50 px-2 py-0.5 rounded border border-[#1e2632]">
               <span className="text-[#5c6470]">OUT:</span>
               <span className="text-[#e6edf3]">{(session.tokensOut / 1000).toFixed(1)}k</span>
+            </div>
+            <div className="flex gap-1.5 items-center bg-[#161c25]/50 px-2 py-0.5 rounded border border-[#1e2632]">
+              <span className="text-[#5c6470]">CACHE R:</span>
+              <span className="text-[#e6edf3]">
+                {session.usageRecordedCount === 0
+                  ? "—"
+                  : `${(session.cacheReadTokens / 1000).toFixed(1)}k`}
+              </span>
+            </div>
+            <div className="flex gap-1.5 items-center bg-[#161c25]/50 px-2 py-0.5 rounded border border-[#1e2632]">
+              <span className="text-[#5c6470]">CACHE W:</span>
+              <span className="text-[#e6edf3]">
+                {session.usageRecordedCount === 0
+                  ? "—"
+                  : `${(session.cacheCreationTokens / 1000).toFixed(1)}k`}
+              </span>
+            </div>
+            <div className="flex gap-1.5 items-center bg-[#161c25]/50 px-2 py-0.5 rounded border border-[#1e2632]">
+              <span className="text-[#5c6470]">TODAY:</span>
+              <span className="text-[#00e0ff] font-bold">
+                {usageToday.recordedCount === 0
+                  ? "—"
+                  : `$${usageToday.costUsd.toFixed(2)}`}
+              </span>
+              <span className="text-[#5c6470]">
+                {usageToday.recordedCount === 0
+                  ? ""
+                  : `/ ${((usageToday.tokensIn + usageToday.cacheReadTokens + usageToday.cacheCreationTokens) / 1000).toFixed(0)}k in`}
+              </span>
             </div>
           </div>
 
