@@ -115,7 +115,23 @@ the right backend; auto-detect installed runtimes. Additive — existing 6 agent
 
 ---
 
-## 7. C2 — broader theme polish (cross-cutting)
+## 7. Repo view (operational) — Merge Resolver + Commit History
+
+**Goal:** A new "Repo" nav section bundling two focused developer-workflow features that VS-familiar operators expect and MC currently lacks: (a) an in-app 3-way **Merge Resolver** built on Monaco to replace the current "resolve manually" dead-end in Proposals, and (b) a read-only **Commit History** navigator for post-merge audit of what agents actually did.
+
+**Why interesting:** Session-branch UX, base-branch picking, and the Monaco diff viewer already shipped (`src/components/diff-viewer.tsx`, `listBranches()`, session-branch-management spec 2026-06-27). This closes the two remaining gaps in the VS-parity story. Merge conflicts today force the operator to shell out; there is no way to audit multi-commit session history from the UI.
+
+**Sketch:**
+- **Merge Resolver:** extend `mergeWorktree()` in `src/lib/worktree.ts` to leave the merge staged (not `--abort`) on conflict; return conflicting files with `<current|incoming|base>` contents. New 3-pane UI parses `<<<<<<< / ======= / >>>>>>>` markers, offers per-hunk accept buttons, POSTs resolved contents, then `git add . && git merge --continue`. Replaces the `proposals-view.tsx` "Merge conflict — resolve manually" toast.
+- **Commit History:** new view with branch dropdown, `git log --format=…` list, click-to-diff using the existing Monaco DiffEditor. Also a "session timeline" tab on session detail.
+
+**Deferred sub-features:** stash (session-per-branch model already covers the 90% case); hunk-level staging (future).
+
+**Complexity:** L (Merge Resolver M–L + Commit History M). **Prereq:** none.
+
+---
+
+## 8. C2 — broader theme polish (cross-cutting)
 
 Typography & spacing pass · conversation-thread refinement · roster-card consistency ·
 color/accent consistency across the new views (Live Feed / Task Board / future sections).
@@ -129,8 +145,9 @@ color/accent consistency across the new views (Live Feed / Task Board / future s
   use (see memory `test-admin-seeded`).
 - `src/lib/plans.ts` is an untracked, currently-unused helper sitting in the working tree —
   decide whether to wire it into a Memory/Plan view or remove it.
+- **Local Companion — native-app slice.** The Companion shipped 2026-06-30 (`companion/` package, `src/lib/companion/*`, browser tools) covers browser automation with hard gates. The original "open File Explorer / launch desktop app" idea from an earlier backlog draft is a small extension: add `launch_app` and `open_path` companion actions, gate via allowlist config, reuse the existing hard-gate + operator-approval flow. **Complexity:** S–M. Not an epic; log here so it isn't forgotten.
 
 ## Suggested order
 
 Proposals (S, next) → Skills (S) → Memory (M) → **server-side runner** (unlocks) →
-Scheduler (L) → Dreaming (XL) → Hermes runtime (XL). C2 polish folded in as you go.
+Scheduler (L) → Dreaming (XL) → Hermes runtime (XL) → Repo view (L). C2 polish folded in as you go.
