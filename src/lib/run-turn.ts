@@ -12,6 +12,7 @@ import { parseMention } from '@/lib/mention';
 import { savePlanSnapshot } from '@/lib/plans';
 import { toPlanSnapshot, type PlanSnapshot } from '@/lib/plan-events';
 import { LEASE_GRACE_MS, resolveTurnInput } from '@/lib/turn-lease';
+import { resolveCaps } from '@/lib/agent-caps';
 
 const DEFAULT_MAX_DURATION_MS = 600_000;
 
@@ -136,6 +137,7 @@ export async function runSessionTurn(
       mentionId && mentionId !== 'sage' ? allAgents.find((a) => a.id === mentionId) : undefined;
     const primary = addressed ?? sage;
     const primaryId = primary?.id ?? 'sage';
+    const primaryCaps = resolveCaps(primary);
 
     emit({ type: 'start', messageId: lastUserMessage!.id });
 
@@ -144,8 +146,16 @@ export async function runSessionTurn(
     let costUsd: number | undefined;
     let tokensIn: number | undefined;
     let tokensOut: number | undefined;
+    let cacheReadTokens: number | undefined;
+    let cacheCreationTokens: number | undefined;
 
-    const flushPrimary = async (usage?: { costUsd?: number; tokensIn?: number; tokensOut?: number }) => {
+    const flushPrimary = async (usage?: {
+      costUsd?: number;
+      tokensIn?: number;
+      tokensOut?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+    }) => {
       if (!primaryBuffer.trim()) return;
       await db.insert(messages).values({
         id: `msg_${bytesToHex(randomBytes(8))}`,
@@ -155,6 +165,8 @@ export async function runSessionTurn(
         content: primaryBuffer,
         token_count_in: usage?.tokensIn,
         token_count_out: usage?.tokensOut,
+        cache_read_tokens: usage?.cacheReadTokens,
+        cache_creation_tokens: usage?.cacheCreationTokens,
         cost_usd: usage?.costUsd,
         created_at: new Date(),
       });
@@ -222,6 +234,9 @@ export async function runSessionTurn(
       model: primary?.model,
       systemPrompt: primary?.system_prompt,
       allowedTools: primary?.tools_allowlist ?? undefined,
+      effort: primaryCaps.effort,
+      maxTurns: primaryCaps.maxTurns,
+      maxBudgetUsd: primaryCaps.maxBudgetUsd,
       ...(dispatchServer
         ? {
             mcpServers: { [DISPATCH_SERVER_NAME]: dispatchServer },
@@ -244,12 +259,14 @@ export async function runSessionTurn(
         costUsd = event.costUsd;
         tokensIn = event.tokensIn;
         tokensOut = event.tokensOut;
+        cacheReadTokens = event.cacheReadTokens;
+        cacheCreationTokens = event.cacheCreationTokens;
         if (!primaryBuffer && event.fullText) primaryBuffer = event.fullText;
       }
       if (event.type !== 'tool_result') emit(event);
     }
 
-    await flushPrimary({ costUsd, tokensIn, tokensOut });
+    await flushPrimary({ costUsd, tokensIn, tokensOut, cacheReadTokens, cacheCreationTokens });
     if (primaryEmitted) {
       await db.update(sessions).set({ updated_at: new Date() }).where(eq(sessions.id, sessionId));
     }
