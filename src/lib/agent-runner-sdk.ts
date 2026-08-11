@@ -2,12 +2,23 @@ import 'server-only';
 import { existsSync } from 'node:fs';
 import { query, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
 import { withExecutionDiscipline } from './agent-discipline';
+import { stoppedByFromSubtype, type EffortLevel, type StoppedBy } from './agent-caps';
 
 export type AgentEvent =
   | { type: 'token'; content: string }
   | { type: 'tool'; name: string; input?: Record<string, unknown> }
   | { type: 'tool_result'; tool: string; content: string; isError: boolean }
-  | { type: 'done'; fullText: string; costUsd?: number; tokensIn?: number; tokensOut?: number }
+  | {
+      type: 'done';
+      fullText: string;
+      costUsd?: number;
+      tokensIn?: number;
+      tokensOut?: number;
+      cacheReadTokens?: number;
+      cacheCreationTokens?: number;
+      /** Set when the run ended by hitting a cap rather than finishing. */
+      stoppedBy?: StoppedBy;
+    }
   | { type: 'error'; message: string; fatal: boolean };
 
 export interface RunAgentOptions {
@@ -49,6 +60,20 @@ export interface RunAgentOptions {
    * `dispatch_agent` MCP call blocks while a specialist works (>60s default).
    */
   extraEnv?: Record<string, string>;
+  /**
+   * Reasoning effort for this agent. Lower effort means fewer, more consolidated
+   * tool calls and less preamble — the main latency and token lever we have that
+   * doesn't change the model.
+   */
+  effort?: EffortLevel;
+  /** Hard ceiling on agent turns. A runaway loop becomes a bounded stop. */
+  maxTurns?: number;
+  /**
+   * Runaway guard in USD. The Mini authenticates with a subscription token, so
+   * this is not a billing limit — the SDK still computes per-turn cost, so it
+   * works as a proxy for "this agent has gone off the rails".
+   */
+  maxBudgetUsd?: number;
   signal?: AbortSignal;
 }
 
@@ -72,8 +97,19 @@ function flattenToolResultContent(content: unknown): string {
 }
 
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
-  const { prompt, workingDir, model, systemPrompt, signal, mcpServers, extraAllowedTools, extraEnv } =
-    opts;
+  const {
+    prompt,
+    workingDir,
+    model,
+    systemPrompt,
+    signal,
+    mcpServers,
+    extraAllowedTools,
+    extraEnv,
+    effort,
+    maxTurns,
+    maxBudgetUsd,
+  } = opts;
   const allowedTools =
     opts.allowedTools && opts.allowedTools.length > 0 ? opts.allowedTools : DEFAULT_ALLOWED_TOOLS;
   // Built-ins (capability set) plus any MCP tool names the caller wants auto-run.
@@ -111,6 +147,17 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         // added via `mcpServers` and auto-run through `extraAllowedTools`.
         tools: allowedTools,
         allowedTools: autoRun,
+        // Isolation: load ONLY the target repo's own settings (which includes its
+        // CLAUDE.md / AGENTS.md — agents changing this repo must keep that
+        // guidance), and only the MCP servers we pass explicitly. Without these,
+        // every agent subprocess also inherits the operator's user-scope config:
+        // the global `github` MCP server (~60 tool schemas) and the superpowers
+        // plugin's SessionStart injection — neither of which any agent uses.
+        settingSources: ['project'],
+        strictMcpConfig: true,
+        ...(effort ? { effort } : {}),
+        ...(maxTurns ? { maxTurns } : {}),
+        ...(maxBudgetUsd ? { maxBudgetUsd } : {}),
         ...(mcpServers ? { mcpServers } : {}),
         ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}),
         abortController,
@@ -180,22 +227,36 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
           }
         }
       } else if (message.type === 'result') {
+        // Usage is present on BOTH the success and error result shapes. Reading
+        // it only on success meant every errored, timed-out, or capped run
+        // recorded zero tokens — precisely the runs worth accounting for.
+        const usage = {
+          costUsd: message.total_cost_usd,
+          tokensIn: message.usage?.input_tokens,
+          tokensOut: message.usage?.output_tokens,
+          cacheReadTokens: message.usage?.cache_read_input_tokens,
+          cacheCreationTokens: message.usage?.cache_creation_input_tokens,
+        };
+
         if (message.subtype === 'success') {
           if (!fullText && message.result) {
             fullText = message.result;
             yield { type: 'token', content: message.result };
           }
-          yield {
-            type: 'done',
-            fullText,
-            costUsd: message.total_cost_usd,
-            tokensIn: message.usage?.input_tokens,
-            tokensOut: message.usage?.output_tokens,
-          };
+          yield { type: 'done', fullText, ...usage };
         } else {
-          const detail = 'errors' in message && message.errors?.length ? `: ${message.errors.join('; ')}` : '';
-          // Fatal: a non-success result means the agent turn ended.
-          yield { type: 'error', message: `agent ended (${message.subtype})${detail}`, fatal: true };
+          const stoppedBy = stoppedByFromSubtype(message.subtype);
+          if (stoppedBy) {
+            // A cap hit is a bounded stop, not a crash: whatever the agent
+            // produced so far is real work. Hand it back as `done` + stoppedBy
+            // so the caller can report it honestly instead of losing it.
+            yield { type: 'done', fullText, ...usage, stoppedBy };
+          } else {
+            const detail =
+              'errors' in message && message.errors?.length ? `: ${message.errors.join('; ')}` : '';
+            // Fatal: a non-cap failure result means the agent turn ended badly.
+            yield { type: 'error', message: `agent ended (${message.subtype})${detail}`, fatal: true };
+          }
         }
       }
     }
