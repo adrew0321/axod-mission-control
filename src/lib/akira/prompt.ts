@@ -45,6 +45,14 @@ export function renderSnapshot(s: FleetSnapshot): string {
     `Scheduled today (${s.schedules.length}): ` +
       (s.schedules.map((sc) => `${sc.title}${sc.nextRunAt ? ` @ ${sc.nextRunAt}` : ''}`).join('; ') || 'none'),
   );
+  const u = s.usage;
+  lines.push(
+    u.recordedCount === 0
+      ? 'Tokens today: none recorded'
+      : `Tokens today: ${u.tokensIn.toLocaleString('en-US')} in, ${u.tokensOut.toLocaleString('en-US')} out, ` +
+        `${u.cacheReadTokens.toLocaleString('en-US')} cache-read, ` +
+        `${u.cacheCreationTokens.toLocaleString('en-US')} cache-write — $${u.costUsd.toFixed(2)} across ${u.recordedCount} messages`,
+  );
   if (s.soulProposal) lines.push(`Soul proposal awaiting your review in Settings — reason: ${s.soulProposal.reason}`);
   if (s.errors.length) lines.push(`(unavailable: ${s.errors.join(', ')})`);
   return lines.join('\n');

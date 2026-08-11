@@ -19,6 +19,27 @@ test('renderSnapshot summarizes counts and health', () => {
   assert.match(text, /pass/i);
 });
 
+test('renderSnapshot reports today\'s token usage', () => {
+  const snap = emptySnapshot();
+  snap.usage = {
+    tokensIn: 1200,
+    tokensOut: 340,
+    cacheReadTokens: 88000,
+    cacheCreationTokens: 4100,
+    costUsd: 1.25,
+    recordedCount: 12,
+  };
+  const text = renderSnapshot(snap);
+  assert.match(text, /Tokens today/);
+  assert.match(text, /88,000 cache-read/);
+  assert.match(text, /\$1\.25/);
+});
+
+test('renderSnapshot says so when no usage was recorded today', () => {
+  const text = renderSnapshot(emptySnapshot());
+  assert.match(text, /Tokens today: none recorded/);
+});
+
 test('buildAkiraPrompt includes snapshot, roster, and transcript', () => {
   const s = emptySnapshot();
   const prompt = buildAkiraPrompt(

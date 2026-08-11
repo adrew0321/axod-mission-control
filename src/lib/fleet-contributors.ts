@@ -6,6 +6,7 @@ import { getProposals } from './proposals-data';
 import { getDreams } from './dreams-data';
 import { getSchedules } from './schedules-data';
 import { readSoulProposal } from '@/lib/akira/memory/soul';
+import { getUsageToday } from './usage-data';
 import {
   getFleetSnapshot,
   type FleetSnapshot,
@@ -100,6 +101,23 @@ const soulProposalContributor: SnapshotContributor = {
   },
 };
 
+const usageContributor: SnapshotContributor = {
+  key: 'usage',
+  collect: async () => {
+    const t = await getUsageToday();
+    return {
+      usage: {
+        tokensIn: t.tokensIn,
+        tokensOut: t.tokensOut,
+        cacheReadTokens: t.cacheReadTokens,
+        cacheCreationTokens: t.cacheCreationTokens,
+        costUsd: t.costUsd,
+        recordedCount: t.recordedCount,
+      },
+    };
+  },
+};
+
 /**
  * The live contributor set. Adding a new user-visible subsystem? Add a
  * contributor here (and extend FleetSnapshot) so AKIRA stays aware of it.
@@ -112,6 +130,7 @@ export const CONTRIBUTORS: SnapshotContributor[] = [
   insightsContributor,
   schedulesContributor,
   soulProposalContributor,
+  usageContributor,
 ];
 
 /** Build the live fleet snapshot from the real DB-backed contributors. */

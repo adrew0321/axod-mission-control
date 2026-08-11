@@ -11,6 +11,15 @@ export interface FleetSnapshot {
   insights: { title: string; detail: string; ageMinutes: number }[];
   schedules: { projectId: string; title: string; nextRunAt: string | null }[];
   soulProposal: { reason: string } | null;
+  usage: {
+    tokensIn: number;
+    tokensOut: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+    costUsd: number;
+    /** Zero means nothing was instrumented today — not "zero tokens". */
+    recordedCount: number;
+  };
   errors: string[];
 }
 
@@ -26,6 +35,7 @@ export function emptySnapshot(): FleetSnapshot {
     insights: [],
     schedules: [],
     soulProposal: null,
+    usage: { tokensIn: 0, tokensOut: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0, recordedCount: 0 },
     errors: [],
   };
 }
