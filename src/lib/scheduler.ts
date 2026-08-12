@@ -7,6 +7,7 @@ import { runSessionTurn } from '@/lib/run-turn';
 import { computeNextRun, parseCadence } from '@/lib/schedule';
 import { healthStatus } from '@/lib/health-verdict';
 import { discardWorktree } from '@/lib/worktree';
+import { onShutdown } from './shutdown';
 
 const TICK_MS = 60_000;
 
@@ -31,7 +32,11 @@ export function startScheduler(): void {
   if (g.__mcSchedulerStarted) return;
   g.__mcSchedulerStarted = true;
   void tick(); // run once at boot, then on the interval
-  setInterval(() => void tick(), TICK_MS);
+  const handle = setInterval(() => void tick(), TICK_MS);
+  onShutdown('scheduler', () => {
+    clearInterval(handle);
+    g.__mcSchedulerStarted = false;
+  });
   console.log('[scheduler] started (60s tick)');
 }
 

@@ -15,6 +15,7 @@ import {
 } from './discord-notify-diff';
 import { scheduleEmbed, dreamEmbed, proposalEmbed, proposalActionRow } from './discord-format';
 import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js';
+import { onShutdown } from './shutdown';
 
 const POLL_MS = 30_000;
 // Dreams are global (not project-scoped) → route to the operator's "home" project channel.
@@ -125,10 +126,14 @@ export function startDiscordNotify(): void {
   const g = globalThis as unknown as { __mcDiscordNotifyStarted?: boolean };
   if (g.__mcDiscordNotifyStarted) return;
   g.__mcDiscordNotifyStarted = true;
-  setInterval(() => {
+  const handle = setInterval(() => {
     void tick().catch((err) =>
       console.error('[discord-notify] tick failed:', err instanceof Error ? err.message : err),
     );
   }, POLL_MS);
+  onShutdown('discord-notify', () => {
+    clearInterval(handle);
+    g.__mcDiscordNotifyStarted = false;
+  });
   console.log('[discord-notify] started (30s poll)');
 }

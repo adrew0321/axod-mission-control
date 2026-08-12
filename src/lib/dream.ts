@@ -6,6 +6,7 @@ import { dreams, dream_insights, sessions, messages, agents } from '@/db/schema'
 import { runClaudeAgent } from '@/lib/agent-runner-sdk';
 import { parseInsights } from '@/lib/dream-insights';
 import { isDreamDue } from '@/lib/dream-due';
+import { onShutdown } from './shutdown';
 
 export const CURATOR_MODEL = 'claude-opus-4-7';
 
@@ -171,6 +172,10 @@ export function startDreaming(): void {
     }
   };
   void check();
-  setInterval(() => void check(), DREAM_TICK_MS);
+  const handle = setInterval(() => void check(), DREAM_TICK_MS);
+  onShutdown('dreaming', () => {
+    clearInterval(handle);
+    g.__mcDreamingStarted = false;
+  });
   console.log(`[dreaming] started (nightly hour ${NIGHTLY_HOUR})`);
 }

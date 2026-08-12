@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startTurn, subscribe, abort, isRunning, type BrokerEvent } from './turn-broker';
+import { startTurn, subscribe, abort, isRunning, runningIds, abortAll, drainTurns, type BrokerEvent } from './turn-broker';
 
 function deferredRun() {
   let emit!: (e: BrokerEvent) => void;
@@ -147,4 +147,69 @@ test('a rejecting run still finishes: running flips false, then clears after ret
   const got: string[] = [];
   subscribe('rj1', (ev) => got.push(ev.type));
   assert.deepEqual(got, ['persisted']);  // state gone → synthetic persisted
+});
+
+test('runningIds lists only running turns; abortAll aborts them and returns the count', () => {
+  const a = deferredRun();
+  const b = deferredRun();
+  startTurn('drain-a', a.run, { timers: fakeTimers().timers });
+  startTurn('drain-b', b.run, { timers: fakeTimers().timers });
+
+  assert.equal(runningIds().includes('drain-a'), true);
+  assert.equal(runningIds().includes('drain-b'), true);
+
+  const n = abortAll();
+  assert.ok(n >= 2);
+  assert.equal(a.s().aborted, true);
+  assert.equal(b.s().aborted, true);
+
+  a.finish();
+  b.finish();
+});
+
+test('drainTurns returns a well-formed result and does not hang when idle', async () => {
+  const res = await drainTurns({ timeoutMs: 50, pollMs: 1 });
+  assert.equal(typeof res.aborted, 'number');
+  assert.equal(typeof res.drained, 'boolean');
+});
+
+test('drainTurns waits for an aborted turn to settle', async () => {
+  const d = deferredRun();
+  startTurn('drain-wait', d.run, { timers: fakeTimers().timers });
+  assert.equal(isRunning('drain-wait'), true);
+
+  // Injected sleep finishes the turn on the first poll, simulating the turn's
+  // own finally block unwinding after the abort.
+  let polls = 0;
+  const sleep = async () => {
+    polls++;
+    if (polls === 1) d.finish();
+    await Promise.resolve();
+  };
+
+  const res = await drainTurns({ timeoutMs: 1000, pollMs: 1, sleep });
+
+  assert.ok(res.aborted >= 1);
+  assert.equal(d.s().aborted, true);
+  // Assert on THIS turn, not global emptiness — other tests share the map.
+  assert.equal(isRunning('drain-wait'), false);
+  assert.equal(runningIds().includes('drain-wait'), false);
+});
+
+test('drainTurns gives up at its deadline and reports drained=false', async () => {
+  const d = deferredRun();
+  startTurn('drain-stuck', d.run, { timers: fakeTimers().timers });
+
+  let t = 0;
+  const res = await drainTurns({
+    timeoutMs: 10,
+    pollMs: 1,
+    sleep: async () => { t += 5; },
+    now: () => t,
+  });
+
+  // This turn never settles, so the drain must report failure.
+  assert.equal(res.drained, false);
+  assert.equal(isRunning('drain-stuck'), true);
+  d.finish();
 });

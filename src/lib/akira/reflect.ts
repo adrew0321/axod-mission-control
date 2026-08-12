@@ -12,6 +12,7 @@ import { listNotes, readNote, writeNote, deleteNote, gitCommitPush } from './mem
 import { safeSlug } from './memory/note';
 import { parseReflection } from './reflect-parse';
 import { planLessonReplace, type LessonNote } from './reflect-plan';
+import { onShutdown } from '../shutdown';
 
 export const REFLECTOR_MODEL = 'claude-opus-4-7';
 export const REFLECTION_HOUR = 4; // staggered after Dreaming (hour 3)
@@ -138,6 +139,10 @@ export function startReflecting(): void {
     }
   };
   void check();
-  setInterval(() => void check(), TICK_MS);
+  const handle = setInterval(() => void check(), TICK_MS);
+  onShutdown('reflect', () => {
+    clearInterval(handle);
+    g.__mcReflectingStarted = false;
+  });
   console.log(`[reflect] started (nightly hour ${REFLECTION_HOUR})`);
 }
