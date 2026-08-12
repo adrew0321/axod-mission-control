@@ -129,6 +129,22 @@ system packages · Node 22 + pnpm · `claude` CLI · `mc` user + `/srv/{mission-
 >   `cd node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3 && node /usr/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js rebuild`.
 > - **Create the data dirs before `pnpm build`/`db:migrate`** — the build instantiates the DB:
 >   `mkdir -p /srv/mission-control/data/worktrees`.
+> - **If `pnpm install` insists on purging `node_modules`** (`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`
+>   — it needs `CI=true` to proceed non-interactively), the purge **will** delete the
+>   hand-compiled better-sqlite3 binding. Back it up first and restore it after; this is
+>   faster and safer than a node-gyp rebuild when the package version is unchanged:
+>
+>   ```bash
+>   B=node_modules/.pnpm/better-sqlite3@12.10.0/node_modules/better-sqlite3/build/Release
+>   cp $B/better_sqlite3.node /tmp/better_sqlite3.node.bak
+>   CI=true pnpm install --frozen-lockfile
+>   mkdir -p $B && cp /tmp/better_sqlite3.node.bak $B/better_sqlite3.node
+>   node -e "const D=require('better-sqlite3');new D('data/mission-control.db',{readonly:true}).close();console.log('binding ok')"
+>   ```
+>
+>   Only valid when the lockfile pins the **same** better-sqlite3 version that produced the
+>   backup (check before restoring). Otherwise rebuild with node-gyp as documented above.
+>   Still do **not** run `pnpm approve-builds` — the allowlist is intentional.
 
 **Then migrate your data BEFORE first start** — same as the Oracle runbook's §A:
 - **DB:** on this Windows PC, stop the local app, then checkpoint the WAL into the main `.db`.
@@ -148,6 +164,31 @@ Then finish the app steps:
   ```bash
   curl -fsS localhost:3000/api/health && echo "  ← app up"
   ```
+
+> **Graceful shutdown (v1.19.0+).** The app now handles SIGTERM: it clears the four
+> background intervals, destroys the Discord client, aborts in-flight turns (which
+> releases their `sessions.running_since` leases) and exits — typically in under 2s.
+> Before this, every stop hung the full `TimeoutStopSec` and was SIGKILLed (15 such
+> timeouts in the journal as of 2026-08-11). The unit needs two changes to match:
+>
+> ```ini
+> KillMode=mixed
+> TimeoutStopSec=20
+> ```
+>
+> `KillMode=mixed` sends SIGTERM to the main process only and SIGKILLs stragglers at
+> the timeout — the spawned `claude` CLI children are torn down by the app's abort
+> path, and under the default `control-group` they were holding the cgroup open.
+> `TimeoutStopSec` is now only a backstop. Apply with:
+>
+> ```bash
+> sudo sed -i 's/^TimeoutStopSec=30$/TimeoutStopSec=20/' /etc/systemd/system/mission-control.service
+> sudo sed -i '/^TimeoutStopSec=/i KillMode=mixed' /etc/systemd/system/mission-control.service
+> sudo systemctl daemon-reload && sudo systemctl restart mission-control
+> ```
+>
+> **Acceptance:** `journalctl -u mission-control --since "5 min ago" | grep stop-sigterm`
+> returns nothing, and `Stopping…` → `Stopped…` is seconds, not 30s.
 
 ## Phase 3 — Cloudflare Tunnel (the ingress)
 All on the Mac Mini (as root unless noted).
