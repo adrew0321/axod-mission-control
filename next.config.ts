@@ -12,9 +12,12 @@ const nextConfig: NextConfig = {
 
   // ── NFT tracing hardening ────────────────────────────────────────────────
   //
-  // Anchor Node File Tracing to the repo root so paths are stable and the
-  // tracer never walks above the project directory into system folders.
-  outputFileTracingRoot: path.resolve(__dirname),
+  // Anchor Node File Tracing to the shared mission-control root so paths are
+  // stable.  Must match turbopack.root (Next.js 16 enforces they be equal).
+  // Three levels up from the worktree __dirname lands at /srv/mission-control,
+  // which is the common ancestor of both the worktree and the shared
+  // node_modules symlink target (/srv/mission-control/node_modules).
+  outputFileTracingRoot: path.resolve(__dirname, '../../..'),
 
   // Exclude paths that NFT would otherwise conservatively pull in for the
   // preview route.  The preview handler calls createServer / readFile /
@@ -35,17 +38,26 @@ const nextConfig: NextConfig = {
     ],
   },
 
-  // ── Turbopack warning suppression ───────────────────────────────────────
+  // ── Turbopack root ──────────────────────────────────────────────────────
   //
-  // preview.ts intentionally uses dynamic path.join(wtPath, ...) calls where
-  // wtPath is a request-time parameter.  Turbopack's static analysis cannot
-  // resolve these and may emit a non-fatal trace warning.  Suppress it here;
-  // the runtime behaviour is unaffected.
+  // In this worktree setup, node_modules is a symlink to the shared
+  // /srv/mission-control/node_modules directory, which is outside the
+  // worktree root that Turbopack auto-detects (from pnpm-lock.yaml).
+  // Per the Next.js 16 docs (turbopack.md), setting turbopack.root to the
+  // common ancestor of both the project and the linked node_modules allows
+  // Turbopack to resolve modules without hitting a "symlink out of filesystem
+  // root" panic.  Three levels up from __dirname lands at /srv/mission-control.
+  //
+  // turbopack warning suppression: preview.ts intentionally uses dynamic
+  // path.join(wtPath, ...) calls where wtPath is a request-time parameter.
+  // Turbopack's static analysis cannot resolve these and may emit a non-fatal
+  // trace warning.  Suppress it here; the runtime behaviour is unaffected.
   //
   // turbopack.ignoreIssue was introduced in Next.js 16.2.0 and applies to
   // both `next dev` and `next build` when Turbopack is the active bundler
   // (the default in Next.js 16).
   turbopack: {
+    root: path.resolve(__dirname, '../../..'),
     ignoreIssue: [
       {
         path: '**/src/lib/preview.ts',
