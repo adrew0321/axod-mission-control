@@ -41,16 +41,21 @@ export async function register() {
       for (const signal of ['SIGTERM', 'SIGINT'] as const) {
         process.once(signal, () => {
           console.log(`[shutdown] ${signal} received`);
-          void runShutdown({ timeoutMs: 8000 }).then((report) => {
-            for (const r of report.results) {
-              const flags = `${r.timedOut ? ' timeout' : ''}${r.error ? ` error=${r.error}` : ''}`;
-              console.log(`[shutdown] ${r.name} ok=${r.ok} ${r.ms}ms${flags}`);
-            }
-            console.log(`[shutdown] complete in ${report.totalMs}ms`);
-            // Explicit: open SSE sockets would otherwise keep the HTTP server
-            // from closing, and the work they were streaming is already aborted.
-            process.exit(0);
-          });
+          void runShutdown({ timeoutMs: 8000, defaultBudgetMs: 1000 })
+            .then((report) => {
+              for (const r of report.results) {
+                const flags = `${r.timedOut ? ' timeout' : ''}${r.error ? ` error=${r.error}` : ''}`;
+                console.log(`[shutdown] ${r.name} ok=${r.ok} ${r.ms}ms${flags}`);
+              }
+              console.log(`[shutdown] complete in ${report.totalMs}ms`);
+              // Explicit: open SSE sockets would otherwise keep the HTTP server
+              // from closing, and the work they were streaming is already aborted.
+              process.exit(0);
+            })
+            .catch((err) => {
+              console.error('[shutdown] failed:', err);
+              process.exit(1);
+            });
         });
       }
     }
