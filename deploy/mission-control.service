@@ -8,11 +8,17 @@ User=mc
 Group=mc
 WorkingDirectory=/srv/mission-control
 EnvironmentFile=/srv/mission-control/.env
-# `next start` (equivalent to `pnpm start`). Confirm node path with `which node`.
+# Next installs its own SIGTERM/SIGINT handler that calls process.exit(143) unless
+# this is set. It must be a real process env var (not the .env file above, per
+# Next's own docs) so it's set here via systemd's Environment=, not EnvironmentFile=.
+Environment=NEXT_MANUAL_SIG_HANDLE=true
+# `next start` (equivalent to `pnpm start`, which also sets NEXT_MANUAL_SIG_HANDLE
+# via cross-env). Confirm node path with `which node`.
 ExecStart=/usr/bin/node /srv/mission-control/node_modules/next/dist/bin/next start
 Restart=on-failure
 RestartSec=5
-TimeoutStopSec=30
+KillMode=mixed
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target

@@ -11,6 +11,7 @@ import {
   type ButtonInteraction,
   type Message,
 } from 'discord.js';
+import { onShutdown } from './shutdown';
 import { parseAllowedIds, isAllowed } from './discord-allow';
 import {
   getBinding,
@@ -95,6 +96,11 @@ export function startDiscordBot(): void {
   client.login(token).catch((err) =>
     console.error('[discord] login failed:', err instanceof Error ? err.message : err),
   );
+
+  onShutdown('discord-bot', async () => {
+    g.__mcDiscordStarted = false;
+    await client.destroy();
+  });
 }
 
 async function handleInteraction(interaction: Interaction, allowed: Set<string>): Promise<void> {

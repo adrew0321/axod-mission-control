@@ -91,3 +91,55 @@ export function abort(sessionId: string): boolean {
   if (state?.running) { state.controller.abort(); return true; }
   return false;
 }
+
+/** Session ids with a turn currently running. */
+export function runningIds(): string[] {
+  const ids: string[] = [];
+  for (const [id, state] of turns) if (state.running) ids.push(id);
+  return ids;
+}
+
+/** Abort every running turn. Returns how many were aborted. */
+export function abortAll(): number {
+  let n = 0;
+  for (const state of turns.values()) {
+    if (state.running) {
+      state.controller.abort();
+      n++;
+    }
+  }
+  return n;
+}
+
+/**
+ * Abort all running turns and wait for them to unwind. Each turn's own `finally`
+ * in run-turn.ts releases its sessions.running_since lease, so draining here is
+ * what makes sessions cleanly restartable after a deploy. Injectable clock/sleep
+ * so it stays unit-testable.
+ */
+export async function drainTurns(
+  opts: {
+    timeoutMs?: number;
+    pollMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  } = {},
+): Promise<{ aborted: number; drained: boolean }> {
+  const timeoutMs = opts.timeoutMs ?? 5000;
+  const pollMs = opts.pollMs ?? 50;
+  const now = opts.now ?? (() => Date.now());
+  const sleep =
+    opts.sleep ??
+    ((ms: number) =>
+      new Promise<void>((r) => {
+        const t = setTimeout(r, ms);
+        (t as { unref?: () => void }).unref?.();
+      }));
+
+  const aborted = abortAll();
+  const deadline = now() + timeoutMs;
+  while (runningIds().length > 0 && now() < deadline) {
+    await sleep(pollMs);
+  }
+  return { aborted, drained: runningIds().length === 0 };
+}
