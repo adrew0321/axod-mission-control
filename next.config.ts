@@ -1,5 +1,12 @@
 import type { NextConfig } from 'next';
-import path from 'node:path';
+
+// In production, __dirname IS the project root (/srv/mission-control) and
+// node_modules is a real directory — Turbopack/NFT auto-detection works fine.
+// In worktree sessions, node_modules is a symlink to /srv/mission-control/node_modules,
+// so we need to anchor the tracing root at the common ancestor.  Set
+// MC_TRACING_ROOT=/srv/mission-control in worktree environments to opt in;
+// leave it unset in prod so __dirname is used and the root stays tight.
+const tracingRoot = process.env.MC_TRACING_ROOT ?? __dirname;
 
 const nextConfig: NextConfig = {
   // ── Server external packages ────────────────────────────────────────────────
@@ -12,12 +19,13 @@ const nextConfig: NextConfig = {
 
   // ── NFT tracing hardening ────────────────────────────────────────────────
   //
-  // Anchor Node File Tracing to the shared mission-control root so paths are
-  // stable.  Must match turbopack.root (Next.js 16 enforces they be equal).
-  // Three levels up from the worktree __dirname lands at /srv/mission-control,
-  // which is the common ancestor of both the worktree and the shared
-  // node_modules symlink target (/srv/mission-control/node_modules).
-  outputFileTracingRoot: path.resolve(__dirname, '../../..'),
+  // Anchor Node File Tracing to tracingRoot so paths are stable.
+  // Must match turbopack.root (Next.js 16 enforces they be equal).
+  // In worktree sessions set MC_TRACING_ROOT=/srv/mission-control so that
+  // tracingRoot resolves to the common ancestor of the worktree and the
+  // symlinked node_modules.  Leave MC_TRACING_ROOT unset in prod — __dirname
+  // already equals /srv/mission-control there, so no override is needed.
+  outputFileTracingRoot: tracingRoot,
 
   // Exclude paths that NFT would otherwise conservatively pull in for the
   // preview route.  The preview handler calls createServer / readFile /
@@ -40,13 +48,16 @@ const nextConfig: NextConfig = {
 
   // ── Turbopack root ──────────────────────────────────────────────────────
   //
-  // In this worktree setup, node_modules is a symlink to the shared
-  // /srv/mission-control/node_modules directory, which is outside the
-  // worktree root that Turbopack auto-detects (from pnpm-lock.yaml).
-  // Per the Next.js 16 docs (turbopack.md), setting turbopack.root to the
-  // common ancestor of both the project and the linked node_modules allows
-  // Turbopack to resolve modules without hitting a "symlink out of filesystem
-  // root" panic.  Three levels up from __dirname lands at /srv/mission-control.
+  // Per the Next.js 16 docs (turbopack.md), turbopack.root must cover the
+  // common ancestor of both the project directory and any symlinked
+  // node_modules so Turbopack can resolve modules without a "symlink out of
+  // filesystem root" panic.
+  // In worktree sessions node_modules is a symlink to the shared
+  // /srv/mission-control/node_modules — set MC_TRACING_ROOT=/srv/mission-control
+  // so tracingRoot covers that ancestor.  In prod __dirname is already
+  // /srv/mission-control and node_modules is real, so MC_TRACING_ROOT should
+  // be left unset; __dirname is used and the root stays tight.
+  // Must equal outputFileTracingRoot (Next.js 16 enforces parity).
   //
   // turbopack warning suppression: preview.ts intentionally uses dynamic
   // path.join(wtPath, ...) calls where wtPath is a request-time parameter.
@@ -57,7 +68,7 @@ const nextConfig: NextConfig = {
   // both `next dev` and `next build` when Turbopack is the active bundler
   // (the default in Next.js 16).
   turbopack: {
-    root: path.resolve(__dirname, '../../..'),
+    root: tracingRoot,
     ignoreIssue: [
       {
         path: '**/src/lib/preview.ts',
