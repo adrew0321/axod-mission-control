@@ -136,9 +136,9 @@ system packages · Node 22 + pnpm · `claude` CLI · `mc` user + `/srv/{mission-
 >
 >   ```bash
 >   B=node_modules/.pnpm/better-sqlite3@12.10.0/node_modules/better-sqlite3/build/Release
->   cp $B/better_sqlite3.node /tmp/better_sqlite3.node.bak
+>   cp "$B/better_sqlite3.node" /tmp/better_sqlite3.node.bak && \
 >   CI=true pnpm install --frozen-lockfile
->   mkdir -p $B && cp /tmp/better_sqlite3.node.bak $B/better_sqlite3.node
+>   mkdir -p "$B" && cp /tmp/better_sqlite3.node.bak "$B/better_sqlite3.node"
 >   node -e "const D=require('better-sqlite3');new D('data/mission-control.db',{readonly:true}).close();console.log('binding ok')"
 >   ```
 >
@@ -166,24 +166,43 @@ Then finish the app steps:
   ```
 
 > **Graceful shutdown (v1.19.0+).** The app now handles SIGTERM: it clears the four
-> background intervals, destroys the Discord client, aborts in-flight turns (which
-> releases their `sessions.running_since` leases) and exits — typically in under 2s.
-> Before this, every stop hung the full `TimeoutStopSec` and was SIGKILLed (15 such
-> timeouts in the journal as of 2026-08-11). The unit needs two changes to match:
+> background intervals, destroys the Discord client, aborts in-flight turns started
+> through the turn broker — the SSE stream route — (which releases their
+> `sessions.running_since` leases) and exits — typically in under 2s. Turns launched
+> by the scheduler or the Discord bot call `runSessionTurn` directly, not through the
+> broker, so they are **not** currently aborted or waited on by this drain. Before
+> this, every stop hung the full `TimeoutStopSec` and was SIGKILLed (15 such timeouts
+> in the journal as of 2026-08-11).
+>
+> The checked-in `deploy/mission-control.service` already carries the settings below,
+> so a **fresh install** needs no extra steps here. An **existing install** running an
+> older copy of the unit file needs to be patched in place — that's what the `sed`
+> commands below are for:
 >
 > ```ini
+> Environment=NEXT_MANUAL_SIG_HANDLE=true
 > KillMode=mixed
 > TimeoutStopSec=20
 > ```
 >
-> `KillMode=mixed` sends SIGTERM to the main process only and SIGKILLs stragglers at
-> the timeout — the spawned `claude` CLI children are torn down by the app's abort
-> path, and under the default `control-group` they were holding the cgroup open.
-> `TimeoutStopSec` is now only a backstop. Apply with:
+> `NEXT_MANUAL_SIG_HANDLE=true` disables Next's own built-in SIGTERM/SIGINT handler,
+> which is registered before our shutdown hook runs and otherwise wins the race and
+> calls `process.exit(143)` before our drain finishes — a non-zero exit after a
+> systemd-requested stop marks the unit **failed**. It must be a real process env var
+> (systemd `Environment=`), not a line in the `.env` file loaded via
+> `EnvironmentFile=` — Next's own docs call out that the `.env` route is unreliable
+> for this.
+>
+> `KillMode=mixed` sends SIGTERM to the main process only, then SIGKILLs everything
+> left in the cgroup once the main process exits — so any orphaned `claude` CLI
+> children are reaped by systemd regardless of what the app's own abort path did or
+> didn't tear down. `TimeoutStopSec` is now only a backstop. Apply to an existing
+> install with:
 >
 > ```bash
 > sudo sed -i 's/^TimeoutStopSec=30$/TimeoutStopSec=20/' /etc/systemd/system/mission-control.service
 > sudo sed -i '/^TimeoutStopSec=/i KillMode=mixed' /etc/systemd/system/mission-control.service
+> sudo sed -i '/^ExecStart=/i Environment=NEXT_MANUAL_SIG_HANDLE=true' /etc/systemd/system/mission-control.service
 > sudo systemctl daemon-reload && sudo systemctl restart mission-control
 > ```
 >

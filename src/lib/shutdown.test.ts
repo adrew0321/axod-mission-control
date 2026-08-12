@@ -66,3 +66,16 @@ test('disposers registered after the total budget is spent are marked timedOut',
   assert.equal(reached, false);
   assert.equal(report.results[1].timedOut, true);
 });
+
+test('defaultBudgetMs bounds a disposer with no explicit budgetMs, and the next one still runs', async () => {
+  resetShutdown();
+  let reached = false;
+  onShutdown('hang', () => new Promise<void>(() => {}));
+  onShutdown('after', () => { reached = true; });
+
+  const report = await runShutdown({ timeoutMs: 1000, defaultBudgetMs: 20 });
+
+  assert.equal(report.results[0].timedOut, true);
+  assert.equal(report.results[0].ok, false);
+  assert.equal(reached, true);
+});

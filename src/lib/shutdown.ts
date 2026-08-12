@@ -87,6 +87,9 @@ async function execute(opts: RunShutdownOpts): Promise<ShutdownReport> {
       await new Promise<void>((resolve, reject) => {
         let handle: unknown;
         let settled = false;
+        // If the disposer rejects after the timeout already settled this promise,
+        // that rejection is intentionally dropped here (settled guards it) — the
+        // entry is already recorded as timedOut and the loop has moved on.
         const settle = (act: () => void) => {
           if (settled) return;
           settled = true;

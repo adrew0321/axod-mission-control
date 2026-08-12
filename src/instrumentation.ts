@@ -23,8 +23,12 @@ export async function register() {
     const { onShutdown, runShutdown } = await import('@/lib/shutdown');
     const { drainTurns } = await import('@/lib/turn-broker');
 
-    // Registered last so the tickers above are already stopped: no new turn can
-    // start while we drain. Each aborted turn releases its own lease via the
+    // Registered last so the tickers above are already stopped: no new broker-started
+    // turn can start while we drain. This only covers turns started through the turn
+    // broker (the SSE stream route, src/app/api/sessions/[id]/stream/route.ts) — the
+    // scheduler and Discord bot call runSessionTurn directly without going through the
+    // broker, so a turn they launched is not visible to abortAll()/drainTurns() and is
+    // not drained here. Each aborted (brokered) turn releases its own lease via the
     // finally block in run-turn.ts.
     onShutdown(
       'turns',
@@ -48,8 +52,11 @@ export async function register() {
                 console.log(`[shutdown] ${r.name} ok=${r.ok} ${r.ms}ms${flags}`);
               }
               console.log(`[shutdown] complete in ${report.totalMs}ms`);
-              // Explicit: open SSE sockets would otherwise keep the HTTP server
-              // from closing, and the work they were streaming is already aborted.
+              // Explicit: open SSE sockets would otherwise keep the HTTP server from
+              // closing, and the work they were streaming is already aborted. This also
+              // drops any in-flight ordinary HTTP request with no response — through the
+              // Cloudflare tunnel that surfaces to the client as a 502 — a deliberate
+              // tradeoff for a bounded shutdown over waiting out every open connection.
               process.exit(0);
             })
             .catch((err) => {
