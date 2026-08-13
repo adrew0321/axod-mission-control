@@ -228,7 +228,7 @@ export async function runSessionTurn(
             extraAllowedTools: [DISPATCH_TOOL_NAME],
           }
         : {}),
-      extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000' },
+      extraEnv: { CLAUDE_CODE_STREAM_CLOSE_TIMEOUT: '600000', MC_TRACING_ROOT: '/srv/mission-control' },
       signal: combinedSignal,
     })) {
       const term = toTerminalEvent(event, primaryId);
