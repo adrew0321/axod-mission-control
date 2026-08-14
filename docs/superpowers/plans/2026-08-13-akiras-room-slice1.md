@@ -10,6 +10,31 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-13-akiras-room-design.md`
 
+## Status — 2026-08-14
+
+**Tasks 1–7 (the code half) are DONE and merged to `dev`** as merge commit `341d392`, built via
+subagent-driven-development. Verified on the merged result: `pnpm test` 426/426, `pnpm exec tsc
+--noEmit` clean, `pnpm build` exit 0. Not released, not pushed, not deployed — version stays 1.19.0.
+
+**Task 8 is NOT done.** It provisions the LXD container on the production Mini and depends on slice 0
+(`docs/runbook-mini-desktop.md`), which has not been run. Until it is, this work is inert for the
+running system: the room tools only enter AKIRA's toolset when `isOnline('room')` is true.
+
+Two deliberate deviations from the text below, both reviewed:
+
+- **Task 4** — `execFs` now rejects a non-fs action *before* validating the path. As written, the gate
+  short-circuited first and returned `blocked: 'empty path'` for a misrouted browser command, which
+  misreports a routing bug as a boundary refusal and made this task's own `default:` branch unreachable.
+- **Task 7** — the `ctx.emit({ type: 'hard_gate', … })` call on a blocked path was dropped. `hard_gate`
+  renders an "approve?" prompt in the HUD, and `/api/companion/approve` sends `{action:'click'}` to the
+  **laptop** — so approving a room path refusal would fire a bogus browser click carrying a filesystem
+  path at the operator's machine, then tell AKIRA to continue, contradicting the tool's own "do not
+  retry" text. `execFs` never reads `cmd.approved`, so a path refusal is not approvable at all.
+
+Three prerequisites for slice 2 came out of this build — symlink resolution, a per-target token, and a
+guard on the registry's unregister rejection loop. They are recorded in the spec under
+"Carried into slice 2".
+
 ## Global Constraints
 
 - **Slice 0 must be complete first.** `~/AKIRA/inbox` and `~/AKIRA/playground` must exist on the Mini — see `docs/runbook-mini-desktop.md`.
@@ -34,7 +59,7 @@
 - Consumes: nothing (first task)
 - Produces: `export type CompanionTarget = 'laptop' | 'room'`; `registerCompanion(s: CompanionSink, target?: CompanionTarget): () => void`; `isOnline(target?: CompanionTarget): boolean`; `sendCommand(cmd: Omit<Command,'id'>, timeoutMs?: number, target?: CompanionTarget): { id: string; result: Promise<Result> }`. All three default `target` to `'laptop'`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `src/lib/companion/registry.test.ts`:
 
@@ -83,12 +108,12 @@ test('target defaults to laptop', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm exec tsx --test src/lib/companion/registry.test.ts`
 Expected: FAIL — `registerCompanion` currently takes one argument, so `isOnline('room')` returns `true` after any registration and the independence assertion fails.
 
-- [ ] **Step 3: Rewrite the registry**
+- [x] **Step 3: Rewrite the registry**
 
 Replace the body of `src/lib/companion/registry.ts` below the imports:
 
@@ -177,17 +202,17 @@ Update the file's header comment — it currently says "Single laptop: one sink 
 // unit-tested with fake sinks.
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm exec tsx --test src/lib/companion/registry.test.ts`
 Expected: PASS, 6 tests. The three pre-existing tests must still pass — they call the no-target form, which is the back-compat path.
 
-- [ ] **Step 5: Verify no call site broke**
+- [x] **Step 5: Verify no call site broke**
 
 Run: `pnpm exec tsc --noEmit`
 Expected: no errors. All seven existing callers (`approve/route.ts`, `status/route.ts`, `stream/route.ts`, `page.tsx`, `browser-tools.ts`, `tools.ts`, `akira-turn.ts`) use the defaulted form and need no changes.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/lib/companion/registry.ts src/lib/companion/registry.test.ts
@@ -208,7 +233,7 @@ git commit -m "feat(companion): registry supports multiple targets (laptop/room)
 - Consumes: Task 1's `CompanionTarget` (not directly imported; conceptual)
 - Produces: `CommandAction` extended with `'fs_list' | 'fs_read' | 'fs_write'`; `Command` gains optional `path?: string` and `content?: string`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/lib/companion/protocol-copies.test.ts`:
 
@@ -241,12 +266,12 @@ test('the protocol declares the fs actions', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec tsx --test src/lib/companion/protocol-copies.test.ts`
 Expected: FAIL with `ENOENT` on `room-agent/src/protocol.ts` — the file does not exist yet.
 
-- [ ] **Step 3: Write the protocol, three times**
+- [x] **Step 3: Write the protocol, three times**
 
 This exact content goes in **all three** paths — `src/lib/companion/protocol.ts`, `companion/src/protocol.ts`, and `room-agent/src/protocol.ts` (create the directory first):
 
@@ -307,12 +332,12 @@ export interface Result {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec tsx --test src/lib/companion/protocol-copies.test.ts`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/companion/protocol.ts companion/src/protocol.ts room-agent/src/protocol.ts src/lib/companion/protocol-copies.test.ts
@@ -332,7 +357,7 @@ git commit -m "feat(protocol): add fs_list/fs_read/fs_write actions + copy drift
 - Consumes: nothing
 - Produces: `export interface Roots { room: string; doorway: string }`; `export type PathVerdict = { ok: true; abs: string } | { ok: false; reason: string }`; `export function validatePath(roots: Roots, requested: string): PathVerdict`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `room-agent/src/paths.test.ts`:
 
@@ -389,12 +414,12 @@ test('rejects a null byte', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec tsx --test room-agent/src/paths.test.ts`
 Expected: FAIL — cannot resolve `./paths`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `room-agent/src/paths.ts`:
 
@@ -431,12 +456,12 @@ export function validatePath(roots: Roots, requested: string): PathVerdict {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec tsx --test room-agent/src/paths.test.ts`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 5: Add room-agent to the root test glob**
+- [x] **Step 5: Add room-agent to the root test glob**
 
 In `package.json`, append `room-agent/src/*.test.ts` to the `test` script:
 
@@ -444,12 +469,12 @@ In `package.json`, append `room-agent/src/*.test.ts` to the `test` script:
 "test": "tsx --test src/lib/*.test.ts src/lib/akira/*.test.ts src/lib/akira/memory/*.test.ts src/lib/voice/*.test.ts src/lib/companion/*.test.ts companion/src/*.test.ts src/lib/routing/*.test.ts room-agent/src/*.test.ts"
 ```
 
-- [ ] **Step 6: Run the whole suite**
+- [x] **Step 6: Run the whole suite**
 
 Run: `pnpm test`
 Expected: PASS. Confirms the new files are picked up and nothing else regressed.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add room-agent/src/paths.ts room-agent/src/paths.test.ts package.json
@@ -468,7 +493,7 @@ git commit -m "feat(room): path gate confining fs actions to the room and doorwa
 - Consumes: `validatePath`, `Roots` from `./paths` (Task 3); `Command`, `Result` from `./protocol` (Task 2)
 - Produces: `export async function execFs(roots: Roots, cmd: Command): Promise<Result>`; `export const MAX_READ_BYTES = 262144`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `room-agent/src/fs-ops.test.ts`:
 
@@ -543,12 +568,12 @@ test('an oversized file is refused', async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec tsx --test room-agent/src/fs-ops.test.ts`
 Expected: FAIL — cannot resolve `./fs-ops`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `room-agent/src/fs-ops.ts`:
 
@@ -599,12 +624,12 @@ export async function execFs(roots: Roots, cmd: Command): Promise<Result> {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec tsx --test room-agent/src/fs-ops.test.ts`
 Expected: PASS, 7 tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add room-agent/src/fs-ops.ts room-agent/src/fs-ops.test.ts
@@ -627,7 +652,7 @@ git commit -m "feat(room): filesystem executor for fs_list/fs_read/fs_write"
 - Consumes: `execFs` from `./fs-ops` (Task 4); `Roots` from `./paths` (Task 3); `Command`, `Result` from `./protocol` (Task 2); the `?target=room` query parameter added in Task 6
 - Produces: `export interface RoomConfig { miniUrl: string; token: string; roots: Roots }`; `export function loadConfig(): RoomConfig`; `export function connect(cfg, onCommand, onStatus?)` returning `{ postResult, stop }`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `room-agent/src/config.test.ts`:
 
@@ -676,12 +701,12 @@ test('honours overrides', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec tsx --test room-agent/src/config.test.ts`
 Expected: FAIL — cannot resolve `./config`.
 
-- [ ] **Step 3: Write config**
+- [x] **Step 3: Write config**
 
 Create `room-agent/src/config.ts`:
 
@@ -712,12 +737,12 @@ export function loadConfig(): RoomConfig {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec tsx --test room-agent/src/config.test.ts`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Write the connection**
+- [x] **Step 5: Write the connection**
 
 Create `room-agent/src/connection.ts`. This mirrors `companion/src/connection.ts` with one difference — it appends `&target=room` to the stream URL:
 
@@ -788,7 +813,7 @@ export function connect(
 }
 ```
 
-- [ ] **Step 6: Write the entrypoint**
+- [x] **Step 6: Write the entrypoint**
 
 Create `room-agent/src/index.ts`:
 
@@ -826,7 +851,7 @@ process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 ```
 
-- [ ] **Step 7: Write the package manifest and env example**
+- [x] **Step 7: Write the package manifest and env example**
 
 Create `room-agent/package.json`:
 
@@ -859,12 +884,12 @@ ROOM_ROOT=/home/akira/workshop
 ROOM_DOORWAY=/mnt/doorway
 ```
 
-- [ ] **Step 8: Verify it typechecks and the suite is green**
+- [x] **Step 8: Verify it typechecks and the suite is green**
 
 Run: `pnpm exec tsc --noEmit && pnpm test`
 Expected: no type errors; all tests pass.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add room-agent/
@@ -884,7 +909,7 @@ git commit -m "feat(room): room agent entrypoint, config, and connection"
 - Consumes: `registerCompanion`, `isOnline`, `CompanionTarget` from Task 1
 - Produces: `export function targetFromParam(raw: string | null): CompanionTarget` in `src/lib/companion/target-param.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/lib/companion/target-param.test.ts`:
 
@@ -906,12 +931,12 @@ test('an unknown target falls back to laptop rather than throwing', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec tsx --test src/lib/companion/target-param.test.ts`
 Expected: FAIL — cannot resolve `./target-param`.
 
-- [ ] **Step 3: Write the parser**
+- [x] **Step 3: Write the parser**
 
 Create `src/lib/companion/target-param.ts`:
 
@@ -925,12 +950,12 @@ export function targetFromParam(raw: string | null): CompanionTarget {
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec tsx --test src/lib/companion/target-param.test.ts`
 Expected: PASS, 3 tests.
 
-- [ ] **Step 5: Wire it into the stream route**
+- [x] **Step 5: Wire it into the stream route**
 
 In `src/app/api/companion/stream/route.ts`, add the import and pass the target through the register closure. `startCompanionStream`'s signature does not change — the target is captured in the closure:
 
@@ -972,7 +997,7 @@ export async function GET(req: Request) {
 }
 ```
 
-- [ ] **Step 6: Report both targets from the status route**
+- [x] **Step 6: Report both targets from the status route**
 
 Replace the body of `src/app/api/companion/status/route.ts`'s handler return with:
 
@@ -986,12 +1011,12 @@ Replace the body of `src/app/api/companion/status/route.ts`'s handler return wit
 
 The `online` key must stay — the HUD and `page.tsx` read it, and this slice does not touch them.
 
-- [ ] **Step 7: Verify**
+- [x] **Step 7: Verify**
 
 Run: `pnpm exec tsc --noEmit && pnpm test`
 Expected: no type errors; all tests pass.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/lib/companion/target-param.ts src/lib/companion/target-param.test.ts src/app/api/companion/stream/route.ts src/app/api/companion/status/route.ts
@@ -1011,7 +1036,7 @@ git commit -m "feat(companion): route connections by ?target= and report both in
 - Consumes: `sendCommand`, `isOnline` from `@/lib/companion/registry` (Task 1); `AkiraToolContext`, `ToolResult`, `ok`, `err` from `./tool-actions`
 - Produces: `export const ROOM_TOOL_NAMES: string[]`; `export function roomToolDefs(ctx: AkiraToolContext)`
 
-- [ ] **Step 1: Write the tool module**
+- [x] **Step 1: Write the tool module**
 
 There is no unit test for this file — it is a thin declarative wrapper over `sendCommand`, exactly like `browser-tools.ts`, which also has none. The behaviour it depends on is covered by Task 1's registry tests. Verification is the E2E smoke in Task 8.
 
@@ -1077,7 +1102,7 @@ export function roomToolDefs(ctx: AkiraToolContext) {
 }
 ```
 
-- [ ] **Step 2: Register the tools conditionally**
+- [x] **Step 2: Register the tools conditionally**
 
 `src/lib/akira/tools.ts:143` currently reads:
 
@@ -1101,7 +1126,7 @@ Add the import alongside the existing `browserToolDefs` import at `src/lib/akira
 import { roomToolDefs } from './room-tools';
 ```
 
-- [ ] **Step 3: Add the tool names to the auto-run list**
+- [x] **Step 3: Add the tool names to the auto-run list**
 
 Defining a tool is not enough — MCP tool names must also appear in `extraAllowedTools` or the SDK
 will not auto-run them. `src/lib/akira-turn.ts:129-138` currently ends with `...BROWSER_TOOL_NAMES`.
@@ -1131,12 +1156,12 @@ Leave `workingDir: process.cwd()` and its comment at line 121 alone. That commen
 read tools; never a worktree" — is still true: her *SDK* tools remain read-only. Room writes happen
 over the wire in a container, not in the Mission Control process.
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `pnpm exec tsc --noEmit && pnpm test && pnpm build`
 Expected: no type errors, tests pass, build succeeds. `pnpm build` matters here — `server-only` import errors surface at build time, not in tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/lib/akira/room-tools.ts src/lib/akira/tools.ts src/lib/akira-turn.ts

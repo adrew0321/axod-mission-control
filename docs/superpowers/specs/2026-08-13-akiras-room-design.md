@@ -196,12 +196,42 @@ Following `pnpm test` convention — `node:test` via `tsx`, extensionless import
 
 ## Open questions
 
-- Does the room agent reconnect cleanly across container restarts, or does it need the displacement
-  handling that `stream-lifecycle.ts` added for the laptop companion? Likely yes — same failure shape.
+- ~~Does the room agent reconnect cleanly across container restarts, or does it need the displacement
+  handling that `stream-lifecycle.ts` added for the laptop companion?~~ **Answered by slice 1's build —
+  it needs it, and the mechanism is now known.** See "Carried into slice 2" below.
 - Should the workshop repo have a git remote (private, like `akira-memory`) so her work survives a
   container rebuild, or is a snapshot sufficient? Leaning remote, for the same reason the vault has one.
 - How does the operator review her workshop output — the existing proposal/diff surface, or something
   new? Prefer reusing the proposal surface; confirm it renders non-code artifacts acceptably.
+
+## Carried into slice 2
+
+Three prerequisites surfaced during slice 1's implementation and review. Each was deliberately deferred
+because nothing in slice 1 can reach it — AKIRA has exactly `fs_list`/`fs_read`/`fs_write` and no shell.
+**Slice 2 lands gated `Bash`, which is precisely what makes all three reachable**, so they are that
+slice's entry cost, not optional hardening.
+
+1. **Resolve symlinks before acting on a path.** `room-agent/src/paths.ts` is pure path math and
+   cannot see a symlink planted inside the room or doorway that points outside them. Today no protocol
+   action can create one. Once `Bash` exists, `execFs` must resolve links — `fs.realpath` on the parent,
+   or `O_NOFOLLOW` — before it reads or writes. Note the load-bearing control remains the LXD mount
+   namespace (prod and `/home/akeem` are simply not in the container); the path gate is defence in depth
+   *inside* the room, and should be described that way rather than as the boundary itself.
+
+2. **Give the room its own token.** `verifyCompanionToken` checks one shared secret, so slice 1 requires
+   `ROOM_TOKEN === COMPANION_TOKEN` and the two zones authenticate as the same principal. A compromised
+   room could therefore connect as `?target=laptop`, displace the operator's real companion (the registry
+   closes the displaced sink), and receive browser commands intended for the machine that holds his
+   logged-in sessions. Unreachable by AKIRA in slice 1 — she has no shell and no path to the token — but
+   a shell changes that. Fix: a per-target secret, checked against the target the connection claims.
+
+3. **Guard the unregister closure's rejection loop.** In `src/lib/companion/registry.ts` the closure
+   returned by `registerCompanion` guards sink *deletion* on `sinks.get(target) === s`, but the loop that
+   rejects that target's in-flight commands has no such guard. A displaced stream's late teardown
+   therefore rejects the *current* connection's in-flight command with "companion disconnected". This is
+   the reconnect question above, with a concrete mechanism: the room reconnects on a 3s backoff loop, so
+   it will hit this far more often than the single laptop ever did. One line —
+   `if (sinks.get(target) !== s) return;` at the top of the closure.
 
 ## Prior art in this repo
 
