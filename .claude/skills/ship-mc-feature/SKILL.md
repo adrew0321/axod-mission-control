@@ -62,13 +62,13 @@ End commit messages with the repo's `Co-Authored-By: Claude …` trailer.
 
 ## Phase 5 — Deploy to the Mini (production)
 **Requires explicit user go-ahead** — production deploys are outward-facing. The Mini is
-`mc-bridge` at `akeem@10.0.0.218`; the app lives at `/srv/mission-control` (user `mc`,
+`mc-bridge` at `akeem@10.0.0.219`; the app lives at `/srv/mission-control` (user `mc`,
 systemd unit `mission-control`, public at bridge.axodcreative.com via cloudflared).
 Full procedure: `docs/runbook-deploy-homelab.md`. The critical moves:
 
 1. Pull + build as `mc`:
    ```bash
-   ssh akeem@10.0.0.218 'sudo -u mc bash -lc "cd /srv/mission-control && git pull --ff-only origin main && pnpm build"'
+   ssh akeem@10.0.0.219 'sudo -u mc bash -lc "cd /srv/mission-control && git pull --ff-only origin main && pnpm build"'
    ```
    - **SKIP `pnpm install` when the release adds NO new deps.** After the mc-HOME move,
      `pnpm install` aborts wanting to purge `node_modules`; **never let it purge** — it
