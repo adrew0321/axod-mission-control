@@ -68,6 +68,40 @@ systemctl is-enabled sleep.target suspend.target hibernate.target hybrid-sleep.t
 
 Expected output: `masked` four times.
 
+## Step 3b — Activate the graceful-shutdown work while you have sudo
+
+Unrelated to the desktop, but this is the right moment: v1.19.0 shipped SIGTERM teardown and it has
+never actually run. The unit calls `next start` directly rather than through `pnpm start`, so the
+`cross-env NEXT_MANUAL_SIG_HANDLE=true` in `package.json` never reaches the process — Next.js installs
+its own SIGTERM handler and the app's teardown never fires. Every restart eats the full 30s
+`TimeoutStopSec` and is then SIGKILLed.
+
+```bash
+sudo systemctl edit --full mission-control
+```
+
+Add one line to the `[Service]` section, beside the existing `EnvironmentFile=`:
+
+```ini
+Environment=NEXT_MANUAL_SIG_HANDLE=true
+```
+
+Then:
+
+```bash
+sudo systemctl daemon-reload
+```
+
+No restart needed here — the step 7 reboot picks it up. **After that reboot**, confirm it worked:
+
+```bash
+sudo systemctl restart mission-control   # should now return in ~1-2s, not 30s
+journalctl -u mission-control -n 30 | grep -iE "shutdown|sigterm|drain"
+```
+
+A restart that still takes exactly 30 seconds means the variable is not reaching the process — check
+`sudo systemctl show mission-control -p Environment`.
+
 ## Step 4 — Install the desktop
 
 `ubuntu-desktop-minimal` rather than `ubuntu-desktop`: it skips LibreOffice, Thunderbird, games, and
@@ -183,5 +217,6 @@ unmasked `suspend.target` on a production host was always a latent bug.
 - [ ] `systemctl is-active mission-control cloudflared` → `active` twice
 - [ ] `curl https://bridge.axodcreative.com/api/health` answers
 - [ ] `systemctl is-enabled sleep.target` → `masked`
+- [ ] `sudo systemctl restart mission-control` returns in ~1-2s, not 30s (step 3b)
 - [ ] `~/code/axod-mission-control` exists on branch `dev`
 - [ ] `~/AKIRA/inbox` and `~/AKIRA/playground` exist
