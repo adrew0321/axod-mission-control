@@ -16,9 +16,15 @@
 subagent-driven-development. Verified on the merged result: `pnpm test` 426/426, `pnpm exec tsc
 --noEmit` clean, `pnpm build` exit 0. Not released, not pushed, not deployed — version stays 1.19.0.
 
-**Task 8 is NOT done.** It provisions the LXD container on the production Mini and depends on slice 0
-(`docs/runbook-mini-desktop.md`), which has not been run. Until it is, this work is inert for the
-running system: the room tools only enter AKIRA's toolset when `isOnline('room')` is true.
+**Task 8 is NOT done**, but it is **no longer blocked**. It provisions the LXD container on the Mini.
+
+> **Updated 2026-08-14, after this status block was written:** slice 0 **has now been run** — see the
+> ✅ EXECUTED banner in `docs/runbook-mini-desktop.md`. The Mini has the desktop, `~/AKIRA/inbox` and
+> `~/AKIRA/playground` exist, and `akeem` is already in the `lxd` group. Task 8's only remaining
+> prerequisite is `snap install lxd && lxd init --auto`, which needs root.
+
+Until Task 8 runs, this work is inert for the running system: the room tools only enter AKIRA's toolset
+when `isOnline('room')` is true.
 
 Two deliberate deviations from the text below, both reviewed:
 
