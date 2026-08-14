@@ -1,19 +1,26 @@
 import { registerCompanion } from '@/lib/companion/registry';
 import { startCompanionStream } from '@/lib/companion/stream-lifecycle';
 import { verifyCompanionToken } from '@/lib/companion/auth';
+import { targetFromParam } from '@/lib/companion/target-param';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
-  const token = new URL(req.url).searchParams.get('token');
+  const params = new URL(req.url).searchParams;
+  const token = params.get('token');
   if (!verifyCompanionToken(token)) {
     return new Response('Unauthorized', { status: 401 });
   }
+  const target = targetFromParam(params.get('target'));
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      startCompanionStream({ controller, register: registerCompanion, signal: req.signal });
+      startCompanionStream({
+        controller,
+        register: (sink) => registerCompanion(sink, target),
+        signal: req.signal,
+      });
     },
   });
 

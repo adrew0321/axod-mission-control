@@ -8,5 +8,9 @@ export const dynamic = 'force-dynamic';
 // sink), whereas a server component reads a separate module instance and always
 // sees offline. The topbar polls this so the "laptop" dot reflects reality.
 export async function GET() {
-  return Response.json({ online: isOnline() });
+  return Response.json({
+    online: isOnline('laptop'), // kept for existing clients
+    laptop: isOnline('laptop'),
+    room: isOnline('room'),
+  });
 }
