@@ -24,3 +24,46 @@ test('times out when no result arrives', async () => {
   await assert.rejects(() => result, /timeout/i);
   unreg();
 });
+
+test('laptop and room are independent sinks', () => {
+  const laptop: { id: string }[] = [];
+  const room: { id: string }[] = [];
+  const unregL = registerCompanion({ send: (c) => laptop.push(c) }, 'laptop');
+  const unregR = registerCompanion({ send: (c) => room.push(c) }, 'room');
+
+  assert.equal(isOnline('laptop'), true);
+  assert.equal(isOnline('room'), true);
+
+  sendCommand({ action: 'fs_list', path: '.' }, 1000, 'room').result.catch(() => {});
+  assert.equal(room.length, 1);
+  assert.equal(laptop.length, 0, 'a room command must not reach the laptop sink');
+
+  unregL();
+  unregR();
+});
+
+test('disconnecting the room does not fail laptop commands', async () => {
+  const unregL = registerCompanion({ send: () => {} }, 'laptop');
+  const unregR = registerCompanion({ send: () => {} }, 'room');
+
+  const laptopCmd = sendCommand({ action: 'read' }, 1000, 'laptop');
+  const roomCmd = sendCommand({ action: 'fs_list', path: '.' }, 1000, 'room');
+
+  unregR(); // room drops
+
+  await assert.rejects(() => roomCmd.result, /disconnected/i);
+  resolveResult({ id: laptopCmd.id, status: 'ok', text: 'still here' });
+  assert.equal((await laptopCmd.result).text, 'still here');
+
+  unregL();
+});
+
+test('target defaults to laptop', () => {
+  const seen: { id: string }[] = [];
+  const unreg = registerCompanion({ send: (c) => seen.push(c) }); // no target
+  assert.equal(isOnline(), true);
+  assert.equal(isOnline('room'), false);
+  sendCommand({ action: 'read' }).result.catch(() => {}); // no target
+  assert.equal(seen.length, 1);
+  unreg();
+});
