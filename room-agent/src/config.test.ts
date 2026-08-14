@@ -40,3 +40,17 @@ test('honours overrides', () => {
     assert.equal(cfg.roots.doorway, '/tmp/d');
   });
 });
+
+test('treats an empty-string root/doorway as absent and falls back to defaults', () => {
+  withEnv({ ROOM_TOKEN: 't', ROOM_ROOT: '', ROOM_DOORWAY: '' }, () => {
+    const cfg = loadConfig();
+    assert.equal(cfg.roots.room, '/home/akira/workshop');
+    assert.equal(cfg.roots.doorway, '/mnt/doorway');
+  });
+});
+
+test('still throws on an empty-string token', () => {
+  withEnv({ ROOM_TOKEN: '' }, () => {
+    assert.throws(() => loadConfig(), /ROOM_TOKEN/);
+  });
+});

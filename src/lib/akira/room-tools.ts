@@ -15,13 +15,11 @@ const ROOM_TIMEOUT_MS = 30_000;
 async function run(
   action: 'fs_list' | 'fs_read' | 'fs_write',
   args: Record<string, unknown>,
-  ctx: AkiraToolContext,
 ): Promise<ToolResult> {
   try {
     const { result } = sendCommand({ action, ...args }, ROOM_TIMEOUT_MS, 'room');
     const r = await result;
     if (r.status === 'blocked') {
-      ctx.emit({ type: 'hard_gate', ref: String(args.path ?? ''), reason: r.reason ?? 'path refused' });
       return ok(
         `That path is outside your room (${r.reason ?? 'refused'}). Do not retry — ask the operator to move the file into ~/AKIRA instead.`,
       );
@@ -33,25 +31,26 @@ async function run(
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- ctx kept for interface parity with other *ToolDefs(ctx) factories in tools.ts
 export function roomToolDefs(ctx: AkiraToolContext) {
   return [
     tool(
       'room_list',
       'List a directory in your room on the Mini, or in the shared ~/AKIRA doorway. Paths are relative to your room unless absolute.',
       { path: z.string().min(1).describe('Directory to list, e.g. "." or "/mnt/doorway/inbox".') },
-      (a) => run('fs_list', { path: a.path }, ctx),
+      (a) => run('fs_list', { path: a.path }),
     ),
     tool(
       'room_read',
       'Read a text file in your room or the doorway. Large files are refused.',
       { path: z.string().min(1) },
-      (a) => run('fs_read', { path: a.path }, ctx),
+      (a) => run('fs_read', { path: a.path }),
     ),
     tool(
       'room_write',
       'Write a text file in your room or the doorway. Parent directories are created. Anything outside those two places is refused.',
       { path: z.string().min(1), content: z.string() },
-      (a) => run('fs_write', { path: a.path, content: a.content }, ctx),
+      (a) => run('fs_write', { path: a.path, content: a.content }),
     ),
   ];
 }
