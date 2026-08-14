@@ -699,8 +699,10 @@ export function loadConfig(): RoomConfig {
   const token = process.env.ROOM_TOKEN ?? '';
   if (!token) throw new Error('ROOM_TOKEN is required (set it in room-agent/.env)');
   return {
-    // The room reaches Mission Control over the host bridge, not the public tunnel.
-    miniUrl: process.env.MINI_URL ?? 'http://10.0.0.1:3000',
+    // The room reaches Mission Control over the LXD bridge gateway, not the public tunnel.
+    // No default is safe to hardcode: the lxdbr0 subnet is assigned when the bridge is
+    // created. provision.sh discovers it and writes MINI_URL into room-agent/.env.
+    miniUrl: process.env.MINI_URL ?? '',
     token,
     roots: {
       room: process.env.ROOM_ROOT ?? '/home/akira/workshop',
@@ -848,8 +850,11 @@ Create `room-agent/.env.example`:
 ```
 # Shared secret — must match COMPANION_TOKEN on the Mission Control host.
 ROOM_TOKEN=
-# Mission Control, reached over the LXD host bridge (not the public tunnel).
-MINI_URL=http://10.0.0.1:3000
+# Mission Control, reached over the LXD bridge gateway (not the public tunnel).
+# Discover the real value on the Mini — do NOT guess, and do NOT use 10.0.0.1 (that is the
+# household router, not the LXD bridge):
+#   lxc network get lxdbr0 ipv4.address     # e.g. 10.166.23.1/24 → use http://10.166.23.1:3000
+MINI_URL=
 ROOM_ROOT=/home/akira/workshop
 ROOM_DOORWAY=/mnt/doorway
 ```
@@ -1233,11 +1238,23 @@ Expected: `container ready.`
 
 - [ ] **Step 4: Install the agent inside the container**
 
+Discover the bridge gateway first — this is the address the container uses to reach Mission Control
+on the host. It is **not** `10.0.0.1` (that is the household router):
+
+```bash
+GW=$(lxc network get lxdbr0 ipv4.address | cut -d/ -f1)   # e.g. 10.166.23.1
+echo "room will reach MC at http://$GW:3000"
+lxc exec akira-room -- curl -sI --max-time 5 "http://$GW:3000/api/health" | head -1
+```
+
+That `curl` must return `HTTP/1.1 200` before you go further. If it times out, the host firewall or
+`lxdbr0` routing is blocking it and no amount of agent debugging will help.
+
 ```bash
 lxc file push -r room-agent akira-room/home/akira/
+lxc exec akira-room -- bash -lc "printf 'ROOM_TOKEN=%s\nMINI_URL=http://%s:3000\n' \"\$COMPANION_TOKEN\" \"$GW\" > /home/akira/room-agent/.env"
 lxc exec akira-room -- bash -lc '
   cd /home/akira/room-agent && pnpm install
-  printf "ROOM_TOKEN=%s\nMINI_URL=http://10.0.0.1:3000\n" "$COMPANION_TOKEN" > .env
   chown -R akira:akira /home/akira/room-agent
 '
 lxc file push deploy/room/akira-room.service akira-room/etc/systemd/system/
