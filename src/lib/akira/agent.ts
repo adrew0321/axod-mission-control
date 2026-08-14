@@ -14,6 +14,9 @@ export const AKIRA_AGENT = {
   // (brief runs every landing); far lighter on the Pro cap than Opus.
   model: 'claude-haiku-4-5-20251001',
   system_prompt: AKIRA_SYSTEM_PROMPT,
-  tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'] as string[],
+  // NO Read/Glob/Grep — see the note in scripts/seed.ts. These execute in the MC
+  // process as `mc` with cwd=/srv/mission-control, so they reach .env and the live
+  // database. room_read covers files; relay covers code.
+  tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite'] as string[],
   color: 'from-sky-300 to-cyan-400',
 };

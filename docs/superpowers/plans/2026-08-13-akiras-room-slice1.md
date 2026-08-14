@@ -16,11 +16,21 @@
 subagent-driven-development. Verified on the merged result: `pnpm test` 426/426, `pnpm exec tsc
 --noEmit` clean, `pnpm build` exit 0. Not released, not pushed, not deployed — version stays 1.19.0.
 
-**Task 8 is DONE — provisioned on the Mini 2026-08-14.** Container `akira-room` is running, the agent
-is connected (`[room] connected to http://10.138.75.1:3000`), the doorway is mounted with working uid
-mapping, and snapshot `clean-slice1` exists. Artifacts committed at `deploy/room/`. It needed **no root
-at all** — see the note below. The remaining unverified step is AKIRA actually calling `room_list`,
-which needs a logged-in browser session.
+**Task 8 is DONE and slice 1 is DEPLOYED as v1.21.0 (2026-08-14).** Container `akira-room` running,
+agent connected (`[room] connected to http://10.138.75.1:3000`), doorway mounted with working uid
+mapping, snapshot `clean-slice1` taken, artifacts at `deploy/room/`. Task 8 needed **no root at all**.
+Prod serves 1.21.0 at `bridge.axodcreative.com`. The one remaining unverified step is AKIRA actually
+calling `room_list` — that needs a logged-in browser session.
+
+> ⚠️ **The plan omitted a required step: slice 1 must be DEPLOYED before the room agent is started.**
+> It was first started against the running v1.19.0, whose `registerCompanion(s)` takes one argument and
+> ignores `?target=`. The room agent therefore registered as the single **laptop** sink for ~11 minutes,
+> which would have displaced a real laptop companion and mis-routed every browser tool call. Task 8 now
+> ends with "do not `systemctl enable --now` until `/api/health` reports the release containing slice 1."
+
+> **Release note.** v1.20.0 was cut against a stale `main` and abandoned; its tag on origin points at an
+> orphan commit. v1.21.0 reconciled `origin/main` (security bumps from PR #1 — Next 16.2.11,
+> claude-agent-sdk 0.3.228) into `dev` first, so the release carries both slice 1 and those fixes.
 
 Original status, retained for context:
 
@@ -1283,7 +1293,14 @@ bash deploy/room/provision.sh
 >
 > The whole of Task 8 therefore runs as the operator with no password prompt.
 
-- [ ] **Step 4: Install the agent inside the container**
+- [x] **Step 4: Install the agent inside the container**
+
+> ⚠️ **Do not start the service until slice 1 is deployed.** Confirm first:
+> ```bash
+> curl -s https://bridge.axodcreative.com/api/health   # version must be >= 1.21.0
+> ```
+> Against an older release the stream route ignores `?target=room` and the agent silently registers as
+> the **laptop** companion. Install the unit, but hold `systemctl enable --now` until that check passes.
 
 Discover the bridge gateway first — this is the address the container uses to reach Mission Control
 on the host. It is **not** `10.0.0.1` (that is the household router):
