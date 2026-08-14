@@ -234,7 +234,14 @@ async function main() {
       role: 'concierge',
       model: 'claude-haiku-4-5-20251001',
       system_prompt: AKIRA_SYSTEM_PROMPT,
-      tools_allowlist: ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite'],
+      // NO Read/Glob/Grep. These run in the Mission Control process as `mc` with
+      // cwd=/srv/mission-control, which contains .env (SESSION_SECRET,
+      // CLAUDE_CODE_OAUTH_TOKEN, COMPANION_TOKEN, AKIRA_MEMORY_PIN — the PIN that
+      // gates her own vault) and the live database. Read-only is not safe when the
+      // readable set includes the secrets. She has room_read for files and `relay`
+      // for anything needing real code access. Was:
+      //   ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite']
+      tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite'],
       color: 'from-sky-300 to-cyan-400',
       effort: 'low',
       max_turns: 15,
