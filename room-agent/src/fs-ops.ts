@@ -9,6 +9,10 @@ import type { Command, Result } from './protocol';
 export const MAX_READ_BYTES = 256 * 1024;
 
 export async function execFs(roots: Roots, cmd: Command): Promise<Result> {
+  if (cmd.action !== 'fs_list' && cmd.action !== 'fs_read' && cmd.action !== 'fs_write') {
+    return { id: cmd.id, status: 'error', reason: `unsupported action: ${cmd.action}` };
+  }
+
   const verdict = validatePath(roots, cmd.path ?? '');
   if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
   const abs = verdict.abs;

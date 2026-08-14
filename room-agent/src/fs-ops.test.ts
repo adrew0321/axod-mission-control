@@ -66,3 +66,10 @@ test('an oversized file is refused', async () => {
   assert.equal(r.status, 'error');
   assert.match(r.reason ?? '', /too large/i);
 });
+
+test('a non-fs action is an error, not a boundary refusal', async () => {
+  const roots = await makeRoots();
+  const r = await execFs(roots, { id: 'c8', action: 'click', ref: 'e1' });
+  assert.equal(r.status, 'error');
+  assert.match(r.reason ?? '', /unsupported action/i);
+});
