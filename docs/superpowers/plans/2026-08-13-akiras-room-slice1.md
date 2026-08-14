@@ -1271,7 +1271,7 @@ curl -s http://localhost:3000/api/companion/status | jq
 
 Expected: `{"online": <bool>, "laptop": <bool>, "room": true}`.
 
-If `room` is false: `lxc exec akira-room -- journalctl -u akira-room -n 50`. The likely causes are a token mismatch or `MINI_URL` pointing somewhere the container cannot reach — check `lxc exec akira-room -- curl -sI http://10.0.0.1:3000/api/health`.
+If `room` is false: `lxc exec akira-room -- journalctl -u akira-room -n 50`. The likely causes are a token mismatch or `MINI_URL` pointing somewhere the container cannot reach — re-check it against the bridge gateway: `GW=$(lxc network get lxdbr0 ipv4.address | cut -d/ -f1); lxc exec akira-room -- curl -sI "http://$GW:3000/api/health"`.
 
 - [ ] **Step 6: Verify the doorway end to end**
 
