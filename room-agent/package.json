@@ -1,0 +1,12 @@
+{
+  "name": "akira-room-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "test": "tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}

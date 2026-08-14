@@ -82,3 +82,6 @@ TODO.local.md
 # python bytecode (deploy/*.py helpers)
 __pycache__/
 *.pyc
+
+# claude code worktrees (EnterWorktree)
+.claude/worktrees/
