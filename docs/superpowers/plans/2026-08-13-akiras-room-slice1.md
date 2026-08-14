@@ -16,7 +16,13 @@
 subagent-driven-development. Verified on the merged result: `pnpm test` 426/426, `pnpm exec tsc
 --noEmit` clean, `pnpm build` exit 0. Not released, not pushed, not deployed — version stays 1.19.0.
 
-**Task 8 is NOT done**, but it is **no longer blocked**. It provisions the LXD container on the Mini.
+**Task 8 is DONE — provisioned on the Mini 2026-08-14.** Container `akira-room` is running, the agent
+is connected (`[room] connected to http://10.138.75.1:3000`), the doorway is mounted with working uid
+mapping, and snapshot `clean-slice1` exists. Artifacts committed at `deploy/room/`. It needed **no root
+at all** — see the note below. The remaining unverified step is AKIRA actually calling `room_list`,
+which needs a logged-in browser session.
+
+Original status, retained for context:
 
 > **Updated 2026-08-14, after this status block was written:** slice 0 **has now been run** — see the
 > ✅ EXECUTED banner in `docs/runbook-mini-desktop.md`. The Mini has the desktop, `~/AKIRA/inbox` and
@@ -1258,14 +1264,24 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-- [ ] **Step 3: Provision, on the Mini**
+- [x] **Step 3: Provision, on the Mini**
 
 ```bash
-sudo snap install lxd && sudo lxd init --auto   # first time only
 bash deploy/room/provision.sh
 ```
 
-Expected: `container ready.`
+> ⚠️ **Corrected 2026-08-14 — no root required.** This step originally read
+> `sudo snap install lxd && sudo lxd init --auto`. Neither was needed on this host:
+> - Ubuntu 24.04 ships an `lxd` **shim** at `/usr/sbin/lxd`; the snap installs itself on first
+>   `lxc` invocation.
+> - `lxd init` does need root, but its individual effects do not. As a member of the `lxd` group
+>   the client is already `auth: trusted`, so `lxc storage create default dir`,
+>   `lxc network create lxdbr0`, and two `lxc profile device add` calls accomplish the same thing
+>   unprivileged. `provision.sh` does exactly that.
+> - `raw.idmap` mapping container root → host uid 1000 was accepted with **no `/etc/subuid` edit**.
+>   Verified: a file written by container root appears on the host owned by `akeem`.
+>
+> The whole of Task 8 therefore runs as the operator with no password prompt.
 
 - [ ] **Step 4: Install the agent inside the container**
 
@@ -1296,11 +1312,29 @@ lxc exec akira-room -- systemctl enable --now akira-room
 
 - [ ] **Step 5: Verify the room is connected**
 
+> ⚠️ **Corrected 2026-08-14.** `curl http://localhost:3000/api/companion/status` does **not** work.
+> `src/proxy.ts:32` excludes only `stream|result|ingest|writeback` from the login gate, and
+> `status/route.ts` has no token check by design — it is the HUD topbar's endpoint, protected by the
+> browser session. An unauthenticated curl gets `307 → /login`. That is correct behaviour, not a bug.
+
+Verify from the agent side and structurally instead:
+
 ```bash
-curl -s http://localhost:3000/api/companion/status | jq
+# 1. The agent logged a successful connection — this IS the registration,
+#    because the stream route calls registerCompanion(sink, 'room') on connect.
+lxc exec akira-room -- journalctl -u akira-room -n 10 --no-pager | grep "connected to"
+
+# 2. A bogus token is rejected with 401, not redirected — proves the proxy exclusion works
+lxc exec akira-room -- curl -s -o /dev/null -w '%{http_code}\n' \
+  "http://$GW:3000/api/companion/stream?token=bogus&target=room"      # expect 401
+
+# 3. The boundary is structural, not just validated in code
+lxc exec akira-room -- ls /srv        # empty dir — prod is not in this namespace
+lxc exec akira-room -- ls /home       # akira, ubuntu — the operator's home is absent
 ```
 
-Expected: `{"online": <bool>, "laptop": <bool>, "room": true}`.
+For `room: true` in JSON, open the front door in a logged-in browser; the topbar polls that endpoint
+with your session.
 
 If `room` is false: `lxc exec akira-room -- journalctl -u akira-room -n 50`. The likely causes are a token mismatch or `MINI_URL` pointing somewhere the container cannot reach — re-check it against the bridge gateway: `GW=$(lxc network get lxdbr0 ipv4.address | cut -d/ -f1); lxc exec akira-room -- curl -sI "http://$GW:3000/api/health"`.
 

@@ -1,0 +1,18 @@
+[Unit]
+Description=AKIRA room agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=akira
+WorkingDirectory=/home/akira/room-agent
+# __TSX__ is substituted by provision.sh with the container's actual tsx path
+# (/usr/bin/tsx when node came from NodeSource). Do not hardcode it here — a wrong
+# path fails as a silent restart loop.
+ExecStart=__TSX__ src/index.ts
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
