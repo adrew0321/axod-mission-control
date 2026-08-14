@@ -26,6 +26,7 @@ import { readSoul } from './akira/memory/soul';
 import { soulLessonsPreamble } from './akira/preamble';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
+import { ROOM_TOOL_NAMES } from './akira/room-tools';
 import { isOnline as companionOnline } from '@/lib/companion/registry';
 
 export type TurnEmit = (e: { type: string; [k: string]: unknown }) => void;
@@ -135,6 +136,7 @@ export async function runAkiraTurn(
         AKIRA_REMEMBER,
         AKIRA_FORGET,
         ...BROWSER_TOOL_NAMES,
+        ...ROOM_TOOL_NAMES,
       ],
       signal: opts.signal,
     })) {
