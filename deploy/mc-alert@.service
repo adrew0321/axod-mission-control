@@ -9,5 +9,9 @@ Description=Alert that %i failed
 Type=oneshot
 User=mc
 Group=mc
+# Without this, `journalctl -u <failed-unit>` returns NOTHING as mc and the alert
+# fires with no context — the unit name and "failed", but not a word about why.
+# Verified on the Mini 2026-08-14: mc is in neither adm nor systemd-journal.
+SupplementaryGroups=systemd-journal
 EnvironmentFile=/srv/mission-control/.env
 ExecStart=/srv/mission-control/deploy/mc-alert.sh %i
