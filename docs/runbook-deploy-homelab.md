@@ -50,8 +50,12 @@ sudo systemctl restart mission-control
 > when deps actually changed, deliberately, with a native rebuild afterwards. Check first:
 > `git diff <last-deployed-tag>..main -- package.json pnpm-lock.yaml`.
 
-> **Restarting needs real root.** `sudo -u mc` is passwordless; root sudo prompts for a password, so
-> the `systemctl` steps can't be automated from a remote session — run them yourself.
+> **Know what root you actually have.** `sudo -n -u mc` is passwordless (`(mc) NOPASSWD: ALL`), and
+> root is NOPASSWD-**allowlisted** for exactly: `systemctl restart|start|stop mission-control`,
+> `systemctl restart cloudflared`, `systemctl daemon-reload`. So a remote/non-interactive session CAN
+> pull, build, restart, and daemon-reload unattended. Anything else as root (writing to
+> `/etc/systemd/system`, starting other units) prompts for a password and needs a real TTY. Run
+> `sudo -n -l` before concluding you're blocked.
 
 `scripts/deploy.sh` automates this but assumes `mc` can sudo the restart; run the restart as
 `akeem` instead. The `ERR_PNPM_IGNORED_BUILDS` warning on install is the intentional
@@ -307,8 +311,9 @@ Discord if `DISCORD_ALERT_WEBHOOK` is set in `/srv/mission-control/.env`, and al
 journal either way.
 
 **Installing (or re-installing after a pull).** `/etc/systemd/system/*.service` are **copies**, not
-symlinks into `/srv/mission-control/deploy/` — a `git pull` changes nothing on its own. These steps
-need **real root**; `sudo -u mc` is passwordless on the Mini but root sudo prompts for a password.
+symlinks into `/srv/mission-control/deploy/` — a `git pull` changes nothing on its own. The two
+`install` commands are **not** on the NOPASSWD allowlist, so they need a real TTY to type a password
+into; `daemon-reload` is allowlisted and runs unattended.
 ```bash
 sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-alert@.service /etc/systemd/system/
 sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-backup.service /etc/systemd/system/
