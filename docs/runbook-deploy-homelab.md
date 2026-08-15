@@ -21,12 +21,14 @@ Cloud = source of truth; local data migrated once.
 > presence at all (e.g. when it is running on the iPhone USB tether, since its built-in WiFi is
 > dead). **Fix properly:** set a DHCP reservation on the router, or give it a static address.
 
-The Mini (`mc-bridge`, `10.0.0.218` → now `10.0.0.219`) is running **v1.8.0**, publicly reachable at
+The Mini (`mc-bridge`, `10.0.0.218` → now `10.0.0.219`) is running **v1.21.3**, publicly reachable at
 **https://bridge.axodcreative.com** via a cloudflared **named tunnel** (`mc-bridge`, systemd
 boot service — see Phase 3). The full stack runs 24/7: app, Scheduler, nightly health-check,
 Dreaming, and the Discord bot (chat + notifications). Login: `adrew0321@gmail.com` (the
 throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-backup.timer`,
-03:30 UTC → `/srv/backups`); R2 offsite backups (Phase 4) deferred.
+03:30 UTC → `/srv/backups`) with failure alerting wired (Phase 4b, deployed v1.21.3 — journal-only
+until `DISCORD_ALERT_WEBHOOK` is set); R2 offsite backups (Phase 4) still deferred, blocked on
+Cloudflare credentials.
 
 ### Updating the live box (deploy a new release)
 
@@ -34,12 +36,22 @@ throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-b
 # code/data update — run as the app user `mc` (owns /srv/mission-control):
 sudo -u mc bash -lc 'cd /srv/mission-control \
   && git pull --ff-only origin main \
-  && pnpm install --frozen-lockfile \
-  && pnpm build \
-  && (set -a; . ./.env; set +a; pnpm db:migrate)'
+  && pnpm build'
+# ONLY if the release changed deps (see warning below):
+#   sudo -u mc bash -lc 'cd /srv/mission-control && pnpm install --frozen-lockfile'
+# ONLY if the release added migrations (drizzle/ changed):
+#   sudo -u mc bash -lc 'cd /srv/mission-control && set -a; . ./.env; set +a; pnpm db:migrate'
 # then restart (allowlisted for akeem — see sudo note):
 sudo systemctl restart mission-control
 ```
+
+> **Do NOT run `pnpm install` on every deploy.** Since the `mc`-HOME move it aborts wanting to purge
+> `node_modules`, and letting it would wipe the hand-compiled `better-sqlite3` binding. Install only
+> when deps actually changed, deliberately, with a native rebuild afterwards. Check first:
+> `git diff <last-deployed-tag>..main -- package.json pnpm-lock.yaml`.
+
+> **Restarting needs real root.** `sudo -u mc` is passwordless; root sudo prompts for a password, so
+> the `systemctl` steps can't be automated from a remote session — run them yourself.
 
 `scripts/deploy.sh` automates this but assumes `mc` can sudo the restart; run the restart as
 `akeem` instead. The `ERR_PNPM_IGNORED_BUILDS` warning on install is the intentional
@@ -284,6 +296,45 @@ Replaces the Oracle Object Storage piece; same idea (nightly push of the local s
    sudo -u mc bash -c 'rclone copy "$(ls -1t /srv/backups/mc-*.db | head -1)" r2:mc-backups'
    ```
    Wire that into a nightly timer (mirror `deploy/mc-backup.timer`, 03:45).
+
+## Phase 4b — Failure alerting (deployed 2026-08-15, v1.21.3)
+Exists because `mc-backup.service` failed **49 nights running** (2026-06-26 → 08-14) and nothing said
+a word. Any unit worth having is worth knowing about when it breaks.
+
+`deploy/mc-alert@.service` is a **templated** handler: wire it into any unit with
+`OnFailure=mc-alert@%n.service` and systemd passes the failed unit's name as the instance. It posts to
+Discord if `DISCORD_ALERT_WEBHOOK` is set in `/srv/mission-control/.env`, and always writes to the
+journal either way.
+
+**Installing (or re-installing after a pull).** `/etc/systemd/system/*.service` are **copies**, not
+symlinks into `/srv/mission-control/deploy/` — a `git pull` changes nothing on its own. These steps
+need **real root**; `sudo -u mc` is passwordless on the Mini but root sudo prompts for a password.
+```bash
+sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-alert@.service /etc/systemd/system/
+sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-backup.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+**Verify:**
+```bash
+systemctl show mc-backup.service -p OnFailure                    # mc-alert@mc-backup.service.service
+systemctl show mc-alert@mc-backup.service -p SupplementaryGroups # systemd-journal
+sudo systemctl start mc-alert@mc-backup.service                  # fire it by hand
+journalctl -u "mc-alert@mc-backup.service" -n 20 --no-pager      # must show mc-backup's OWN log lines
+```
+That last check is the whole point. **`SupplementaryGroups=systemd-journal` is load-bearing:** the
+handler runs as `mc`, which is in neither `adm` nor `systemd-journal`, so without that line
+`journalctl -u <failed-unit>` returns *nothing* and the alert fires with a unit name and the word
+"failed" but no reason. Any future unit reading the journal as `mc` needs the same line.
+
+**End-to-end test of the trigger itself** (the manual start above only tests the handler):
+```bash
+printf '[Unit]\nDescription=alert self-test\nOnFailure=mc-alert@%%n.service\n[Service]\nType=oneshot\nExecStart=/bin/false\n' \
+  | sudo tee /etc/systemd/system/mc-alert-selftest.service >/dev/null
+sudo systemctl daemon-reload && sudo systemctl start mc-alert-selftest.service
+journalctl -u "mc-alert@mc-alert-selftest.service.service" -n 15 --no-pager
+sudo rm /etc/systemd/system/mc-alert-selftest.service && sudo systemctl daemon-reload
+```
 
 ## Phase 5 — Verify
 From your **phone on cellular** (proves it's reachable off your home network and independent of
