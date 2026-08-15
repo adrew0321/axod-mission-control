@@ -1,5 +1,6 @@
 [Unit]
 Description=Mission Control nightly SQLite backup
+OnFailure=mc-alert@%n.service
 
 [Service]
 Type=oneshot

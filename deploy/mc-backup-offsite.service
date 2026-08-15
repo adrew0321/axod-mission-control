@@ -1,7 +1,8 @@
 [Unit]
-Description=Mission Control nightly offsite backup (Object Storage)
+Description=Mission Control nightly offsite backup (Cloudflare R2)
 After=network-online.target
 Wants=network-online.target
+OnFailure=mc-alert@%n.service
 
 [Service]
 Type=oneshot
