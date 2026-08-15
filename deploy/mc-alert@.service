@@ -1,0 +1,13 @@
+[Unit]
+Description=Alert that %i failed
+# Templated failure handler. Wire it into any unit worth knowing about with:
+#   OnFailure=mc-alert@%n.service
+# systemd passes the FAILED unit's name as the instance (%i), so one template
+# covers every job.
+
+[Service]
+Type=oneshot
+User=mc
+Group=mc
+EnvironmentFile=/srv/mission-control/.env
+ExecStart=/srv/mission-control/deploy/mc-alert.sh %i
