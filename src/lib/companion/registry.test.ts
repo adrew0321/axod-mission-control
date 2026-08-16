@@ -58,6 +58,26 @@ test('disconnecting the room does not fail laptop commands', async () => {
   unregL();
 });
 
+test('a displaced stream tearing down late leaves the live connection alone', async () => {
+  // The room agent reconnects on a 3s backoff loop, so a new stream regularly
+  // displaces an old one. The old stream's cleanup then runs *after* the new
+  // one is live, and must not touch commands that belong to the new connection.
+  const displaced = registerCompanion({ send: () => {} }, 'room');
+  const seen: { id: string }[] = [];
+  const live = registerCompanion({ send: (c) => seen.push(c) }, 'room');
+
+  const cmd = sendCommand({ action: 'fs_list', path: '.' }, 1000, 'room');
+  assert.equal(seen.length, 1, 'the command must go to the live sink');
+
+  displaced(); // late teardown of the stream that was replaced
+
+  assert.equal(isOnline('room'), true, 'the live sink must stay registered');
+  resolveResult({ id: cmd.id, status: 'ok', text: 'survived' });
+  assert.equal((await cmd.result).text, 'survived');
+
+  live();
+});
+
 test('target defaults to laptop', () => {
   const seen: { id: string }[] = [];
   const unreg = registerCompanion({ send: (c) => seen.push(c) }); // no target
