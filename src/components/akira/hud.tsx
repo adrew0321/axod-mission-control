@@ -353,17 +353,28 @@ export function Hud({
     if (!gate) return;
     const g = gate;
     setGate(null);
+
+    if (g.gateId) {
+      // Room gate: the awaiting tool resumes and reports the output itself,
+      // so there is no turn to restart. Send the decision explicitly — the
+      // server denies anything that isn't exactly "approved".
+      await fetch("/api/companion/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gateId: g.gateId, decision }),
+      });
+      return;
+    }
+
+    // Laptop gate: the server's ref branch fires the click unconditionally,
+    // so a denial must NOT post at all — clearing the card is the cancel.
+    if (decision !== "approved") return;
     await fetch("/api/companion/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      // A room gate is settled by id — the command itself never leaves the server.
-      body: JSON.stringify(g.gateId ? { gateId: g.gateId, decision } : { ref: g.ref }),
+      body: JSON.stringify({ ref: g.ref }),
     });
-    // A room gate resumes the tool that is still awaiting it inside the live turn,
-    // so there is nothing to restart. A laptop click has no such awaiter.
-    if (!g.gateId && decision === "approved") {
-      runTurn("I approved the gated action — continue.");
-    }
+    runTurn("I approved the gated action — continue.");
   }
 
   const stats = [
