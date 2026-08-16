@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { sendCommand, isOnline } from '@/lib/companion/registry';
-import { decideGate } from '@/lib/companion/gates';
+import { decideGate, resolveDecision } from '@/lib/companion/gates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,8 +21,10 @@ export async function POST(req: Request) {
 
   // Room gate: the command itself lives server-side against this id — the client
   // only decides. The tool awaiting the decision resumes and reports the output.
+  // An approval must be explicit and exact; anything ambiguous denies (see
+  // resolveDecision) — a garbled deny must never silently run the command.
   if (body.gateId) {
-    const settled = decideGate(body.gateId, body.decision === 'denied' ? 'denied' : 'approved');
+    const settled = decideGate(body.gateId, resolveDecision(body.decision));
     return Response.json({ ok: settled, expired: !settled });
   }
 

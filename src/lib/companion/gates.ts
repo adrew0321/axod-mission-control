@@ -45,6 +45,21 @@ export function openGate(
   return { id, decision };
 }
 
+/**
+ * Normalizes a client-supplied decision into a GateDecision. An approval must be
+ * explicit and exact — anything else (missing, null, a typo, a future client bug,
+ * a dropped field) denies. This is deliberate, not a lazy default: `gates.ts`
+ * already auto-denies a gate that times out in silence, on the principle that
+ * silence is not consent. Defaulting ambiguous HTTP input to approved would make
+ * the timeout path and the decide path disagree about which way ambiguity falls —
+ * and for a safety valve that exists to hold back commands that would outlive the
+ * turn, ambiguity must fall the same direction everywhere: deny. Do not "simplify"
+ * this back to defaulting approved.
+ */
+export function resolveDecision(d: unknown): GateDecision {
+  return d === 'approved' ? 'approved' : 'denied';
+}
+
 /** Settle a gate. False if it is unknown or already settled. */
 export function decideGate(id: string, d: GateDecision): boolean {
   const g = gates.get(id);

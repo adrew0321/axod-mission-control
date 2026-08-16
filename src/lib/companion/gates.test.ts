@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { openGate, decideGate, getGate, pendingGateCount } from './gates';
+import { openGate, decideGate, getGate, pendingGateCount, resolveDecision } from './gates';
 
 test('an approved gate settles with approved', async () => {
   const { id, decision } = openGate({ target: 'room', reason: 'server', command: 'npm run dev' });
@@ -47,4 +47,32 @@ test('gate ids are unique', () => {
   assert.notEqual(a.id, b.id);
   a.decision.catch(() => {});
   b.decision.catch(() => {});
+});
+
+test('resolveDecision requires an explicit "approved"; ambiguous input denies', () => {
+  assert.equal(resolveDecision(undefined), 'denied', 'missing decision denies');
+  assert.equal(resolveDecision(null), 'denied', 'null decision denies');
+  assert.equal(resolveDecision('aproved'), 'denied', 'a misspelling denies');
+  assert.equal(resolveDecision('approved'), 'approved', 'an explicit approval approves');
+});
+
+test('an ambiguous decision (missing, null, misspelled) settles the gate as denied', async () => {
+  for (const bad of [undefined, null, 'aproved']) {
+    const { id, decision } = openGate({ target: 'room', reason: 'r', command: 'c' });
+    assert.equal(decideGate(id, resolveDecision(bad)), true);
+    assert.equal(await decision, 'denied', `resolveDecision(${JSON.stringify(bad)}) must deny`);
+  }
+});
+
+test('an explicit "approved" decision still approves the gate', async () => {
+  const { id, decision } = openGate({ target: 'room', reason: 'r', command: 'c' });
+  assert.equal(decideGate(id, resolveDecision('approved')), true);
+  assert.equal(await decision, 'approved');
+});
+
+test('deciding a gate after its timeout already denied it returns false and does not re-settle', async () => {
+  const { id, decision } = openGate({ target: 'room', reason: 'r', command: 'c' }, 30);
+  assert.equal(await decision, 'denied', 'the timeout settles it first');
+  assert.equal(decideGate(id, 'approved'), false, 'the timeout already settled this gate');
+  assert.equal(getGate(id), undefined);
 });
