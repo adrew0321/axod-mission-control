@@ -1,6 +1,8 @@
 // Executes fs_* commands inside the room. Every path goes through the gate first;
 // a rejected path returns status 'blocked' (the same shape guard.ts produces for
-// the browser), never an exception.
+// the browser), never an exception. The gate also resolves symlinks (paths-real.ts),
+// so the `abs` it returns is the link-resolved path, not necessarily the literal one
+// requested — every fs call below operates on that resolved path.
 import { readFile, writeFile, readdir, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { type Roots } from './paths';
