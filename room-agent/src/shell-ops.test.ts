@@ -261,3 +261,67 @@ test('the output cap bounds memory, not just the returned string', { skip }, asy
     `heap grew ${(grew / 1e6).toFixed(1)}MB for a 120MB command — the cap should have kept this flat, not tracking the output`,
   );
 });
+
+test('a simple (non-pipeline) command whose output exceeds the cap still reports ok, not an error', { skip }, async () => {
+  // Coordinator review round 3, Important — my fault, not mine to leave
+  // unfixed: destroying the read pipes to enforce the cap (see `append`) can
+  // SIGPIPE the child. On Linux, `bash -lc '<simple command>'` exec-optimises
+  // — the child process IS the command, not bash wrapping it — so that
+  // SIGPIPE kills the leader itself, and `close` reports `code: null, signal:
+  // 'SIGPIPE'`. Before this fix that was indistinguishable from an external
+  // kill and reported `status: 'error'` for a command that ran to completion
+  // and produced perfectly good (truncated) output — for ANY ungated
+  // single-process command whose output exceeds the cap: `find`, `grep -r`,
+  // `cat`, `base64`, `git log`, `journalctl`.
+  //
+  // Both OTHER truncation tests in this file use a PIPELINE (`head | tr`),
+  // which structurally cannot reach this path: bash stays the leader in a
+  // pipeline and exits with a real code (141), never `null`. This test
+  // deliberately avoids `|` — a bounded bash `for` loop where bash itself is
+  // the direct writer, so on Linux bash's own write() to the closed pipe
+  // triggers the same "leader dies from the broken pipe" shape as an
+  // exec-optimised external command would.
+  //
+  // Verified on THIS host (Windows/Git-Bash): destroying the pipes does NOT
+  // deliver a POSIX SIGPIPE to the writer here — the loop simply finishes
+  // normally, so this test passes via the ordinary (pre-existing, always-
+  // correct) close path on Windows, not via the new `pipesClosedByUs &&
+  // signal === 'SIGPIPE'` branch. That branch is Linux-only; it was verified
+  // by reading the code and reasoning through the `code`/`signal`
+  // combinations, not by executing it — this host cannot reach it. See the
+  // fix report for the full reasoning and the reviewer's own measured table.
+  const command = 'for ((i=0; i<3000; i++)); do echo "padding line $i to exceed the output cap for the test with enough characters to matter"; done';
+  const r = await execShell(await roots(), cmd({ command }), 15_000);
+  assert.equal(r.status, 'ok', `expected a truncated-but-successful run, got: ${JSON.stringify(r)}`);
+  assert.equal(typeof r.exitCode, 'number', 'a command that ran (even if cut short by the cap) must report a real exit code, not null — null specifically means "killed by our own timeout"');
+  assert.ok((r.text ?? '').length < 70_000, 'output must be capped');
+  assert.match(r.text ?? '', /truncated/i);
+});
+
+test('the output cap never splits a UTF-16 surrogate pair at the boundary', { skip }, async () => {
+  // Coordinator review round 3, Minor: the surrogate-pair guard added in
+  // round 2 (see `append` in shell-ops.ts) shipped with no regression test —
+  // every existing truncation test used ASCII only, so the guard could be
+  // deleted entirely and every test would still pass. Craft output where a
+  // 4-byte character (U+1F600 😀, a UTF-16 surrogate pair — 2 code units)
+  // straddles exactly the 59999/60000 cap boundary, and assert no lone
+  // surrogate and no U+FFFD replacement character survive into the result.
+  const command = "printf 'x%.0s' $(seq 1 59999); printf '\\xf0\\x9f\\x98\\x80'; printf 'y%.0s' $(seq 1 100)";
+  const r = await execShell(await roots(), cmd({ command }), 15_000);
+  const text = r.text ?? '';
+  assert.equal(r.status, 'ok');
+  assert.match(text, /truncated/i);
+  assert.ok(!text.includes('�'), 'no U+FFFD replacement character should appear at the truncation boundary');
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    const isHigh = code >= 0xd800 && code <= 0xdbff;
+    const isLow = code >= 0xdc00 && code <= 0xdfff;
+    if (isHigh) {
+      const next = text.charCodeAt(i + 1);
+      assert.ok(next >= 0xdc00 && next <= 0xdfff, `lone high surrogate at index ${i}`);
+    } else if (isLow) {
+      const prev = text.charCodeAt(i - 1);
+      assert.ok(prev >= 0xd800 && prev <= 0xdbff, `lone low surrogate at index ${i}`);
+    }
+  }
+});

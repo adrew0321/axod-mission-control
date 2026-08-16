@@ -15,6 +15,10 @@ import type { Command, Result } from './protocol';
 
 export const SHELL_TIMEOUT_MS = 120_000;
 export const MAX_OUTPUT_CHARS = 60_000;
+/** POSIX 128 + SIGPIPE(13) — the exit code bash itself reports for a process
+ * killed by a broken pipe. Used when WE close the output pipes to enforce
+ * MAX_OUTPUT_CHARS and that closure is what kills an exec-optimised child. */
+const SIGPIPE_EXIT_CODE = 141;
 
 export async function execShell(
   roots: Roots,
@@ -73,6 +77,17 @@ export async function execShell(
     const stderrDecoder = new StringDecoder('utf8');
     let out = '';
     let truncated = false;
+    // Set the moment WE destroy the pipes for truncation (below), never for
+    // any other reason. Fix round 3 (coordinator review, 2026-08-16): closing
+    // the read ends can SIGPIPE the child — and when `bash -lc '<simple
+    // command>'` exec-optimises (the child process IS the command, not bash
+    // wrapping it), that SIGPIPE kills the leader itself, which `close`
+    // reports as `code: null, signal: 'SIGPIPE'`. Without this flag that was
+    // indistinguishable from an external kill and got reported as an error —
+    // for a command that ran to completion and produced perfectly good
+    // (truncated) output. This flag is what lets `close` tell "we did this on
+    // purpose" apart from "something else killed it".
+    let pipesClosedByUs = false;
     const append = (s: string) => {
       if (truncated || !s) return;
       if (out.length + s.length > MAX_OUTPUT_CHARS) {
@@ -90,6 +105,7 @@ export async function execShell(
         }
         out += s.slice(0, cut);
         truncated = true;
+        pipesClosedByUs = true;
         // Stop the child from producing more output — and stop decoding what
         // it's already sent — the moment we've given up on capturing any more
         // of it. Destroying the read ends closes the pipe; most well-behaved
@@ -175,10 +191,33 @@ export async function execShell(
 
     child.on('close', (code, signal) => {
       if (code === null) {
+        if (pipesClosedByUs && signal === 'SIGPIPE') {
+          // We closed the read pipes ourselves once the output cap was hit
+          // (see `append`), and the child died from the resulting broken
+          // pipe. That is the direct, intended consequence of choosing to
+          // stop reading — not a failure. It's the exact same event a
+          // pipeline's downstream stage causes naturally when IT stops
+          // reading; bash's own convention there is to report 128+signal
+          // (141 for SIGPIPE) as the exit code, so mirror that convention
+          // here for a consistent, truthful exit code between the pipeline
+          // and non-pipeline (exec-optimised single-process) shapes of the
+          // same truncation event, instead of a `null` that would misread as
+          // "killed by our timeout" per this field's own doc comment.
+          const body = finalText().trimEnd();
+          finish({
+            id: cmd.id,
+            status: 'ok',
+            exitCode: SIGPIPE_EXIT_CODE,
+            text: `${body}${body ? '\n\n' : ''}(exit code ${SIGPIPE_EXIT_CODE})`,
+          });
+          return;
+        }
         // Our own timeout kill already settled this promise before 'close' can
         // fire (the guard above makes this a no-op in that case), so a null
         // exit code reaching here means something else terminated the process
-        // by signal — an external OOM-kill, a crash. That is not "ok".
+        // by signal — an external OOM-kill, a crash, or (if `pipesClosedByUs`
+        // is set but the signal isn't SIGPIPE) an unrelated kill racing our
+        // own pipe closure. That is not "ok".
         finish({
           id: cmd.id,
           status: 'error',
