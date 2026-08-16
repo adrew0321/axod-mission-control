@@ -325,6 +325,20 @@ patched. Ignore any older instruction here to `apt install rclone`.
    sudo systemctl daemon-reload && sudo systemctl enable --now mc-backup-offsite.timer
    ```
    It carries `OnFailure=mc-alert@%n.service`, so a failed upload alerts via Phase 4b.
+6. **Set the retention lifecycle rule** — R2 → `mc-backups` → **Settings** → **Object Lifecycle
+   Rules** → Add rule. Current setting: **delete 90 days after upload, prefix `mc-`**.
+
+   90 rather than 30 because retention must outlast your realistic *detection* lag, and the backup
+   outage above went unnoticed for **49 days** — a 30-day window would have left nothing to recover
+   from. Cost is irrelevant either way: ~1.4 MB per nightly snapshot is ~126 MB for 90 days, about
+   1.3% of the 10 GB free tier.
+
+   **This is dashboard-only.** Lifecycle is a bucket-level action needing the `Workers R2 Storage
+   Write` permission group; the Object-scoped backup token gets **403 AccessDenied** on both
+   `PUT ?lifecycle` and `GET ?lifecycle` (verified 2026-08-15). So the rule cannot be set, read back,
+   or audited with the credentials on the Mini — **if you ever rebuild the bucket, re-create this rule
+   by hand or nothing will ever prune it.** Don't widen the backup token to make this scriptable; the
+   job should not hold bucket-admin rights.
 
 ## Phase 4b — Failure alerting (deployed 2026-08-15, v1.21.3)
 Exists because `mc-backup.service` failed **49 nights running** (2026-06-26 → 08-14) and nothing said
