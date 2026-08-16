@@ -70,6 +70,28 @@ const ungated = [
   // Minor: tmux teardown/inspection is not "starting" a session.
   'tmux kill-server',
   'tmux kill-session -t work',
+
+  // Fix-round-3 addition (coordinator review, 2026-08-15): concern 2 was
+  // confirmed correct as originally implemented (see the round-2 `&>` case
+  // above) — re-verified with the `&>>` append form too.
+  './worker.sh &>> out.log',
+
+  // Fix-round-3: the "false-positive neighbor" of each new recursion case —
+  // the trigger text is present but only as an inert *argument* to `echo`,
+  // never as an actual `bash -c`/substitution invocation. These must stay
+  // ungated by the SAME quote-aware tokenizer that lets the real cases gate.
+  'echo "bash -c nohup"',
+  'echo "sh -c server"',
+  'echo "bash -c npm run dev"',
+  // A `$(...)` inside SINGLE quotes is inert (single quotes suppress shell
+  // expansion entirely) — must not be treated as a live command.
+  "echo '$(nohup ./worker.sh)'",
+  // A backtick span inside SINGLE quotes is likewise inert.
+  "echo '`nohup ./x`'",
+
+  // Fix-round-3: `-c` with no argument does nothing — there is no command
+  // string to run, so it is not treated as a nested command.
+  'bash -c',
 ];
 
 for (const cmd of ungated) {
@@ -125,6 +147,27 @@ const gated: [string, RegExp][] = [
   ['ssh -N -L 8080:localhost:80 example.com', /long-running|server/i],
   ['bun dev', /long-running|server/i],
   ['deno task dev', /long-running|server/i],
+
+  // Fix-round-3 additions (coordinator review, 2026-08-15): round 2's
+  // quote-stripping hid a gated payload wrapped in `bash -c "…"` or
+  // `$(…)`/backticks. These must be extracted and recursively classified
+  // BEFORE the outer quotes are stripped.
+  ['bash -c "nohup ./worker.sh"', /detached/i],
+  ["sh -c './server &'", /backgrounds|&/i],
+  ['bash -c "npm run dev"', /long-running|server/i],
+  ['echo $(nohup ./worker.sh)', /detached/i],
+  ['`nohup ./x`', /detached/i],
+  // Design decision: a combined short-flag cluster containing `-c` (e.g.
+  // `-lc`, login shell + command) still consumes the next argument as the
+  // command string, so it must gate the same as bare `-c`.
+  ['bash -lc "nohup ./worker.sh"', /detached/i],
+  // Depth cap: 4 levels of `$(...)` nesting exceeds MAX_RECURSION_DEPTH (3).
+  // The innermost command ("echo nohup") would actually be ungated on its
+  // own merits (nohup is an argument to echo, not the command word) — this
+  // command only gates because the recursion limit fails safe, not because
+  // any level's content was found risky. Confirms the cap is load-bearing,
+  // not just decorative.
+  ['echo $(echo $(echo $(echo $(echo nohup))))', /recursion|depth|limit/i],
 ];
 
 for (const [cmd, reasonPattern] of gated) {

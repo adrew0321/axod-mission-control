@@ -14,6 +14,15 @@
 // split into segments on control operators, and match tool patterns only
 // against a segment's *command word* — the same shape a real shell resolves
 // before it looks at anything else.
+//
+// Fix round 3 (coordinator review, 2026-08-15): stripping quoted spans (added
+// in round 2 to kill false positives like `git commit -m "…nohup…"`) hid a
+// gated command's payload whenever it arrived wrapped in `bash -c "…"` or
+// `$(…)`/backticks — a fail-open on the gate's one job. Fix: extract those
+// spans and recursively classify them BEFORE stripping quotes for the outer
+// scan, with a depth cap so nesting can't run away.
+
+type Verdict = { gated: boolean; reason?: string };
 
 /** Strips every span wrapped in one of `quoteChars`, replacing it with a single
  * space. An unclosed quote absorbs the rest of the string (fails safe: the
@@ -112,23 +121,27 @@ function isAssignment(token: string): boolean {
   return /^[A-Za-z_][A-Za-z0-9_]*=/.test(token);
 }
 
-/** Tokenizes a segment and drops any `VAR=value` assignments and known
- * wrapper prefixes (in any order/combination) so the real command word is
- * `tokens[0]`. Leading `(` / trailing `)` from subshell grouping are stripped
- * from each token so `(nohup` still resolves to `nohup`. */
-function segmentTokens(segment: string): string[] {
-  let tokens = segment
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((t) => t.replace(/^\(+/, '').replace(/\)+$/, ''))
-    .filter(Boolean);
-
+/** Drops any `VAR=value` assignments and known wrapper prefixes, in any
+ * order/combination, so `tokens[0]` is always the real command word. */
+function dropWrappersAndAssignments(tokens: string[]): string[] {
   let i = 0;
   while (i < tokens.length && (isAssignment(tokens[i]) || WRAPPER_PREFIXES.has(tokens[i]))) {
     i++;
   }
   return tokens.slice(i);
+}
+
+/** Tokenizes a segment (already quote-stripped) on whitespace, stripping a
+ * leading `(` / trailing `)` from each token (subshell grouping) so `(nohup`
+ * still resolves to `nohup`, then resolves the command word. */
+function segmentTokens(segment: string): string[] {
+  const tokens = segment
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((t) => t.replace(/^\(+/, '').replace(/\)+$/, ''))
+    .filter(Boolean);
+  return dropWrappersAndAssignments(tokens);
 }
 
 const ALWAYS_DETACHED_WORDS = new Set(['nohup', 'setsid', 'disown']);
@@ -221,7 +234,7 @@ function longestSleepSeconds(command: string): number | null {
   return longest;
 }
 
-function classifySegment(segment: string): { gated: boolean; reason?: string } | null {
+function classifySegment(segment: string): Verdict | null {
   const tokens = segmentTokens(segment);
   if (tokens.length === 0) return null;
   const [word, ...rest] = tokens;
@@ -260,13 +273,217 @@ function classifySegment(segment: string): { gated: boolean; reason?: string } |
   return null;
 }
 
-/**
- * Returns { gated: true, reason } when a command must wait for explicit operator
- * approval because it starts something that will not finish on its own.
- */
-export function classifyShell(command: string): { gated: boolean; reason?: string } {
-  const c = (command ?? '').trim();
+// --- Fix round 3: nested-command extraction --------------------------------
+//
+// `bash -c "…"` and `$(…)`/backticks hand a command string to a second,
+// hidden shell invocation. If we strip quotes before looking for these, the
+// payload disappears along with the quote marks — exactly the round-2
+// regression the coordinator caught. So this runs on the RAW (unstripped)
+// command, using a quote-aware tokenizer, before any quote-stripping happens.
+
+type RawToken = { text: string; isOperator: boolean };
+
+/** Tokenizes the raw command into words and control operators, quote-aware:
+ * a quoted span's content becomes part of the current word (quotes removed,
+ * unescaped) rather than being split on internal whitespace — the same
+ * "one word, spaces and all" rule a real shell applies. This is what lets
+ * `echo "bash -c nohup"` resolve to a single argument word instead of being
+ * mistaken for an actual `bash -c` invocation. */
+function tokenizeRaw(s: string): RawToken[] {
+  const tokens: RawToken[] = [];
+  let current = '';
+  let hasContent = false;
+  let i = 0;
+
+  const flush = () => {
+    if (hasContent) tokens.push({ text: current, isOperator: false });
+    current = '';
+    hasContent = false;
+  };
+
+  while (i < s.length) {
+    const ch = s[i];
+
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+      flush();
+      i++;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      hasContent = true;
+      const quote = ch;
+      i++;
+      while (i < s.length && s[i] !== quote) {
+        if (s[i] === '\\' && i + 1 < s.length) {
+          current += s[i + 1];
+          i += 2;
+          continue;
+        }
+        current += s[i];
+        i++;
+      }
+      i++; // consume closing quote (or fall off the end if unclosed)
+      continue;
+    }
+
+    if (ch === ';') {
+      flush();
+      tokens.push({ text: ';', isOperator: true });
+      i++;
+      continue;
+    }
+
+    if (ch === '|') {
+      flush();
+      if (s[i + 1] === '|') {
+        tokens.push({ text: '||', isOperator: true });
+        i += 2;
+      } else {
+        tokens.push({ text: '|', isOperator: true });
+        i++;
+      }
+      continue;
+    }
+
+    if (ch === '&') {
+      if (s[i + 1] === '&') {
+        flush();
+        tokens.push({ text: '&&', isOperator: true });
+        i += 2;
+        continue;
+      }
+      const prev = s[i - 1];
+      if (s[i + 1] === '>' || prev === '>') {
+        current += ch; // redirect-related `&` — part of the word, not an operator
+        hasContent = true;
+        i++;
+        continue;
+      }
+      flush();
+      tokens.push({ text: '&', isOperator: true });
+      i++;
+      continue;
+    }
+
+    current += ch;
+    hasContent = true;
+    i++;
+  }
+  flush();
+  return tokens;
+}
+
+/** Groups raw tokens into segments on operator tokens, stripping subshell
+ * parens the same way {@link segmentTokens} does. */
+function rawSegments(tokens: RawToken[]): string[][] {
+  const segments: string[][] = [];
+  let current: string[] = [];
+  for (const t of tokens) {
+    if (t.isOperator) {
+      segments.push(current);
+      current = [];
+    } else {
+      const cleaned = t.text.replace(/^\(+/, '').replace(/\)+$/, '');
+      if (cleaned) current.push(cleaned);
+    }
+  }
+  segments.push(current);
+  return segments;
+}
+
+const DASH_C_WRAPPERS = new Set(['bash', 'sh', 'zsh', 'dash']);
+/** A short-flag cluster containing `-c` (e.g. `-c`, `-lc`, `-cl`). Chosen
+ * deliberately permissive: whatever else is bundled with it, bash/sh/zsh/dash
+ * still consume the NEXT argument as the command string once `-c` is present
+ * anywhere in a single-dash cluster — under-matching here is a silent
+ * fail-open, and `bash -lc "…"` (login shell + command) is a common enough
+ * real-world spelling that it must be caught, not just bare `-c`. */
+const DASH_C_FLAG = /^-[a-z]*c[a-z]*$/;
+
+/** Finds `bash -c <arg>` (and `sh`/`zsh`/`dash`) invocations where the
+ * segment's *resolved command word* — after wrapper-prefix/assignment
+ * skipping, same as the outer pipeline — is one of the four interpreters,
+ * and returns each such `<arg>` for recursive classification. A `-c` with
+ * nothing after it (no argument) yields nothing: there is no command string
+ * to run, so it is not treated as a nested command. */
+function extractDashCCommands(rawCommand: string): string[] {
+  const segments = rawSegments(tokenizeRaw(rawCommand));
+  const found: string[] = [];
+  for (const segment of segments) {
+    const resolved = dropWrappersAndAssignments(segment);
+    if (resolved.length === 0) continue;
+    const [word, ...rest] = resolved;
+    if (!DASH_C_WRAPPERS.has(word)) continue;
+    for (let i = 0; i < rest.length; i++) {
+      if (DASH_C_FLAG.test(rest[i])) {
+        const arg = rest[i + 1];
+        if (arg !== undefined) found.push(arg);
+        break;
+      }
+    }
+  }
+  return found;
+}
+
+/** Finds `$(...)` (balanced parens) and `` `...` `` spans and returns their
+ * inner text for recursive classification. Only spans OUTSIDE single quotes
+ * count — single quotes suppress shell expansion entirely, so `'$(...)'` is
+ * inert literal text and must not be treated as a live command; a span
+ * inside double quotes (or bare) still executes, so those stay visible. */
+function extractSubstitutionCommands(rawCommand: string): string[] {
+  const scanned = stripQuoted(rawCommand, "'");
+  const found: string[] = [];
+
+  const backtickRe = /`([^`]*)`/g;
+  let m: RegExpExecArray | null;
+  while ((m = backtickRe.exec(scanned))) {
+    found.push(m[1]);
+  }
+
+  let i = 0;
+  while (i < scanned.length) {
+    if (scanned[i] === '$' && scanned[i + 1] === '(') {
+      let depth = 1;
+      let j = i + 2;
+      while (j < scanned.length && depth > 0) {
+        if (scanned[j] === '(') depth++;
+        else if (scanned[j] === ')') depth--;
+        j++;
+      }
+      // If unclosed (depth never reached 0), best-effort: treat everything
+      // swept up as the inner content and stop scanning.
+      found.push(scanned.slice(i + 2, depth === 0 ? j - 1 : j));
+      i = j;
+    } else {
+      i++;
+    }
+  }
+
+  return found;
+}
+
+/** Recursion cap for nested `bash -c`/`$(...)`/backtick commands. Depths 0-3
+ * are classified normally; anything deeper gates unconditionally — fail
+ * safe, not open, so a malformed or adversarially deep nest can't run away
+ * or slip through unexamined. */
+const MAX_RECURSION_DEPTH = 3;
+
+function classifyWithDepth(rawCommand: string, depth: number): Verdict {
+  const c = rawCommand.trim();
   if (!c) return { gated: false };
+
+  if (depth > MAX_RECURSION_DEPTH) {
+    return { gated: true, reason: 'a nested command exceeds the recursion depth limit; gating to be safe' };
+  }
+
+  const nested = [...extractDashCCommands(c), ...extractSubstitutionCommands(c)];
+  for (const inner of nested) {
+    const verdict = classifyWithDepth(inner, depth + 1);
+    if (verdict.gated) {
+      return { gated: true, reason: `runs a nested command that ${verdict.reason}` };
+    }
+  }
 
   const stripped = stripQuoted(c, `'"`);
   if (!stripped.trim()) return { gated: false };
@@ -283,4 +500,12 @@ export function classifyShell(command: string): { gated: boolean; reason?: strin
   }
 
   return { gated: false };
+}
+
+/**
+ * Returns { gated: true, reason } when a command must wait for explicit operator
+ * approval because it starts something that will not finish on its own.
+ */
+export function classifyShell(command: string): Verdict {
+  return classifyWithDepth(command ?? '', 0);
 }
