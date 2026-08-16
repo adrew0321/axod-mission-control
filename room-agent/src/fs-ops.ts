@@ -3,7 +3,8 @@
 // the browser), never an exception.
 import { readFile, writeFile, readdir, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { validatePath, type Roots } from './paths';
+import { type Roots } from './paths';
+import { validatePathReal } from './paths-real';
 import type { Command, Result } from './protocol';
 
 export const MAX_READ_BYTES = 256 * 1024;
@@ -13,7 +14,7 @@ export async function execFs(roots: Roots, cmd: Command): Promise<Result> {
     return { id: cmd.id, status: 'error', reason: `unsupported action: ${cmd.action}` };
   }
 
-  const verdict = validatePath(roots, cmd.path ?? '');
+  const verdict = await validatePathReal(roots, cmd.path ?? '');
   if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
   const abs = verdict.abs;
 
