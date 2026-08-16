@@ -11,7 +11,8 @@ export type CommandAction =
   | 'wait'
   | 'fs_list'
   | 'fs_read'
-  | 'fs_write';
+  | 'fs_write'
+  | 'shell';
 
 export interface Command {
   id: string;
@@ -23,6 +24,10 @@ export interface Command {
   path?: string;
   /** fs_write: the bytes to write, UTF-8. */
   content?: string;
+  /** shell: the command line, run through `bash -lc` inside the room. */
+  command?: string;
+  /** shell: working directory. Defaults to the room root; validated like any path. */
+  cwd?: string;
   /** Set true only after the operator explicitly approved a hard-gated action. */
   approved?: boolean;
 }
@@ -51,4 +56,6 @@ export interface Result {
   snapshot?: Snapshot;
   text?: string;
   reason?: string;
+  /** shell: the process exit code, or null when it was killed on timeout. */
+  exitCode?: number | null;
 }
