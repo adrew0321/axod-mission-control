@@ -61,7 +61,12 @@ export function Hud({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const [proposal, setProposal] = useState<RelayProposal | null>(null);
-  const [gate, setGate] = useState<{ ref: string; reason: string } | null>(null);
+  const [gate, setGate] = useState<{
+    ref: string;
+    reason: string;
+    gateId?: string;
+    command?: string;
+  } | null>(null);
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [attachments, setAttachments] = useState<
@@ -189,7 +194,7 @@ export function Hud({
       } else if (e.type === "relay_proposal") {
         setProposal({ projectId: e.projectId, sessionId: e.sessionId, instruction: e.instruction });
       } else if (e.type === "hard_gate") {
-        setGate({ ref: e.ref, reason: e.reason });
+        setGate({ ref: e.ref, reason: e.reason, gateId: e.gateId, command: e.command });
       } else if (e.type === "persisted" || e.type === "error") {
         if (e.type === "error") {
           setReply((r) => r || "I couldn't compose a brief just now — tap to retry.");
@@ -342,16 +347,23 @@ export function Hud({
     setMode("idle");
   }
 
-  async function approveGate() {
+  // Named resolveGate, not decideGate — `decideGate` is the gate broker's export
+  // in src/lib/companion/gates.ts and the two are easy to confuse in review.
+  async function resolveGate(decision: "approved" | "denied") {
     if (!gate) return;
     const g = gate;
     setGate(null);
     await fetch("/api/companion/approve", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ref: g.ref }),
+      // A room gate is settled by id — the command itself never leaves the server.
+      body: JSON.stringify(g.gateId ? { gateId: g.gateId, decision } : { ref: g.ref }),
     });
-    runTurn("I approved the gated action — continue.");
+    // A room gate resumes the tool that is still awaiting it inside the live turn,
+    // so there is nothing to restart. A laptop click has no such awaiter.
+    if (!g.gateId && decision === "approved") {
+      runTurn("I approved the gated action — continue.");
+    }
   }
 
   const stats = [
@@ -448,9 +460,20 @@ export function Hud({
 
         {gate && (
           <div style={{ ...proposalCard, transition: "opacity .3s ease, transform .3s ease" }}>
-            <div style={{ marginBottom: 10 }}>⚠ AKIRA wants to do something irreversible: {gate.reason}. Approve?</div>
-            <button onClick={approveGate} style={pillStyle}>Approve</button>
-            <button onClick={() => setGate(null)} style={{ ...pillStyle, marginLeft: 8 }}>Cancel</button>
+            <div style={{ marginBottom: 10 }}>
+              {gate.command ? (
+                <>
+                  ⚠ AKIRA wants to run <code style={{ fontFamily: "monospace" }}>{gate.command}</code> in
+                  her room — {gate.reason}. Approve?
+                </>
+              ) : (
+                <>⚠ AKIRA wants to do something irreversible: {gate.reason}. Approve?</>
+              )}
+            </div>
+            <button onClick={() => resolveGate("approved")} style={pillStyle}>Approve</button>
+            <button onClick={() => resolveGate("denied")} style={{ ...pillStyle, marginLeft: 8 }}>
+              {gate.gateId ? "Deny" : "Cancel"}
+            </button>
           </div>
         )}
 
