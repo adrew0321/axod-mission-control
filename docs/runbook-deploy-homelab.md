@@ -378,7 +378,20 @@ printf '[Unit]\nDescription=alert self-test\nOnFailure=mc-alert@%%n.service\n[Se
 sudo systemctl daemon-reload && sudo systemctl start mc-alert-selftest.service
 journalctl -u "mc-alert@mc-alert-selftest.service.service" -n 15 --no-pager
 sudo rm /etc/systemd/system/mc-alert-selftest.service && sudo systemctl daemon-reload
+sudo systemctl reset-failed mc-alert-selftest.service   # DO NOT SKIP — see below
 ```
+`systemctl start` will report the job failed; that is the point. Pass criteria in the journal output:
+the handler **ran at all** (proves systemd triggered it, not you), reported `→ failed`, and printed
+`alert posted to Discord.`
+
+**The `reset-failed` is not optional.** Deleting the unit file does not clear systemd's in-memory
+failed state — the deleted unit lingers in `systemctl --failed` forever as `not-found failed`. Leaving
+it there permanently poisons the one check that caught the 49-night backup outage: an operator who
+learns that `--failed` always shows noise is an operator who stops reading it.
+
+**Write the unit with `printf`, in a real shell.** A `\n` that gets eaten before `printf` sees it puts
+the whole file on one line and systemd rejects it with `Invalid section header '[Unit]nDescription=…'`.
+Verify with `systemd-analyze verify /etc/systemd/system/mc-alert-selftest.service` if unsure.
 
 ## Phase 5 — Verify
 From your **phone on cellular** (proves it's reachable off your home network and independent of
