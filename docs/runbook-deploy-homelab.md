@@ -27,8 +27,8 @@ boot service — see Phase 3). The full stack runs 24/7: app, Scheduler, nightly
 Dreaming, and the Discord bot (chat + notifications). Login: `adrew0321@gmail.com` (the
 throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-backup.timer`,
 03:30 UTC → `/srv/backups`) with failure alerting wired (Phase 4b, deployed v1.21.3 — journal-only
-until `DISCORD_ALERT_WEBHOOK` is set); R2 offsite backups (Phase 4) still deferred, blocked on
-Cloudflare credentials.
+until `DISCORD_ALERT_WEBHOOK` is set), and R2 offsite backups configured 2026-08-15 (Phase 4,
+verified upload to `mc-backups`).
 
 ### Updating the live box (deploy a new release)
 
@@ -280,26 +280,51 @@ All on the Mac Mini (as root unless noted).
    ```
 
 ## Phase 4 — Offsite backups → Cloudflare R2 (free 10 GB)
-Replaces the Oracle Object Storage piece; same idea (nightly push of the local snapshot).
-1. **Cloudflare dashboard → R2 → Create bucket** (e.g. `mc-backups`).
-2. **R2 → Manage API Tokens → Create API Token** (Object Read & Write, scoped to that bucket).
-   Note the **Access Key ID**, **Secret Access Key**, and your **account R2 endpoint**
-   (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`).
-3. On the Mini, install **rclone** and configure an R2 remote:
-   ```bash
-   apt -y install rclone
-   sudo -u mc rclone config create r2 s3 provider Cloudflare \
-     access_key_id <ACCESS_KEY> secret_access_key <SECRET> \
-     endpoint https://<ACCOUNT_ID>.r2.cloudflarestorage.com acl private
+*Configured 2026-08-15. Until then every snapshot lived on the same disk as the database.*
+
+**No rclone, no aws CLI.** `deploy/mc-backup-offsite.sh` signs the request with curl's built-in AWS
+SigV4 (`--aws-sigv4`, curl ≥ 7.75; the Mini has 8.5.0), so there is nothing extra to install or keep
+patched. Ignore any older instruction here to `apt install rclone`.
+
+1. **Cloudflare dashboard → R2 → Create bucket** (`mc-backups`).
+2. **R2 Overview → Account Details panel → API Tokens → Manage → Create API Token.** This is *not*
+   the general account API-tokens page — that one yields a Bearer token and cannot produce S3
+   credentials. Choose **Object Read & Write**, scoped to the bucket. Deliberately no DELETE:
+   retention is an R2 **lifecycle rule** on the bucket, because a backup job that can delete backups
+   is how you lose backups.
+3. **Record four values in `/srv/mission-control/.env`** (the script reads these names exactly):
    ```
-   (`rclone.conf` lands in the `mc` user's home, mode 600 — not committed.)
-4. Reuse the existing `deploy/mc-backup-offsite.{service,timer}` but point the upload at R2.
-   Simplest: a tiny wrapper that rclone-copies the newest snapshot:
-   ```bash
-   # on the Mini, as a quick alternative to PAR upload:
-   sudo -u mc bash -c 'rclone copy "$(ls -1t /srv/backups/mc-*.db | head -1)" r2:mc-backups'
+   R2_ACCOUNT_ID=<32-char hex account id>
+   R2_BUCKET=mc-backups
+   R2_ACCESS_KEY_ID=<32 chars>
+   R2_SECRET_ACCESS_KEY=<64 chars>
    ```
-   Wire that into a nightly timer (mirror `deploy/mc-backup.timer`, 03:45).
+   **`R2_ACCOUNT_ID` is the account id, not a token.** The token screen shows a `cfat_…` token value
+   far more prominently than the account id, and pasting that produces a 53-char value and a broken
+   endpoint. Sanity-check by length: 32 / 10 / 32 / 64. Append as `mc` (passwordless, no TTY needed):
+   ```bash
+   sudo -u mc tee -a /srv/mission-control/.env >/dev/null <<'EOF'
+   R2_ACCOUNT_ID=...
+   EOF
+   ```
+4. **Test by hand before trusting the timer:**
+   ```bash
+   sudo -u mc bash -lc 'set -a; . /srv/mission-control/.env; set +a; \
+     /srv/mission-control/deploy/mc-backup-offsite.sh'
+   ```
+   Expect `uploaded and verified mc-YYYYMMDD-HHMMSS.db (N bytes)`. The script re-reads the object's
+   `Content-Length` and fails on a mismatch rather than trusting the PUT — a backup you have not read
+   back is a rumour. Unconfigured, it exits 0 with a message, so it is safe to install early.
+5. **Install and enable the nightly timer** (03:45, after the 03:30 local snapshot). Needs real root —
+   `install` and `systemctl enable` are not on the NOPASSWD allowlist:
+   ```bash
+   sudo install -m 644 -o root -g root \
+     /srv/mission-control/deploy/mc-backup-offsite.service /etc/systemd/system/
+   sudo install -m 644 -o root -g root \
+     /srv/mission-control/deploy/mc-backup-offsite.timer /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now mc-backup-offsite.timer
+   ```
+   It carries `OnFailure=mc-alert@%n.service`, so a failed upload alerts via Phase 4b.
 
 ## Phase 4b — Failure alerting (deployed 2026-08-15, v1.21.3)
 Exists because `mc-backup.service` failed **49 nights running** (2026-06-26 → 08-14) and nothing said
