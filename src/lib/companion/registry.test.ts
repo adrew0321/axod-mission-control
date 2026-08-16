@@ -87,3 +87,28 @@ test('target defaults to laptop', () => {
   assert.equal(seen.length, 1);
   unreg();
 });
+
+test('a result may only settle a command dispatched to its own target', async () => {
+  // Defence in depth behind the token split: even if a credential leaked, a
+  // POST from the room must not settle a command that went to the laptop.
+  const unregL = registerCompanion({ send: () => {} }, 'laptop');
+  const unregR = registerCompanion({ send: () => {} }, 'room');
+
+  const laptopCmd = sendCommand({ action: 'read' }, 1000, 'laptop');
+
+  resolveResult({ id: laptopCmd.id, status: 'ok', text: 'from the room' }, 'room');
+  // Still pending — the room's post was ignored.
+  resolveResult({ id: laptopCmd.id, status: 'ok', text: 'from the laptop' }, 'laptop');
+  assert.equal((await laptopCmd.result).text, 'from the laptop');
+
+  unregL();
+  unregR();
+});
+
+test('resolveResult with no target still settles (back-compat)', async () => {
+  const unreg = registerCompanion({ send: () => {} }, 'laptop');
+  const cmd = sendCommand({ action: 'read' }, 1000);
+  resolveResult({ id: cmd.id, status: 'ok', text: 'ok' });
+  assert.equal((await cmd.result).text, 'ok');
+  unreg();
+});
