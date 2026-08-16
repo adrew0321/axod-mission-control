@@ -21,12 +21,14 @@ Cloud = source of truth; local data migrated once.
 > presence at all (e.g. when it is running on the iPhone USB tether, since its built-in WiFi is
 > dead). **Fix properly:** set a DHCP reservation on the router, or give it a static address.
 
-The Mini (`mc-bridge`, `10.0.0.218` → now `10.0.0.219`) is running **v1.8.0**, publicly reachable at
+The Mini (`mc-bridge`, `10.0.0.218` → now `10.0.0.219`) is running **v1.21.3**, publicly reachable at
 **https://bridge.axodcreative.com** via a cloudflared **named tunnel** (`mc-bridge`, systemd
 boot service — see Phase 3). The full stack runs 24/7: app, Scheduler, nightly health-check,
 Dreaming, and the Discord bot (chat + notifications). Login: `adrew0321@gmail.com` (the
 throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-backup.timer`,
-03:30 UTC → `/srv/backups`); R2 offsite backups (Phase 4) deferred.
+03:30 UTC → `/srv/backups`) with failure alerting wired (Phase 4b, deployed v1.21.3 — journal-only
+until `DISCORD_ALERT_WEBHOOK` is set), and R2 offsite backups configured 2026-08-15 (Phase 4,
+verified upload to `mc-backups`).
 
 ### Updating the live box (deploy a new release)
 
@@ -34,12 +36,26 @@ throwaway `test@` admin has been removed). Local nightly DB snapshots run (`mc-b
 # code/data update — run as the app user `mc` (owns /srv/mission-control):
 sudo -u mc bash -lc 'cd /srv/mission-control \
   && git pull --ff-only origin main \
-  && pnpm install --frozen-lockfile \
-  && pnpm build \
-  && (set -a; . ./.env; set +a; pnpm db:migrate)'
+  && pnpm build'
+# ONLY if the release changed deps (see warning below):
+#   sudo -u mc bash -lc 'cd /srv/mission-control && pnpm install --frozen-lockfile'
+# ONLY if the release added migrations (drizzle/ changed):
+#   sudo -u mc bash -lc 'cd /srv/mission-control && set -a; . ./.env; set +a; pnpm db:migrate'
 # then restart (allowlisted for akeem — see sudo note):
 sudo systemctl restart mission-control
 ```
+
+> **Do NOT run `pnpm install` on every deploy.** Since the `mc`-HOME move it aborts wanting to purge
+> `node_modules`, and letting it would wipe the hand-compiled `better-sqlite3` binding. Install only
+> when deps actually changed, deliberately, with a native rebuild afterwards. Check first:
+> `git diff <last-deployed-tag>..main -- package.json pnpm-lock.yaml`.
+
+> **Know what root you actually have.** `sudo -n -u mc` is passwordless (`(mc) NOPASSWD: ALL`), and
+> root is NOPASSWD-**allowlisted** for exactly: `systemctl restart|start|stop mission-control`,
+> `systemctl restart cloudflared`, `systemctl daemon-reload`. So a remote/non-interactive session CAN
+> pull, build, restart, and daemon-reload unattended. Anything else as root (writing to
+> `/etc/systemd/system`, starting other units) prompts for a password and needs a real TTY. Run
+> `sudo -n -l` before concluding you're blocked.
 
 `scripts/deploy.sh` automates this but assumes `mc` can sudo the restart; run the restart as
 `akeem` instead. The `ERR_PNPM_IGNORED_BUILDS` warning on install is the intentional
@@ -264,26 +280,105 @@ All on the Mac Mini (as root unless noted).
    ```
 
 ## Phase 4 — Offsite backups → Cloudflare R2 (free 10 GB)
-Replaces the Oracle Object Storage piece; same idea (nightly push of the local snapshot).
-1. **Cloudflare dashboard → R2 → Create bucket** (e.g. `mc-backups`).
-2. **R2 → Manage API Tokens → Create API Token** (Object Read & Write, scoped to that bucket).
-   Note the **Access Key ID**, **Secret Access Key**, and your **account R2 endpoint**
-   (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`).
-3. On the Mini, install **rclone** and configure an R2 remote:
-   ```bash
-   apt -y install rclone
-   sudo -u mc rclone config create r2 s3 provider Cloudflare \
-     access_key_id <ACCESS_KEY> secret_access_key <SECRET> \
-     endpoint https://<ACCOUNT_ID>.r2.cloudflarestorage.com acl private
+*Configured 2026-08-15. Until then every snapshot lived on the same disk as the database.*
+
+**No rclone, no aws CLI.** `deploy/mc-backup-offsite.sh` signs the request with curl's built-in AWS
+SigV4 (`--aws-sigv4`, curl ≥ 7.75; the Mini has 8.5.0), so there is nothing extra to install or keep
+patched. Ignore any older instruction here to `apt install rclone`.
+
+1. **Cloudflare dashboard → R2 → Create bucket** (`mc-backups`).
+2. **R2 Overview → Account Details panel → API Tokens → Manage → Create API Token.** This is *not*
+   the general account API-tokens page — that one yields a Bearer token and cannot produce S3
+   credentials. Choose **Object Read & Write**, scoped to the bucket. Deliberately no DELETE:
+   retention is an R2 **lifecycle rule** on the bucket, because a backup job that can delete backups
+   is how you lose backups.
+3. **Record four values in `/srv/mission-control/.env`** (the script reads these names exactly):
    ```
-   (`rclone.conf` lands in the `mc` user's home, mode 600 — not committed.)
-4. Reuse the existing `deploy/mc-backup-offsite.{service,timer}` but point the upload at R2.
-   Simplest: a tiny wrapper that rclone-copies the newest snapshot:
-   ```bash
-   # on the Mini, as a quick alternative to PAR upload:
-   sudo -u mc bash -c 'rclone copy "$(ls -1t /srv/backups/mc-*.db | head -1)" r2:mc-backups'
+   R2_ACCOUNT_ID=<32-char hex account id>
+   R2_BUCKET=mc-backups
+   R2_ACCESS_KEY_ID=<32 chars>
+   R2_SECRET_ACCESS_KEY=<64 chars>
    ```
-   Wire that into a nightly timer (mirror `deploy/mc-backup.timer`, 03:45).
+   **`R2_ACCOUNT_ID` is the account id, not a token.** The token screen shows a `cfat_…` token value
+   far more prominently than the account id, and pasting that produces a 53-char value and a broken
+   endpoint. Sanity-check by length: 32 / 10 / 32 / 64. Append as `mc` (passwordless, no TTY needed):
+   ```bash
+   sudo -u mc tee -a /srv/mission-control/.env >/dev/null <<'EOF'
+   R2_ACCOUNT_ID=...
+   EOF
+   ```
+4. **Test by hand before trusting the timer:**
+   ```bash
+   sudo -u mc bash -lc 'set -a; . /srv/mission-control/.env; set +a; \
+     /srv/mission-control/deploy/mc-backup-offsite.sh'
+   ```
+   Expect `uploaded and verified mc-YYYYMMDD-HHMMSS.db (N bytes)`. The script re-reads the object's
+   `Content-Length` and fails on a mismatch rather than trusting the PUT — a backup you have not read
+   back is a rumour. Unconfigured, it exits 0 with a message, so it is safe to install early.
+5. **Install and enable the nightly timer** (03:45, after the 03:30 local snapshot). Needs real root —
+   `install` and `systemctl enable` are not on the NOPASSWD allowlist:
+   ```bash
+   sudo install -m 644 -o root -g root \
+     /srv/mission-control/deploy/mc-backup-offsite.service /etc/systemd/system/
+   sudo install -m 644 -o root -g root \
+     /srv/mission-control/deploy/mc-backup-offsite.timer /etc/systemd/system/
+   sudo systemctl daemon-reload && sudo systemctl enable --now mc-backup-offsite.timer
+   ```
+   It carries `OnFailure=mc-alert@%n.service`, so a failed upload alerts via Phase 4b.
+6. **Set the retention lifecycle rule** — R2 → `mc-backups` → **Settings** → **Object Lifecycle
+   Rules** → Add rule. Current setting: **delete 90 days after upload, prefix `mc-`**.
+
+   90 rather than 30 because retention must outlast your realistic *detection* lag, and the backup
+   outage above went unnoticed for **49 days** — a 30-day window would have left nothing to recover
+   from. Cost is irrelevant either way: ~1.4 MB per nightly snapshot is ~126 MB for 90 days, about
+   1.3% of the 10 GB free tier.
+
+   **This is dashboard-only.** Lifecycle is a bucket-level action needing the `Workers R2 Storage
+   Write` permission group; the Object-scoped backup token gets **403 AccessDenied** on both
+   `PUT ?lifecycle` and `GET ?lifecycle` (verified 2026-08-15). So the rule cannot be set, read back,
+   or audited with the credentials on the Mini — **if you ever rebuild the bucket, re-create this rule
+   by hand or nothing will ever prune it.** Don't widen the backup token to make this scriptable; the
+   job should not hold bucket-admin rights.
+
+## Phase 4b — Failure alerting (deployed 2026-08-15, v1.21.3)
+Exists because `mc-backup.service` failed **49 nights running** (2026-06-26 → 08-14) and nothing said
+a word. Any unit worth having is worth knowing about when it breaks.
+
+`deploy/mc-alert@.service` is a **templated** handler: wire it into any unit with
+`OnFailure=mc-alert@%n.service` and systemd passes the failed unit's name as the instance. It posts to
+Discord if `DISCORD_ALERT_WEBHOOK` is set in `/srv/mission-control/.env`, and always writes to the
+journal either way.
+
+**Installing (or re-installing after a pull).** `/etc/systemd/system/*.service` are **copies**, not
+symlinks into `/srv/mission-control/deploy/` — a `git pull` changes nothing on its own. The two
+`install` commands are **not** on the NOPASSWD allowlist, so they need a real TTY to type a password
+into; `daemon-reload` is allowlisted and runs unattended.
+```bash
+sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-alert@.service /etc/systemd/system/
+sudo install -m 644 -o root -g root /srv/mission-control/deploy/mc-backup.service /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+**Verify:**
+```bash
+systemctl show mc-backup.service -p OnFailure                    # mc-alert@mc-backup.service.service
+systemctl show mc-alert@mc-backup.service -p SupplementaryGroups # systemd-journal
+sudo systemctl start mc-alert@mc-backup.service                  # fire it by hand
+journalctl -u "mc-alert@mc-backup.service" -n 20 --no-pager      # must show mc-backup's OWN log lines
+```
+That last check is the whole point. **`SupplementaryGroups=systemd-journal` is load-bearing:** the
+handler runs as `mc`, which is in neither `adm` nor `systemd-journal`, so without that line
+`journalctl -u <failed-unit>` returns *nothing* and the alert fires with a unit name and the word
+"failed" but no reason. Any future unit reading the journal as `mc` needs the same line.
+
+**End-to-end test of the trigger itself** (the manual start above only tests the handler):
+```bash
+printf '[Unit]\nDescription=alert self-test\nOnFailure=mc-alert@%%n.service\n[Service]\nType=oneshot\nExecStart=/bin/false\n' \
+  | sudo tee /etc/systemd/system/mc-alert-selftest.service >/dev/null
+sudo systemctl daemon-reload && sudo systemctl start mc-alert-selftest.service
+journalctl -u "mc-alert@mc-alert-selftest.service.service" -n 15 --no-pager
+sudo rm /etc/systemd/system/mc-alert-selftest.service && sudo systemctl daemon-reload
+```
 
 ## Phase 5 — Verify
 From your **phone on cellular** (proves it's reachable off your home network and independent of

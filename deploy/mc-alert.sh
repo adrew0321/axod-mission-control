@@ -30,12 +30,17 @@ fi
 
 # Discord hard-caps messages at 2000 chars; keep well clear.
 SNIPPET="$(printf '%s' "$DETAIL" | tail -c 1200)"
-PAYLOAD="$(UNIT="$UNIT" HOST="$HOST" STATUS="$STATUS" SNIPPET="$SNIPPET" python3 -c '
-import json, os
+# Values come in as argv, not os.environ, so the Python source needs no quoted
+# dict keys. The shell does NOT expand backslashes inside a single-quoted -c
+# block, so an escaped \" here reaches Python literally and is a SyntaxError
+# inside an f-string expression — which is exactly how every Discord post
+# failed with a 400 until 2026-08-15.
+PAYLOAD="$(python3 -c '
+import json, sys
+unit, host, status, snippet = sys.argv[1:5]
 print(json.dumps({
-    "content": f":rotating_light: **{os.environ[\"UNIT\"]}** failed on `{os.environ[\"HOST\"]}` "
-               f"(state: {os.environ[\"STATUS\"]})\n```\n{os.environ[\"SNIPPET\"]}\n```"
-}))')"
+    "content": f":rotating_light: **{unit}** failed on `{host}` (state: {status})\n```\n{snippet}\n```"
+}))' "$UNIT" "$HOST" "$STATUS" "$SNIPPET")"
 
 curl -fsS --max-time 20 -H "Content-Type: application/json" \
   -d "$PAYLOAD" "$WEBHOOK" >/dev/null \

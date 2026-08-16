@@ -4,6 +4,7 @@
 import { createWriteStream } from 'node:fs';
 import { rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { once } from 'node:events';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -55,7 +56,14 @@ export async function streamToFileWithCap(
     // Signal the source to stop (an oversized/failed upload shouldn't keep
     // streaming into the void), then clean up the partial destination file.
     await reader.cancel(e).catch(() => {});
+    // destroy() closes the fd asynchronously, so the unlink below can race it.
+    // POSIX unlinks an open file happily, but Windows refuses (EPERM/EBUSY) and
+    // rm's `force` swallows that — leaving the partial file we meant to delete.
+    // Wait for the handle to actually close before removing.
     out.destroy();
+    if (!out.closed) {
+      await once(out, 'close').catch(() => {});
+    }
     await rm(destPath, { force: true });
     throw e ?? streamErr;
   }
