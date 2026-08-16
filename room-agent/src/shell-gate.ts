@@ -10,11 +10,36 @@
 /** Backgrounded with a trailing `&` (but not `&&`). */
 const BACKGROUNDED = /(^|[^&])&\s*$/;
 
-/** Detachers: the process is explicitly meant to survive this command. */
-const DETACHED = /(^|[;&|]\s*)(nohup|setsid|screen|tmux|disown|systemctl|service)\b/i;
+/**
+ * Always-detaching primitives: whatever wraps them (sudo, env, time, nice, ...),
+ * the command explicitly asks the process to survive this shell. Deliberately
+ * NOT anchored to the start of the command — a prefix chain must not defeat
+ * the gate (fix-round: `sudo nohup …` was slipping through ungated).
+ */
+const ALWAYS_DETACHED = /\b(?:nohup|setsid|disown)\b/i;
 
-/** Dev servers and watchers — they never return on their own. */
-const SERVER = /\b(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:dev|start|serve|watch)\b|\b(?:next|vite|nodemon|webpack-dev-server)\s+(?:dev|start|serve)?\b|\bhttp\.server\b|\bnpx\s+serve\b|\bflask\s+run\b|\buvicorn\b|\bgunicorn\b/i;
+/**
+ * screen/tmux: session managers. Listing or querying existing sessions is a
+ * one-shot read; anything else starts a new session that outlives this command.
+ */
+const SESSION_TOOL = /\b(?:screen|tmux)\b/i;
+const SESSION_QUERY = /\bscreen\s+(?:-ls|-list)\b|\btmux\s+(?:ls|list-sessions)\b/i;
+
+/**
+ * systemctl/service: only the mutating verbs park a long-running unit.
+ * Read-only inspection (status, --failed, --status-all, list-units) must run
+ * free — the operator inspects prod state from the room routinely.
+ */
+const SERVICE_MUTATE = /\b(?:systemctl|service)\b[^|;&]*\b(?:start|restart|reload|enable|daemon-reload)\b/i;
+
+/**
+ * Dev servers and watchers — they never return on their own. `next`/`vite`
+ * only count when the subcommand itself is long-running (a `build` is a
+ * one-shot compile); `nodemon`/`webpack-dev-server` are long-running no
+ * matter what arguments follow.
+ */
+const SERVER =
+  /\b(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:dev|start|serve|watch)\b|\b(?:next|vite)\s+(?:dev|start|serve|preview)\b|\b(?:nodemon|webpack-dev-server)\b|\bhttp\.server\b|\bnpx\s+serve\b|\bflask\s+run\b|\buvicorn\b|\bgunicorn\b/i;
 
 /** Follow-mode readers. */
 const FOLLOW = /\btail\s+-\w*f\b|\btail\s+--follow\b|\bjournalctl\s+[^|;]*-f\b|\bwatch\s+-n\b/i;
@@ -42,7 +67,13 @@ export function classifyShell(command: string): { gated: boolean; reason?: strin
   const c = (command ?? '').trim();
   if (!c) return { gated: false };
 
-  if (DETACHED.test(c)) return { gated: true, reason: 'starts a detached process that outlives this command' };
+  if (ALWAYS_DETACHED.test(c)) return { gated: true, reason: 'starts a detached process that outlives this command' };
+  if (SESSION_TOOL.test(c) && !SESSION_QUERY.test(c)) {
+    return { gated: true, reason: 'starts a screen/tmux session that outlives this command' };
+  }
+  if (SERVICE_MUTATE.test(c)) {
+    return { gated: true, reason: 'starts, restarts, or enables a system service that outlives this command' };
+  }
   if (BACKGROUNDED.test(c)) return { gated: true, reason: 'backgrounds the process with `&`' };
   if (SERVER.test(c)) return { gated: true, reason: 'starts a long-running server or watcher' };
   if (FOLLOW.test(c)) return { gated: true, reason: 'follows a stream and never returns' };

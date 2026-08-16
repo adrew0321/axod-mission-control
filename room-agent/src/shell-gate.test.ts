@@ -13,6 +13,20 @@ const ungated = [
   'grep -r TODO .',
   'sleep 5',
   'cat /mnt/doorway/inbox/resume.docx | head -c 200',
+  // Fix-round additions (coordinator review, 2026-08-15):
+  // `next`/`vite` only count as servers when the subcommand itself is
+  // long-running; a build is a one-shot compile.
+  'next build',
+  'vite build',
+  'npm run build',
+  // systemctl/service: read-only inspection must run free — the operator
+  // routinely inspects prod state from the room.
+  'systemctl status mission-control',
+  'systemctl --failed',
+  // screen/tmux: querying existing sessions is a one-shot read, not a start.
+  'screen -ls',
+  'tmux ls',
+  'service --status-all',
 ];
 
 for (const cmd of ungated) {
@@ -32,6 +46,19 @@ const gated = [
   'while true; do echo hi; done',
   'sleep 3600',
   'nodemon index.js',
+  // Fix-round additions (coordinator review, 2026-08-15):
+  // A wrapper prefix (sudo, env, time, nice, ...) must not defeat the gate on
+  // an always-detaching primitive.
+  'sudo nohup ./worker.sh',
+  'env nohup ./worker.sh',
+  'time nohup ./worker.sh',
+  'nice nohup ./worker.sh',
+  // systemctl/service: mutating verbs park a long-running unit.
+  'sudo systemctl start mission-control',
+  'systemctl restart akira-room',
+  // screen/tmux: starting a new session is exactly the outlives-the-command case.
+  'screen -dmS work ./run.sh',
+  'tmux new-session -d ./run.sh',
 ];
 
 for (const cmd of gated) {
