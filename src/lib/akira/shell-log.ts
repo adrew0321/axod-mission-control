@@ -14,7 +14,14 @@ export interface ShellLogEvent {
   command: string;
   cwd?: string;
   exitCode?: number | null;
+  /** The process outcome ('ok' / 'error') on a 'result' event. Never repurposed
+   *  to carry the gate's reason text — see `reason` for that. */
   status?: string;
+  /** Human-readable "why": the gate's reason on a 'gated' event, or the failure
+   *  detail on an error 'result' (including a transport rejection). Kept separate
+   *  from `status` so a field means the same thing on every line, not just within
+   *  one event type. */
+  reason?: string;
 }
 
 export function shellLogPath(): string {
@@ -28,6 +35,7 @@ export function formatShellLogLine(e: ShellLogEvent): string {
   if (e.cwd !== undefined) row.cwd = e.cwd;
   if (e.exitCode !== undefined) row.exitCode = e.exitCode;
   if (e.status !== undefined) row.status = e.status;
+  if (e.reason !== undefined) row.reason = e.reason;
   return JSON.stringify(row) + '\n';
 }
 

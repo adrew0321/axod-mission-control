@@ -38,3 +38,30 @@ test('a null exit code (killed) survives the round trip', () => {
   assert.equal(parsed.exitCode, null);
   assert.ok('exitCode' in parsed, 'a kill must be distinguishable from "not recorded"');
 });
+
+test('a gate reason has its own field, separate from status', () => {
+  const parsed = JSON.parse(
+    formatShellLogLine({
+      at,
+      event: 'gated',
+      command: 'npm run dev',
+      reason: 'this would start something long-running',
+    }),
+  );
+  assert.equal(parsed.reason, 'this would start something long-running');
+  assert.equal(parsed.status, undefined, 'status is reserved for outcomes, not the gate reason text');
+});
+
+test('status and reason can both be present at once and stay distinct', () => {
+  const parsed = JSON.parse(
+    formatShellLogLine({
+      at,
+      event: 'result',
+      command: 'ls',
+      status: 'error',
+      reason: 'companion command timeout',
+    }),
+  );
+  assert.equal(parsed.status, 'error');
+  assert.equal(parsed.reason, 'companion command timeout');
+});
