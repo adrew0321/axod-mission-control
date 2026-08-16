@@ -22,19 +22,37 @@ const cmd = (over: Partial<Command>): Command => ({ id: 'cmd_1', action: 'shell'
 // assume from process.platform (which would blanket-skip everything here, even
 // though `bash -lc` genuinely works on this host via Git Bash), probe the real
 // capability: can we spawn bash and get an exit code back at all?
+//
+// A static capability question ("can this host run bash at all?") must not be
+// answered with a deadline — any fixed timeout races unbounded machine load.
+// A first version of this probe used a 5s timeout that was fine in isolation
+// but produced a false skip (11 tests silently reporting "unavailable") once
+// ~40s of heavy worktree tests ahead of this file in the full `pnpm test` run
+// had loaded the host. Widening the number just moves the same race further
+// out — a busier CI runner exceeds it exactly as this one exceeded 5s. So: a
+// timeout here is INCONCLUSIVE, not a skip (retried once, since one transient
+// stall is far likelier than two), and on any host where bash is *expected*
+// — everything except this Windows dev laptop — any other failure is loud
+// (throws) rather than silently skipping the whole file while the suite
+// reports green.
+function probeBashOnce(): { ok: boolean; code?: string } {
+  const probe = spawnSync('bash', ['-lc', 'exit 0'], { timeout: 15_000 });
+  const code = (probe.error as NodeJS.ErrnoException | undefined)?.code;
+  return { ok: probe.error === undefined && probe.status === 0, code };
+}
+
 function canSpawnBash(): boolean {
-  try {
-    // Generous timeout: `bash -lc` (a login shell) reads profile/rc files, and
-    // under load from the rest of the suite (the worktree tests just ahead of
-    // this file spawn plenty of their own git/node processes) that startup has
-    // been observed to take several seconds. A probe that times out too eagerly
-    // would report "unavailable" for a shell that actually works, just slowly —
-    // exactly the false-skip this capability probe exists to avoid.
-    const r = spawnSync('bash', ['-lc', 'exit 0'], { timeout: 15_000 });
-    return r.error === undefined && r.status === 0;
-  } catch {
-    return false;
+  let result = probeBashOnce();
+  if (!result.ok && result.code === 'ETIMEDOUT') {
+    result = probeBashOnce(); // one retry: a transient stall is far likelier than two
   }
+  if (!result.ok && result.code === 'ETIMEDOUT') {
+    throw new Error('bash capability probe timed out twice in a row — inconclusive, not a skip (host may be overloaded)');
+  }
+  if (!result.ok && process.platform !== 'win32') {
+    throw new Error(`bash unexpectedly unavailable on a non-Windows host (${result.code ?? 'unknown error'}) — this must not be a silent skip`);
+  }
+  return result.ok;
 }
 
 const skip = canSpawnBash() ? false : 'bash -lc is not available on this host';
@@ -43,9 +61,16 @@ const skip = canSpawnBash() ? false : 'bash -lc is not available on this host';
 // ...)`? On Linux (the room) it can. On this Windows dev laptop it cannot — Node's
 // negative-pid kill throws ESRCH unconditionally, confirmed by direct probe (a
 // live, freshly spawned process still reports ESRCH). Gate the "did the OS-level
-// process actually die" test on this specific capability, separately from plain
+// process actually die" tests on this specific capability, separately from plain
 // bash spawning, so a false-green never hides a broken kill.
-function canKillProcessGroup(): boolean {
+//
+// Note on what this actually proves: `process.kill(-pid, 0)` is an existence
+// probe — it shows the group is *addressable*, not that a SIGKILL sent to it
+// would actually *reap* every process in it. It's the best cheap proxy available
+// (a host that can't even address the group certainly can't kill it), and the
+// tests gated on it independently verify the real outcome (the target process is
+// actually gone) rather than trusting the probe's signal-0 result directly.
+function canAddressProcessGroup(): boolean {
   let child;
   try {
     child = spawn('bash', ['-lc', 'sleep 2'], { detached: true, stdio: 'ignore' });
@@ -54,24 +79,24 @@ function canKillProcessGroup(): boolean {
   }
   const pid = child.pid;
   if (!pid) return false;
-  let supported: boolean;
+  let addressable: boolean;
   try {
     process.kill(-pid, 0); // signal 0: existence probe only, does not actually kill
-    supported = true;
+    addressable = true;
   } catch {
-    supported = false;
+    addressable = false;
   }
   // Clean up the probe child either way so it doesn't outlive this module load.
   try { process.kill(-pid, 'SIGKILL'); } catch { /* group kill unsupported or already gone */ }
   try { child.kill('SIGKILL'); } catch { /* already gone */ }
   child.unref();
-  return supported;
+  return addressable;
 }
 
 const groupKillSkip = skip
-  || (canKillProcessGroup()
+  || (canAddressProcessGroup()
     ? false
-    : 'process.kill(-pid) does not actually terminate a process group on this host — cannot verify the child was really killed, only that execShell reports a timeout');
+    : 'process.kill(-pid) cannot even address a process group on this host — cannot verify the child was really killed, only that execShell reports a timeout');
 
 test('runs a command and returns its output', { skip }, async () => {
   const r = await execShell(await roots(), cmd({ command: 'echo hello' }));
@@ -120,20 +145,29 @@ test('a gated command is blocked with the classifier reason', async () => {
 });
 
 test('an approved gated command runs', { skip }, async () => {
-  // The gate is the operator's, not a permanent ban. Deliberately a SHORT sleep
-  // (not the brief's `sleep 120`): on this host the timeout fallback can only
-  // kill the immediate bash leader (see the kill-fallback note in shell-ops.ts),
-  // not a forked grandchild, so a long sleep here would leak a real OS process
-  // for the rest of its duration after the test file exits. A short one self-
-  // reaps within seconds even in the worst case, while still proving the point:
-  // approval lets a gated command reach the spawn at all.
-  const r = await execShell(await roots(), cmd({ command: 'sleep 2 && echo never', approved: true }), 300);
-  assert.notEqual(r.status, 'blocked');
+  // Fix round 1 (coordinator review): the brief's `sleep 120` was shortened to
+  // `sleep 2` in the first pass to bound an orphan-leak risk on this host (see
+  // the grandchild-kill test below), but that crossed classifyShell's
+  // MAX_SLEEP_SEC=60 threshold — `sleep 2 && echo never` isn't gated at all, so
+  // `approved: true` was a no-op and this test proved nothing about approval
+  // bypassing the gate. `npm run dev` IS gated (by command word, unconditionally,
+  // not by duration), and run from a fresh temp room root with no package.json
+  // it fails fast (`npm error enoent … Could not read package.json`) instead of
+  // actually starting a dev server — no sleep, no orphan risk, and the
+  // security-relevant path (approval reaching the spawn) gets real coverage.
+  const r = await execShell(await roots(), cmd({ command: 'npm run dev', approved: true }));
+  assert.equal(r.status, 'ok', 'approval let the gated command reach the spawn and run to completion');
 });
 
 test('an empty command is an error, not a block', async () => {
   const r = await execShell(await roots(), cmd({ command: '   ' }));
   assert.equal(r.status, 'error');
+});
+
+test('a null byte in the command is an error, not an uncaught exception', async () => {
+  const r = await execShell(await roots(), cmd({ command: 'echo a\0b' }));
+  assert.equal(r.status, 'error');
+  assert.match(r.reason ?? '', /null byte/i);
 });
 
 test('a non-shell action is rejected before anything else', async () => {
@@ -147,18 +181,18 @@ test('a non-shell action is rejected before anything else', async () => {
 // group kill in try/catch and returns the timeout result regardless of whether
 // the kill itself worked, so that single test would go green here even though
 // the kill throws ESRCH on this host — a passing test that verifies nothing about
-// the safety property it's named for. Two tests instead: the result shape (real,
-// runs everywhere bash does), and the actual-death check (gated on whether this
-// host can genuinely kill a process group).
+// the safety property it's named for. Split into: the result shape (real, runs
+// everywhere bash does), and two actual-death checks below (gated on whether
+// this host can genuinely address a process group).
 
 test('a command that overruns the timeout is reported as a killed error, not a transport failure', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'sleep 5', approved: true }), 200);
+  const r = await execShell(await roots(), cmd({ command: 'sleep 5' }), 200);
   assert.equal(r.status, 'error');
   assert.equal(r.exitCode, null);
   assert.match(r.reason ?? '', /timeout|killed/i);
 });
 
-test('a timed-out command is genuinely dead at the OS level, not merely reported dead', { skip: groupKillSkip }, async () => {
+test('a timed-out leader is genuinely dead at the OS level, not merely reported dead', { skip: groupKillSkip }, async () => {
   const rts = await roots();
   // `echo $$` reports the spawned leader's own pid; it's captured in `out` well
   // before the 250ms timeout fires, so it survives into the killed result's text.
@@ -171,7 +205,32 @@ test('a timed-out command is genuinely dead at the OS level, not merely reported
   assert.throws(
     () => process.kill(pid, 0),
     /ESRCH/,
-    'the process must actually be gone after a timeout kill, not just reported as gone',
+    'the leader must actually be gone after a timeout kill, not just reported as gone',
+  );
+});
+
+test('a timeout kills a grandchild too, not just the leader', { skip: groupKillSkip }, async () => {
+  // Coordinator review, Important 2: the previous version of this test proved
+  // only that the LEADER died — exactly what the `child.kill('SIGKILL')`
+  // fallback already guarantees on its own, so it would go green whether the
+  // group kill worked or silently failed and the fallback quietly covered for
+  // it. Orphaned grandchildren are the entire reason the process group exists
+  // (a compound command forks; the leader alone doesn't reach its children).
+  // `sleep 300 &` backgrounds a real grandchild, `$!` captures its pid, `wait`
+  // blocks the leader so the timeout — not a natural exit — is what ends this.
+  const rts = await roots();
+  // 500ms rather than the leader test's 250ms: this command does more before
+  // the timeout fires (fork the background job, print its pid, enter `wait`),
+  // and needs a touch more headroom for the shell to actually get there.
+  const r = await execShell(rts, cmd({ command: 'sleep 300 & echo $!; wait', approved: true }), 500);
+  assert.equal(r.status, 'error');
+  const grandchildPid = Number((r.text ?? '').trim().split(/\s+/)[0]);
+  assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0, `expected the backgrounded pid in captured output, got: ${r.text}`);
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.throws(
+    () => process.kill(grandchildPid, 0),
+    /ESRCH/,
+    'the grandchild must actually be gone after a timeout kill — this is exactly what the process group exists to prevent it surviving',
   );
 });
 
@@ -179,4 +238,26 @@ test('output is truncated rather than returned unbounded', { skip }, async () =>
   const r = await execShell(await roots(), cmd({ command: 'head -c 200000 /dev/zero | tr "\\0" "x"' }));
   assert.ok((r.text ?? '').length < 70_000, 'output must be capped');
   assert.match(r.text ?? '', /truncated/i);
+});
+
+test('the output cap bounds memory, not just the returned string', { skip }, async () => {
+  // Coordinator review, Critical: MAX_OUTPUT_CHARS used to bound only the final
+  // string (`cap()` ran once at the end) while the accumulator grew without
+  // limit as data arrived — a 120MB command's output tracked 120MB in the
+  // agent's heap for the whole run, on the box that also hosts prod. Prove the
+  // fix holds by pushing well past the 60,000-char cap and checking the process
+  // heap does not track the command's real output size.
+  if (global.gc) global.gc();
+  const before = process.memoryUsage().heapUsed;
+  const r = await execShell(await roots(), cmd({ command: 'head -c 120000000 /dev/zero | tr "\\0" "x"' }), 30_000);
+  if (global.gc) global.gc();
+  const after = process.memoryUsage().heapUsed;
+  assert.equal(r.status, 'ok');
+  assert.ok((r.text ?? '').length < 70_000, 'output must be capped');
+  assert.match(r.text ?? '', /truncated/i);
+  const grew = after - before;
+  assert.ok(
+    grew < 20_000_000,
+    `heap grew ${(grew / 1e6).toFixed(1)}MB for a 120MB command — the cap should have kept this flat, not tracking the output`,
+  );
 });

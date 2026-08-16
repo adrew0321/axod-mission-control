@@ -25,8 +25,14 @@
 type Verdict = { gated: boolean; reason?: string };
 
 /** Strips every span wrapped in one of `quoteChars`, replacing it with a single
- * space. An unclosed quote absorbs the rest of the string (fails safe: the
- * remainder just disappears from matching, it never throws). */
+ * space. An unclosed quote absorbs the rest of the string — that is NOT safe on
+ * its own: silently discarding the untouched remainder is failing OPEN, since a
+ * gate-worthy command word riding along in that remainder would never get
+ * matched (a real shell instead refuses an unterminated quote outright, a
+ * syntax error). It is safe to call this here only because `classifyWithDepth`
+ * checks `hasUnterminatedQuote` and gates unconditionally BEFORE ever reaching
+ * this function — do not call `stripQuoted` on unvalidated input without that
+ * guard in front of it. */
 function stripQuoted(s: string, quoteChars: string): string {
   let out = '';
   let i = 0;
@@ -463,6 +469,31 @@ function extractSubstitutionCommands(rawCommand: string): string[] {
   return found;
 }
 
+/** True when `s` contains a `'` or `"` that never closes. Mirrors stripQuoted's
+ * own quote-walking rules (same backslash-skip) so the two agree on what
+ * counts as "unterminated". A real shell refuses to run a command with an
+ * unclosed quote (syntax error) — this classifier must refuse to reason about
+ * one too, rather than let stripQuoted silently drop everything after it. */
+function hasUnterminatedQuote(s: string): boolean {
+  let i = 0;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === "'" || ch === '"') {
+      const quote = ch;
+      i++;
+      while (i < s.length && s[i] !== quote) {
+        if (s[i] === '\\' && i + 1 < s.length) i++;
+        i++;
+      }
+      if (i >= s.length) return true; // ran off the end without a closing quote
+      i++; // consume the closing quote
+    } else {
+      i++;
+    }
+  }
+  return false;
+}
+
 /** Recursion cap for nested `bash -c`/`$(...)`/backtick commands. Depths 0-3
  * are classified normally; anything deeper gates unconditionally — fail
  * safe, not open, so a malformed or adversarially deep nest can't run away
@@ -475,6 +506,15 @@ function classifyWithDepth(rawCommand: string, depth: number): Verdict {
 
   if (depth > MAX_RECURSION_DEPTH) {
     return { gated: true, reason: 'a nested command exceeds the recursion depth limit; gating to be safe' };
+  }
+
+  // Must run before any stripQuoted-based extraction or scanning below: an
+  // unterminated quote makes stripQuoted silently discard the remainder of
+  // the string, which used to let a gate-worthy payload after the broken
+  // quote go completely unseen (e.g. `echo 'unclosed && npm run dev` was
+  // misclassified as ungated). Fail safe: inconclusive means gated.
+  if (hasUnterminatedQuote(c)) {
+    return { gated: true, reason: 'an unterminated quote makes the command ambiguous to classify; gating to be safe' };
   }
 
   const nested = [...extractDashCCommands(c), ...extractSubstitutionCommands(c)];
