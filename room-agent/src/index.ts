@@ -1,6 +1,7 @@
 import { loadConfig } from './config';
 import { connect } from './connection';
 import { execFs } from './fs-ops';
+import { execShell } from './shell-ops';
 import type { Command } from './protocol';
 
 const cfg = loadConfig();
@@ -12,8 +13,10 @@ let chain: Promise<void> = Promise.resolve();
 const conn = connect(cfg, (cmd: Command) => {
   chain = chain
     .then(async () => {
-      console.log('[room] exec', cmd.action, cmd.path ?? '');
-      const result = await execFs(cfg.roots, cmd);
+      console.log('[room] exec', cmd.action, cmd.command ?? cmd.path ?? '');
+      const result = cmd.action === 'shell'
+        ? await execShell(cfg.roots, cmd)
+        : await execFs(cfg.roots, cmd);
       if (result.status !== 'ok') console.warn('[room]', result.status, result.reason);
       await conn.postResult(result);
     })
