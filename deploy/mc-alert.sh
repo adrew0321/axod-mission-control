@@ -12,12 +12,28 @@
 # Usage: mc-alert.sh <failed-unit-name>
 set -uo pipefail   # NOT -e: an alert script must never fail silently itself
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 UNIT="${1:-unknown.service}"
 HOST="$(hostname)"
 WEBHOOK="${DISCORD_ALERT_WEBHOOK:-}"
 
 STATUS="$(systemctl is-failed "$UNIT" 2>/dev/null || true)"
 DETAIL="$(journalctl -u "$UNIT" -n 12 --no-pager 2>/dev/null | tail -12)"
+
+# systemd's machine-readable verdict, used to summarise failures that produced
+# no output of their own (203/EXEC, timeouts, OOM kills).
+RESULT="$(systemctl show "$UNIT" -p Result --value 2>/dev/null || true)"
+EXIT_STATUS="$(systemctl show "$UNIT" -p ExecMainStatus --value 2>/dev/null || true)"
+
+# The unit's own last words. Drop systemd's bookkeeping lines and journalctl's
+# '--' markers, then strip the syslog prefix, leaving just what the script said.
+# When a script printed a real error, that line beats any classification.
+APP_LINE="$(printf '%s\n' "$DETAIL" \
+  | grep -vE ' systemd\[[0-9]+\]: ' \
+  | grep -vE '^-- ' \
+  | sed -E 's/^[A-Za-z]{3} +[0-9]+ [0-9]{2}:[0-9]{2}:[0-9]{2} [^ ]+ [^ ]+: //' \
+  | tail -1)"
 
 # Always leave a trace locally, webhook or not.
 echo "ALERT: ${UNIT} on ${HOST} → ${STATUS}"
@@ -28,19 +44,19 @@ if [ -z "$WEBHOOK" ]; then
   exit 0
 fi
 
-# Discord hard-caps messages at 2000 chars; keep well clear.
-SNIPPET="$(printf '%s' "$DETAIL" | tail -c 1200)"
-# Values come in as argv, not os.environ, so the Python source needs no quoted
-# dict keys. The shell does NOT expand backslashes inside a single-quoted -c
-# block, so an escaped \" here reaches Python literally and is a SyntaxError
-# inside an f-string expression — which is exactly how every Discord post
-# failed with a 400 until 2026-08-15.
-PAYLOAD="$(python3 -c '
-import json, sys
-unit, host, status, snippet = sys.argv[1:5]
-print(json.dumps({
-    "content": f":rotating_light: **{unit}** failed on `{host}` (state: {status})\n```\n{snippet}\n```"
-}))' "$UNIT" "$HOST" "$STATUS" "$SNIPPET")"
+# Embed descriptions allow 4096 chars; the builder trims to fit.
+SNIPPET="$(printf '%s' "$DETAIL" | tail -c 2000)"
+
+PAYLOAD="$(python3 "$SCRIPT_DIR/mc-alert-payload.py" \
+  "$UNIT" "$HOST" "$RESULT" "$EXIT_STATUS" "$APP_LINE" "$SNIPPET" 2>/dev/null)"
+
+# If the builder died, still say something rather than POSTing an empty body and
+# collecting a 400. A degraded alert beats a silent one.
+if [ -z "$PAYLOAD" ]; then
+  echo "payload builder failed — falling back to plain text."
+  PAYLOAD="$(printf '{"content":"ALERT: %s failed on %s (alert payload builder error)"}' \
+    "$UNIT" "$HOST")"
+fi
 
 curl -fsS --max-time 20 -H "Content-Type: application/json" \
   -d "$PAYLOAD" "$WEBHOOK" >/dev/null \
