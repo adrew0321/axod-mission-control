@@ -9,10 +9,12 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   const params = new URL(req.url).searchParams;
   const token = params.get('token');
-  if (!verifyCompanionToken(token)) {
+  const target = targetFromParam(params.get('target'));
+  // Verify against THIS target's secret — a room credential cannot claim
+  // ?target=laptop and displace the operator's real companion.
+  if (!verifyCompanionToken(token, target)) {
     return new Response('Unauthorized', { status: 401 });
   }
-  const target = targetFromParam(params.get('target'));
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

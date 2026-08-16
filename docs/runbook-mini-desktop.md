@@ -271,3 +271,23 @@ unmasked `suspend.target` on a production host was always a latent bug.
 - [ ] the temporary `/etc/sudoers.d/` drop-in is removed, if you used one
 - [ ] `~/code/axod-mission-control` exists on branch `dev`
 - [ ] `~/AKIRA/inbox` and `~/AKIRA/playground` exist
+
+## Slice 2 — the room's own credential
+
+The room no longer shares the laptop's secret. On the Mini:
+
+    # generate a fresh secret, distinct from COMPANION_TOKEN
+    openssl rand -hex 32
+
+Set it as `ROOM_COMPANION_TOKEN` in `/srv/mission-control/.env`, restart Mission
+Control, then set the SAME value as `ROOM_TOKEN` in the container's
+`/home/akira/room-agent/.env` and restart `akira-room`.
+
+**Order matters, and the failure is safe.** Between the two restarts the room's
+connect attempts return 401 and it retries on its 3s backoff; nothing is lost.
+Verify with `lxc exec akira-room -- journalctl -u akira-room -n 20` — expect
+`[room] connected to …`, not a repeating `stream 401`.
+
+If `ROOM_COMPANION_TOKEN` is unset, or equal to `COMPANION_TOKEN`, the room
+cannot connect. That is deliberate: falling back to the shared secret would
+silently restore the hole this closes.

@@ -11,7 +11,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const token = req.headers.get('x-companion-token');
-  if (!verifyCompanionToken(token)) {
+  // Laptop-only: these move repositories between the operator's machine and the
+  // Mini. A room credential has no business here.
+  if (!verifyCompanionToken(token, 'laptop')) {
     return new Response('Unauthorized', { status: 401 });
   }
 
