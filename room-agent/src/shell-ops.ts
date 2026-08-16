@@ -41,15 +41,34 @@ export async function execShell(
   }
 
   return new Promise<Result>((resolve) => {
+    let settled = false;
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = spawn('bash', ['-lc', command], { cwd, detached: true });
+    } catch (e) {
+      // A malformed input (this is defence in depth — 'command' is already
+      // checked for null bytes above) or an environment failure must still
+      // come back as a Result, never an exception: an uncaught throw here
+      // would skip postResult entirely and leave the caller waiting forever.
+      resolve({ id: cmd.id, status: 'error', exitCode: null, reason: e instanceof Error ? e.message : String(e) });
+      return;
+    }
+
     // Bounded collector: MAX_OUTPUT_CHARS is a memory bound, not just a display
     // bound. A naive "accumulate everything, cap it once at the end" tracks the
     // command's actual output in the agent's heap for the whole run — on a box
     // that also hosts prod, a `find /`, a runaway log dump, or `yes` grows that
     // heap for up to a full timeout window. Stop appending once the cap is hit.
-    // A StringDecoder per stream (stdout and stderr are independent byte
-    // streams and must not share decode state) avoids splitting a multi-byte
-    // UTF-8 sequence right at the cap boundary, which slicing raw chunks would
-    // risk.
+    //
+    // Two separate boundary risks live here, at two different layers, and each
+    // needs its own guard: a StringDecoder per stream (stdout and stderr are
+    // independent byte streams and must not share decode state) avoids
+    // splitting a multi-byte UTF-8 sequence across chunk boundaries as bytes
+    // arrive from the pipe — but it hands back a complete, valid JS string per
+    // chunk, and slicing THAT string at an arbitrary code-unit offset (the cap
+    // itself) can still cut a UTF-16 surrogate pair in half, leaving a lone
+    // surrogate that re-encodes as U+FFFD. The decoder and the cap-slice guard
+    // below cover different boundaries; neither substitutes for the other.
     const stdoutDecoder = new StringDecoder('utf8');
     const stderrDecoder = new StringDecoder('utf8');
     let out = '';
@@ -57,8 +76,27 @@ export async function execShell(
     const append = (s: string) => {
       if (truncated || !s) return;
       if (out.length + s.length > MAX_OUTPUT_CHARS) {
-        out += s.slice(0, MAX_OUTPUT_CHARS - out.length);
+        let cut = MAX_OUTPUT_CHARS - out.length;
+        // Don't split a surrogate pair at the cut point: if the code unit just
+        // before the cut is a high surrogate and the one at the cut is its low
+        // surrogate, back off by one so the pair stays together on the same
+        // side of the cut rather than leaving a lone, invalid surrogate.
+        if (cut > 0 && cut < s.length) {
+          const before = s.charCodeAt(cut - 1);
+          const at = s.charCodeAt(cut);
+          if (before >= 0xd800 && before <= 0xdbff && at >= 0xdc00 && at <= 0xdfff) {
+            cut -= 1;
+          }
+        }
+        out += s.slice(0, cut);
         truncated = true;
+        // Stop the child from producing more output — and stop decoding what
+        // it's already sent — the moment we've given up on capturing any more
+        // of it. Destroying the read ends closes the pipe; most well-behaved
+        // commands (head/tr/cat/etc.) die on the resulting broken pipe instead
+        // of continuing to churn on data nobody's collecting.
+        try { child.stdout.destroy(); } catch { /* already gone */ }
+        try { child.stderr.destroy(); } catch { /* already gone */ }
       } else {
         out += s;
       }
@@ -74,19 +112,6 @@ export async function execShell(
       }
       return truncated ? `${out}\n\n… output truncated at ${MAX_OUTPUT_CHARS} characters.` : out;
     };
-
-    let settled = false;
-    let child: ChildProcessWithoutNullStreams;
-    try {
-      child = spawn('bash', ['-lc', command], { cwd, detached: true });
-    } catch (e) {
-      // A malformed input (this is defence in depth — 'command' is already
-      // checked for null bytes above) or an environment failure must still
-      // come back as a Result, never an exception: an uncaught throw here
-      // would skip postResult entirely and leave the caller waiting forever.
-      resolve({ id: cmd.id, status: 'error', exitCode: null, reason: e instanceof Error ? e.message : String(e) });
-      return;
-    }
 
     const finish = (r: Result) => {
       if (settled) return;

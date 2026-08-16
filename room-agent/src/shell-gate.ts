@@ -24,29 +24,53 @@
 
 type Verdict = { gated: boolean; reason?: string };
 
-/** Strips every span wrapped in one of `quoteChars`, replacing it with a single
- * space. An unclosed quote absorbs the rest of the string — that is NOT safe on
- * its own: silently discarding the untouched remainder is failing OPEN, since a
- * gate-worthy command word riding along in that remainder would never get
- * matched (a real shell instead refuses an unterminated quote outright, a
- * syntax error). It is safe to call this here only because `classifyWithDepth`
- * checks `hasUnterminatedQuote` and gates unconditionally BEFORE ever reaching
- * this function — do not call `stripQuoted` on unvalidated input without that
- * guard in front of it. */
-function stripQuoted(s: string, quoteChars: string): string {
+/** Blanks every span wrapped in one of `quoteCharsToStrip`, replacing it with a
+ * single space. Recognises BOTH quote characters (`'` and `"`) as span
+ * delimiters regardless of which one(s) `quoteCharsToStrip` names — a quote
+ * type that isn't being stripped is still walked as its own opaque span and
+ * copied through VERBATIM, rather than treated as ordinary text. That
+ * distinction is the fix for a fail-open the coordinator caught (fix round 2,
+ * 2026-08-16): the previous version only recognised the characters literally
+ * listed in `quoteChars`, so a single-quote-only scan (used by
+ * `extractSubstitutionCommands` to find `$(...)`/backticks outside single
+ * quotes) treated a `'` sitting inside a perfectly balanced `"..."` span —
+ * ordinary English, `echo "don't $(nohup ./worker.sh)"` — as if it were
+ * opening a real single-quoted span. It then consumed everything up to the
+ * next `'` (or fell off the end) looking for a close that was never coming,
+ * silently deleting the `$(...)` payload along with it before extraction ever
+ * ran. Now: a `"..."` span is recognised and its boundary respected even when
+ * `"` isn't in `quoteCharsToStrip`, so an apostrophe inside it can never be
+ * misread as a stray quote-open (and symmetrically for `'...'` when scanning
+ * for `"`).
+ *
+ * An unclosed quote (of either type) still absorbs the rest of the string on
+ * its own — that remains NOT safe in isolation, since a gate-worthy word
+ * riding along in the untouched remainder would still go unseen. What makes
+ * every current call site safe is `classifyWithDepth` calling
+ * `hasUnterminatedQuote` on the whole raw command FIRST and gating
+ * unconditionally if any quote (of either type, checked jointly) fails to
+ * close — by the time `stripQuoted` ever runs, every quote character in the
+ * string is already known to close somewhere. Do not call `stripQuoted` on
+ * unvalidated input without that guard in front of it. */
+function stripQuoted(s: string, quoteCharsToStrip: string): string {
   let out = '';
   let i = 0;
   while (i < s.length) {
     const ch = s[i];
-    if (quoteChars.includes(ch)) {
+    if (ch === "'" || ch === '"') {
       const quote = ch;
+      const start = i;
       i++;
       while (i < s.length && s[i] !== quote) {
         if (s[i] === '\\' && i + 1 < s.length) i++;
         i++;
       }
       i++; // consume the closing quote (or, if unclosed, just falls off the end)
-      out += ' ';
+      if (quoteCharsToStrip.includes(quote)) {
+        out += ' '; // blank this span
+      } else {
+        out += s.slice(start, Math.min(i, s.length)); // preserve the other quote type verbatim
+      }
     } else {
       out += ch;
       i++;

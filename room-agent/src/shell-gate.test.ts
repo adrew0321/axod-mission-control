@@ -92,6 +92,20 @@ const ungated = [
   // Fix-round-3: `-c` with no argument does nothing — there is no command
   // string to run, so it is not treated as a nested command.
   'bash -c',
+
+  // Fix-round-2 (coordinator review, 2026-08-16): the doorway-invariant /
+  // "ordinary English" control set for the apostrophe-in-double-quotes fix
+  // below. `hasUnterminatedQuote` deliberately fails SAFE (gates) on
+  // backslash-escaped quotes and apostrophes inside `#` comments — a known,
+  // parked over-gating edge the coordinator verified is spec-safe (an
+  // approval prompt, not an escape) and explicitly said not to chase. These
+  // four are the spec-level doorway invariant that must NOT regress while
+  // fixing the fail-open: an apostrophe in an otherwise-ordinary command must
+  // still run free.
+  'echo "it\'s done" > /mnt/doorway/inbox/note.txt',
+  'git commit -m "fix: don\'t start the server"',
+  "awk '{print $1}' file.txt",
+  'find . -name "*.ts" -exec grep -l \'foo\' {} \\;',
 ];
 
 for (const cmd of ungated) {
@@ -168,6 +182,29 @@ const gated: [string, RegExp][] = [
   // any level's content was found risky. Confirms the cap is load-bearing,
   // not just decorative.
   ['echo $(echo $(echo $(echo $(echo nohup))))', /recursion|depth|limit/i],
+
+  // Fix-round-1 addition (coordinator review, 2026-08-15) — never had a
+  // committed regression test: an unterminated quote used to let stripQuoted
+  // silently discard the remainder of the command, hiding a gate-worthy
+  // payload after it.
+  ["echo 'unclosed && npm run dev", /unterminated|ambiguous/i],
+
+  // Fix-round-2 additions (coordinator review, 2026-08-16): the cross-file fix
+  // above introduced its own fail-open, one layer over. `extractSubstitutionCommands`
+  // scans for single quotes ONLY (to find `$(...)`/backticks living outside
+  // single-quoted, inert spans) — but its naive scan didn't know a `'` can
+  // legitimately sit inside a *double*-quoted span as ordinary literal text.
+  // It misread that apostrophe as opening a real single-quoted span, consumed
+  // everything looking for a closing `'` that was never coming, and quietly
+  // deleted the `$(...)` payload along with it — before extraction ever ran.
+  // The reviewer confirmed bash actually executes these; no adversary
+  // required, `echo "don't $(...)"` is ordinary English. The balanced control
+  // (no apostrophe) already gated before this fix; these must gate too, for
+  // the SAME reason, once the apostrophe no longer breaks extraction.
+  ['echo "$(nohup ./worker.sh)"', /detached/i],
+  ["echo \"it's $(nohup ./worker.sh)\"", /detached/i],
+  ["echo \"don't $(npm run dev)\"", /long-running|server/i],
+  ['echo "it\'s ok" && echo "$(nohup ./x)"', /detached/i],
 ];
 
 for (const [cmd, reasonPattern] of gated) {
