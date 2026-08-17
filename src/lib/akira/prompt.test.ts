@@ -52,3 +52,18 @@ test('buildAkiraPrompt includes snapshot, roster, and transcript', () => {
   assert.match(prompt, /Operator: hi/);
   assert.match(prompt, /FLEET/);
 });
+
+test('the prompt explains the two doorway folders and which one asks first', () => {
+  assert.match(AKIRA_SYSTEM_PROMPT, /inbox/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /playground/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /~\/AKIRA/);
+});
+
+test('the prompt tells her to stop and wait on a gated command, not retry', () => {
+  assert.match(AKIRA_SYSTEM_PROMPT, /do not retry|don't retry/i);
+});
+
+test('the prompt says her room work is hers and prod is off limits', () => {
+  assert.match(AKIRA_SYSTEM_PROMPT, /room/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /prod|Mission Control/i);
+});
