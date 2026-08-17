@@ -26,6 +26,10 @@ let scheduleCursor = new Map<string, number>();
 let dreamCursor: number | null = null;
 let proposalCursor = new Set<string>();
 let roomProposalCursor = new Set<string>();
+// The room gather can fail independently of the other three (see tick()), so it needs
+// its own "have I been primed" bit — priming for it may complete on a later tick than
+// the shared `primed` flag below.
+let roomProposalPrimed = false;
 let primed = false;
 
 /** Send an embed to every channel bound to a project. Returns false on send failure
@@ -87,23 +91,37 @@ async function tick(): Promise<void> {
 
   // Newest, least-exercised gather of the four: isolate it so a persistent bug here
   // degrades to "no room embeds" instead of blocking schedules/dreams/proposals below.
-  const roomProps = await getOpenRoomProposals().catch((err) => {
-    console.error('[discord-notify] room-proposal gather failed:', err instanceof Error ? err.message : err);
-    return [];
-  });
-  const currRoomIds = new Set(roomProps.map((p) => p.id));
+  // null (not []) on failure: [] is a factual claim ("nothing is open") that the diff/
+  // prune below would believe and act on, wiping the cursor and causing duplicate posts
+  // on the next successful tick. null means "unknown" — the right response is to touch
+  // nothing, so the diff, posting loop, and prune are all skipped this tick when it's null.
+  const roomGather = await getOpenRoomProposals()
+    .then((props) => {
+      const ids = new Set(props.map((p) => p.id));
+      return { props, ids, diff: diffProposals(roomProposalCursor, ids) };
+    })
+    .catch((err) => {
+      console.error('[discord-notify] room-proposal gather failed:', err instanceof Error ? err.message : err);
+      return null;
+    });
 
   const sched = diffScheduleRuns(scheduleCursor, schedRows);
   const dreamD = pickNewDreams(dreamCursor, dreamRows);
   const prop = diffProposals(proposalCursor, currIds);
-  const roomProp = diffProposals(roomProposalCursor, currRoomIds);
 
   // --- first tick: prime cursors, post nothing ---
   if (!primed) {
     scheduleCursor = sched.next;
     dreamCursor = dreamD.next;
     proposalCursor = prop.next;
-    roomProposalCursor = roomProp.next;
+    // Only mark the room source primed if this tick's gather actually succeeded.
+    // If it failed, roomProposalCursor stays empty and unprimed so a later successful
+    // gather is treated as a (delayed) priming tick, not a diff against an empty cursor
+    // — which would otherwise announce every pre-existing proposal as "new".
+    if (roomGather) {
+      roomProposalCursor = roomGather.diff.next;
+      roomProposalPrimed = true;
+    }
     primed = true;
     return;
   }
@@ -132,13 +150,25 @@ async function tick(): Promise<void> {
   proposalCursor = new Set([...proposalCursor].filter((id) => currIds.has(id)));
 
   // --- AKIRA's inbox: route to the home project channel (drops are not project-scoped) ---
-  for (const id of roomProp.newIds) {
-    const p = roomProps.find((x) => x.id === id);
-    if (p && (await postToProject(client, DREAM_PROJECT_ID, roomProposalEmbed(p)))) {
-      roomProposalCursor.add(id);
+  if (roomGather) {
+    if (!roomProposalPrimed) {
+      // Priming failed on the original tick 1; this is the first successful gather since
+      // then. Seed the cursor and post nothing, same as ordinary priming — do not diff
+      // against the still-empty cursor, which would read every open proposal as new.
+      roomProposalCursor = roomGather.diff.next;
+      roomProposalPrimed = true;
+    } else {
+      for (const id of roomGather.diff.newIds) {
+        const p = roomGather.props.find((x) => x.id === id);
+        if (p && (await postToProject(client, DREAM_PROJECT_ID, roomProposalEmbed(p)))) {
+          roomProposalCursor.add(id);
+        }
+      }
+      roomProposalCursor = new Set([...roomProposalCursor].filter((id) => roomGather.ids.has(id)));
     }
   }
-  roomProposalCursor = new Set([...roomProposalCursor].filter((id) => currRoomIds.has(id)));
+  // else: this tick's gather failed — cursor and roomProposalPrimed are left untouched,
+  // so the next successful gather resumes exactly where this one would have.
 }
 
 /** Start the notification poller. Idempotent; only when the bot token is set. */
