@@ -291,3 +291,16 @@ Verify with `lxc exec akira-room -- journalctl -u akira-room -n 20` — expect
 If `ROOM_COMPANION_TOKEN` is unset, or equal to `COMPANION_TOKEN`, the room
 cannot connect. That is deliberate: falling back to the shared secret would
 silently restore the hole this closes.
+
+### Migration 0014 was hand-written — no snapshot file
+
+`drizzle/0014_room_proposals.sql` was written by hand, not generated, because
+this repo's `pnpm db:generate` is broken by pre-existing snapshot-lineage
+corruption (see the drizzle table-rebuild gotcha elsewhere in this repo's
+memory). It deliberately ships with **no** `drizzle/meta/0014_snapshot.json`.
+
+Whoever eventually repairs the snapshot lineage: `room_proposals` will be
+invisible to the generator at that point, since it never had a snapshot to
+diff from. Regenerating blind is likely to emit a duplicate
+`CREATE TABLE room_proposals`. Check the live schema (or this migration's
+SQL) before trusting a freshly generated migration in that range.
