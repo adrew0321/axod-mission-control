@@ -116,3 +116,29 @@ test('proposalResultEmbed: color + text per kind', () => {
   assert.equal(proposalResultEmbed('conflict').color, 0xf59e0b);
   assert.match(String(proposalResultEmbed('stale').title), /already resolved/i);
 });
+
+import { roomProposalEmbed } from './discord-format';
+
+const drop = {
+  id: 'rprop_abc',
+  zone: 'inbox' as const,
+  name: 'resume.docx',
+  path: '/mnt/doorway/inbox/resume.docx',
+  sizeBytes: 42_000,
+  ext: 'docx',
+  head: '(binary docx file)',
+  summary: 'resume.docx · docx · 41.0 KB',
+  status: 'open' as const,
+  createdAt: '2026-08-15T09:30:00.000Z',
+};
+
+test('a room proposal embed names the file and where it landed', () => {
+  const e = roomProposalEmbed(drop);
+  assert.match(e.title ?? '', /resume\.docx/);
+  assert.match(JSON.stringify(e), /inbox/i);
+  assert.match(e.description ?? '', /41\.0 KB/);
+});
+
+test('the embed carries the path so it can be opened without the UI', () => {
+  assert.match(JSON.stringify(roomProposalEmbed(drop)), /\/mnt\/doorway\/inbox\/resume\.docx/);
+});

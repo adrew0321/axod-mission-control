@@ -6,6 +6,7 @@ import { getReadyClient } from './discord-bot';
 import { getChannelsForProject } from './discord-bindings';
 import { getProposals } from './proposals-data';
 import { getDreams } from './dreams-data';
+import { getOpenRoomProposals } from './room-proposals-data';
 import {
   diffScheduleRuns,
   pickNewDreams,
@@ -13,7 +14,7 @@ import {
   type ScheduleRunRow,
   type DreamRowLite,
 } from './discord-notify-diff';
-import { scheduleEmbed, dreamEmbed, proposalEmbed, proposalActionRow } from './discord-format';
+import { scheduleEmbed, dreamEmbed, proposalEmbed, proposalActionRow, roomProposalEmbed } from './discord-format';
 import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js';
 import { onShutdown } from './shutdown';
 
@@ -24,6 +25,7 @@ const DREAM_PROJECT_ID = 'mission-control';
 let scheduleCursor = new Map<string, number>();
 let dreamCursor: number | null = null;
 let proposalCursor = new Set<string>();
+let roomProposalCursor = new Set<string>();
 let primed = false;
 
 /** Send an embed to every channel bound to a project. Returns false on send failure
@@ -83,15 +85,20 @@ async function tick(): Promise<void> {
   const proposals = await getProposals();
   const currIds = new Set(proposals.map((p) => p.sessionId));
 
+  const roomProps = await getOpenRoomProposals();
+  const currRoomIds = new Set(roomProps.map((p) => p.id));
+
   const sched = diffScheduleRuns(scheduleCursor, schedRows);
   const dreamD = pickNewDreams(dreamCursor, dreamRows);
   const prop = diffProposals(proposalCursor, currIds);
+  const roomProp = diffProposals(roomProposalCursor, currRoomIds);
 
   // --- first tick: prime cursors, post nothing ---
   if (!primed) {
     scheduleCursor = sched.next;
     dreamCursor = dreamD.next;
     proposalCursor = prop.next;
+    roomProposalCursor = roomProp.next;
     primed = true;
     return;
   }
@@ -118,6 +125,15 @@ async function tick(): Promise<void> {
     }
   }
   proposalCursor = new Set([...proposalCursor].filter((id) => currIds.has(id)));
+
+  // --- AKIRA's inbox: route to the home project channel (drops are not project-scoped) ---
+  for (const id of roomProp.newIds) {
+    const p = roomProps.find((x) => x.id === id);
+    if (p && (await postToProject(client, DREAM_PROJECT_ID, roomProposalEmbed(p)))) {
+      roomProposalCursor.add(id);
+    }
+  }
+  roomProposalCursor = new Set([...roomProposalCursor].filter((id) => currRoomIds.has(id)));
 }
 
 /** Start the notification poller. Idempotent; only when the bot token is set. */
