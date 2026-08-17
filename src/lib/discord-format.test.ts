@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chunkReply } from './discord-format';
+import { chunkReply, roomProposalEmbed } from './discord-format';
 
 test('short text → single chunk', () => {
   assert.deepEqual(chunkReply('hello'), ['hello']);
@@ -116,8 +116,6 @@ test('proposalResultEmbed: color + text per kind', () => {
   assert.equal(proposalResultEmbed('conflict').color, 0xf59e0b);
   assert.match(String(proposalResultEmbed('stale').title), /already resolved/i);
 });
-
-import { roomProposalEmbed } from './discord-format';
 
 const drop = {
   id: 'rprop_abc',

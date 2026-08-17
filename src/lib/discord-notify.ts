@@ -85,7 +85,12 @@ async function tick(): Promise<void> {
   const proposals = await getProposals();
   const currIds = new Set(proposals.map((p) => p.sessionId));
 
-  const roomProps = await getOpenRoomProposals();
+  // Newest, least-exercised gather of the four: isolate it so a persistent bug here
+  // degrades to "no room embeds" instead of blocking schedules/dreams/proposals below.
+  const roomProps = await getOpenRoomProposals().catch((err) => {
+    console.error('[discord-notify] room-proposal gather failed:', err instanceof Error ? err.message : err);
+    return [];
+  });
   const currRoomIds = new Set(roomProps.map((p) => p.id));
 
   const sched = diffScheduleRuns(scheduleCursor, schedRows);

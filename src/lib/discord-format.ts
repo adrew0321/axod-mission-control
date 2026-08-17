@@ -107,10 +107,13 @@ export function proposalResultEmbed(
  *  No action row: approving starts a full agent turn, which belongs on the
  *  dashboard rather than behind a Discord button. */
 export function roomProposalEmbed(p: RoomProposal): APIEmbed {
+  // A dropped file's path isn't fully operator-authored; a backtick in it would
+  // close the code span early, so strip backticks before interpolating.
+  const safePath = p.path.replace(/`/g, '');
   return {
     title: `📥 ${p.name} is in AKIRA's inbox`,
     description: p.summary,
-    fields: [{ name: 'path', value: `\`${p.path}\``, inline: false }],
+    fields: [{ name: 'path', value: `\`${safePath}\``, inline: false }],
     footer: { text: 'Approve it in Proposals to have her work on it' },
     timestamp: p.createdAt,
   };
