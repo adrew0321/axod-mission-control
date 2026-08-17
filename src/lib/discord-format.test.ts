@@ -140,3 +140,10 @@ test('a room proposal embed names the file and where it landed', () => {
 test('the embed carries the path so it can be opened without the UI', () => {
   assert.match(JSON.stringify(roomProposalEmbed(drop)), /\/mnt\/doorway\/inbox\/resume\.docx/);
 });
+
+test('a room proposal embed sets a color, like every sibling embed', () => {
+  // roomProposalEmbed was the one embed builder that left color unset,
+  // leaving it Discord's default grey instead of matching the rest of the
+  // bot's visual language.
+  assert.equal(roomProposalEmbed(drop).color, 0x3b82f6);
+});

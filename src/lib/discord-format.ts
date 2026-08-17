@@ -113,6 +113,7 @@ export function roomProposalEmbed(p: RoomProposal): APIEmbed {
   return {
     title: `📥 ${p.name} is in AKIRA's inbox`,
     description: p.summary,
+    color: BLUE, // matches proposalEmbed/dreamEmbed — an item awaiting the operator's decision
     fields: [{ name: 'path', value: `\`${safePath}\``, inline: false }],
     footer: { text: 'Approve it in Proposals to have her work on it' },
     timestamp: p.createdAt,
