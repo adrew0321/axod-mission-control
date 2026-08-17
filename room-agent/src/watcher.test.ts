@@ -109,7 +109,10 @@ test('a zone missing at startup is retried on a backoff and starts working once 
   // inbox deliberately does NOT exist yet — construction must fail and retry.
   const roots = { room, doorway };
   const c = collector();
-  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 100 });
+  // retryMs is well below the wait windows (7-10x, matching this file's settleMs
+  // convention below) so a delayed timer under full-suite load still lands with
+  // room to spare — a tighter ratio here flaked once in CI.
+  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 20 });
   await settle(150); // let the first construction attempt fail
   await mkdir(join(doorway, 'inbox'), { recursive: true });
   await settle(200); // let a retry land and start watching the now-real directory
@@ -130,7 +133,7 @@ test('stop() cancels a pending retry so a zone created after stop() is never pic
   // inbox still missing — this forces a pending retry timer to exist when stop() runs.
   const roots = { room, doorway };
   const c = collector();
-  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 100 });
+  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 20 });
   await settle(50); // construction has failed and a retry is now pending
   w.stop();
   await mkdir(join(doorway, 'inbox'), { recursive: true });
