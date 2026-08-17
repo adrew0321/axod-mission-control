@@ -14,9 +14,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const { id } = await params;
-  await db
-    .update(room_proposals)
-    .set({ status: 'dismissed', decided_at: new Date() })
-    .where(and(eq(room_proposals.id, id), eq(room_proposals.status, 'open')));
-  return Response.json({ ok: true });
+  try {
+    await db
+      .update(room_proposals)
+      .set({ status: 'dismissed', decided_at: new Date() })
+      .where(and(eq(room_proposals.id, id), eq(room_proposals.status, 'open')));
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json(
+      { error: `Dismiss failed: ${e instanceof Error ? e.message : String(e)}` },
+      { status: 500 },
+    );
+  }
 }

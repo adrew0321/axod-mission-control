@@ -17,20 +17,27 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
   const { id } = await params;
 
-  const row = await db
-    .select()
-    .from(room_proposals)
-    .where(and(eq(room_proposals.id, id), eq(room_proposals.status, 'open')))
-    .limit(1)
-    .then((r) => r[0]);
-  if (!row) return Response.json({ error: 'no open proposal' }, { status: 404 });
+  try {
+    const row = await db
+      .select()
+      .from(room_proposals)
+      .where(and(eq(room_proposals.id, id), eq(room_proposals.status, 'open')))
+      .limit(1)
+      .then((r) => r[0]);
+    if (!row) return Response.json({ error: 'no open proposal' }, { status: 404 });
 
-  await db
-    .update(room_proposals)
-    .set({ status: 'approved', decided_at: new Date() })
-    .where(eq(room_proposals.id, id));
+    await db
+      .update(room_proposals)
+      .set({ status: 'approved', decided_at: new Date() })
+      .where(eq(room_proposals.id, id));
 
-  // The full-cost turn runs only now, after approval.
-  runRoomTurn(inboxTurnInstruction({ name: row.name, path: row.path, summary: row.summary }));
-  return Response.json({ ok: true });
+    // The full-cost turn runs only now, after approval.
+    runRoomTurn(inboxTurnInstruction({ name: row.name, path: row.path, summary: row.summary }));
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json(
+      { error: `Approve failed: ${e instanceof Error ? e.message : String(e)}` },
+      { status: 500 },
+    );
+  }
 }

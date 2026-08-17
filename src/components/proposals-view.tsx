@@ -27,9 +27,18 @@ export default function ProposalsView({
 
   async function decideRoom(id: string, decision: "approve" | "dismiss") {
     setRoomBusyId(id);
+    setErrorById((e) => ({ ...e, [id]: "" }));
     try {
-      await fetch(`/api/room-proposals/${id}/${decision}`, { method: "POST" });
-      await onRefreshRoom();
+      const res = await fetch(`/api/room-proposals/${id}/${decision}`, { method: "POST" });
+      if (res.ok) {
+        await onRefreshRoom();
+      } else {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setErrorById((e) => ({
+          ...e,
+          [id]: data.error ?? (decision === "approve" ? "Failed to start — try again" : "Dismiss failed"),
+        }));
+      }
     } finally {
       setRoomBusyId(null);
     }
@@ -89,29 +98,33 @@ export default function ProposalsView({
                 AKIRA&apos;s inbox — dropped in ~/AKIRA/inbox
               </span>
             </div>
-            {roomProposals.map((p) => (
-              <div key={p.id} className="px-4 py-3 border-t border-[#1e2632]">
-                <div className="text-xs text-[#e6edf3] font-medium">{p.name}</div>
-                <div className="text-[10px] font-mono text-[#5c6470] mt-0.5 break-all">{p.path}</div>
-                <div className="text-[11px] text-[#8b949e] mt-1.5 whitespace-pre-wrap">{p.summary}</div>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    disabled={roomBusyId === p.id}
-                    onClick={() => decideRoom(p.id, "approve")}
-                    className="text-[10px] font-mono px-2 py-1 rounded border border-[#2a3441] bg-[#161c25] text-[#e6edf3] disabled:opacity-50"
-                  >
-                    {roomBusyId === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Have her work on it"}
-                  </button>
-                  <button
-                    disabled={roomBusyId === p.id}
-                    onClick={() => decideRoom(p.id, "dismiss")}
-                    className="text-[10px] font-mono px-2 py-1 rounded border border-[#2a3441] text-[#5c6470] disabled:opacity-50"
-                  >
-                    Dismiss
-                  </button>
+            {roomProposals.map((p) => {
+              const roomErr = errorById[p.id];
+              return (
+                <div key={p.id} className="px-4 py-3 border-t border-[#1e2632]">
+                  <div className="text-xs text-[#e6edf3] font-medium">{p.name}</div>
+                  <div className="text-[10px] font-mono text-[#5c6470] mt-0.5 break-all">{p.path}</div>
+                  <div className="text-[11px] text-[#8b949e] mt-1.5 whitespace-pre-wrap">{p.summary}</div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      disabled={roomBusyId === p.id}
+                      onClick={() => decideRoom(p.id, "approve")}
+                      className="text-[10px] font-mono px-2 py-1 rounded border border-[#2a3441] bg-[#161c25] text-[#e6edf3] disabled:opacity-50"
+                    >
+                      {roomBusyId === p.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Have her work on it"}
+                    </button>
+                    <button
+                      disabled={roomBusyId === p.id}
+                      onClick={() => decideRoom(p.id, "dismiss")}
+                      className="text-[10px] font-mono px-2 py-1 rounded border border-[#2a3441] text-[#5c6470] disabled:opacity-50"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  {roomErr && <div className="mt-2 text-[10px] font-mono text-[#f85149]">{roomErr}</div>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
