@@ -1330,6 +1330,20 @@ git commit -m "feat(companion): server-side gate broker; approve route settles r
 
 ---
 
+> **Known limitation, closed at the review's final fix wave (not a Task 8 step):**
+> `runRoomTurn` (doorway-triggered turns — `room-proposals-data.ts`) calls
+> `runAkiraTurn({ instruction })` with no `emit`, so a gated shell command
+> inside an inbox-approved or playground turn has no HUD to surface a
+> `hard_gate` card to. Left unhandled, it would park in the gate broker for
+> the full `GATE_TIMEOUT_MS` (120s), stalling the single serialized
+> `turnChain`, then auto-deny anyway. `AkiraToolContext` gained an explicit
+> `watched` flag (`akira-turn.ts` sets it `true` only when a real
+> operator-facing `emit` is supplied, as `/api/akira/stream` does) so
+> `runShell` (`src/lib/akira/room-shell.ts`) can deny immediately instead of
+> opening a gate nobody can answer. A persistent pending-gates surface that
+> lets a *later* turn or a different channel answer the gate is still
+> slice-3 sized and out of scope here.
+
 ### Task 8: The `room_bash` tool and the shell command log
 
 Decision 8: every shell command is logged where the operator can read it. Under Decision 4 detection is the primary control, so the log is load-bearing rather than diagnostic — which is exactly why it lives **on the Mission Control side, not in the room**. A log inside the container is a log the shell can rewrite.
