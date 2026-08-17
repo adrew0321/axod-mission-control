@@ -1,5 +1,6 @@
 import type { Command, Result } from './protocol';
 import type { RoomConfig } from './config';
+import type { DropReport } from './doorway';
 
 export function connect(
   cfg: RoomConfig,
@@ -15,6 +16,14 @@ export function connect(
       headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
       body: JSON.stringify(r),
     }).catch((e) => console.error('[room] result POST failed:', e?.message ?? e));
+  }
+
+  async function postDrop(r: DropReport): Promise<void> {
+    await fetch(`${cfg.miniUrl}/api/companion/room-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
+      body: JSON.stringify(r),
+    }).catch((e) => console.error('[room] drop POST failed:', e?.message ?? e));
   }
 
   async function loop() {
@@ -56,6 +65,7 @@ export function connect(
 
   return {
     postResult,
+    postDrop,
     stop() {
       stopped = true;
       controller?.abort();

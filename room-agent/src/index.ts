@@ -2,6 +2,7 @@ import { loadConfig } from './config';
 import { connect } from './connection';
 import { execFs } from './fs-ops';
 import { execShell } from './shell-ops';
+import { watchDoorway } from './watcher';
 import type { Command } from './protocol';
 
 const cfg = loadConfig();
@@ -23,10 +24,16 @@ const conn = connect(cfg, (cmd: Command) => {
     .catch((err) => console.error('[room] command chain error:', err));
 });
 
+const watcher = watchDoorway(cfg.roots, (drop) => {
+  console.log('[room] drop', drop.zone, drop.name, `${drop.sizeBytes}b`);
+  void conn.postDrop(drop);
+});
+
 console.log('[room] AKIRA room agent started; room:', cfg.roots.room, 'doorway:', cfg.roots.doorway);
 
 function shutdown() {
   console.log('\n[room] shutting down…');
+  watcher.stop();
   conn.stop();
   process.exit(0);
 }

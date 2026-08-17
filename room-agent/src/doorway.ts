@@ -59,6 +59,7 @@ const NOISE = [
   /^\._/,                    // AppleDouble resource-fork shadow files
   /^\.Trash-/,
   /^~\$/,                    // Office lock files
+  /^\.~lock\..*#$/,          // LibreOffice lock files (.~lock.<filename>#)
   /\.(crdownload|part|partial|tmp|swp|swx)$/i,
 ];
 

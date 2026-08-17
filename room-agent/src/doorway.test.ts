@@ -39,9 +39,19 @@ test('noise names are ignored', () => {
     'x.swp',
     '._resource',
     '.Trash-1000',
+    '.~lock.resume.docx#',
   ]) {
     assert.equal(isNoiseName(n), true, `${n} must be treated as noise`);
   }
+});
+
+test('a LibreOffice lock file is noise, so opening a dropped file to look at it does not raise a spurious proposal', () => {
+  // LibreOffice creates .~lock.<filename># beside a file it opens in place.
+  // The design explicitly supports the operator opening doorway files in
+  // LibreOffice (that's why the bind mount has uid mapping), so this pattern
+  // must be enumerated alongside the other editor/OS lock files.
+  assert.equal(isNoiseName('.~lock.resume.docx#'), true);
+  assert.equal(isNoiseName('.~lock.Q3 plan.pptx#'), true);
 });
 
 test('real files are not noise', () => {
