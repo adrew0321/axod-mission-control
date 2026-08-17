@@ -128,7 +128,7 @@ export default function ProposalsView({
           </div>
         )}
 
-        {proposals.length === 0 && (
+        {proposals.length === 0 && roomProposals.length === 0 && (
           <div className="text-[11px] font-mono text-[#3a424d] text-center py-10">No changes awaiting review.</div>
         )}
 
