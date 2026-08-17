@@ -6,8 +6,8 @@
 // hers to act in directly. There is no global mode to remember — the operator
 // chooses per item by where he drops it.
 // Pure — no fs, no network.
-import { basename, isAbsolute, resolve, sep } from 'node:path';
-import type { Roots } from './paths';
+import { basename, isAbsolute, resolve } from 'node:path';
+import { within, type Roots } from './paths';
 
 export type DoorwayZone = 'inbox' | 'playground';
 
@@ -23,12 +23,6 @@ export interface DropReport {
   head: string;
 }
 
-function under(parent: string, child: string): boolean {
-  const p = resolve(parent);
-  const c = resolve(child);
-  return c.startsWith(p.endsWith(sep) ? p : p + sep);
-}
-
 /**
  * Which doorway zone an absolute path falls in, or null for neither.
  * `abs` must actually be absolute: `resolve()` silently falls back to
@@ -39,7 +33,9 @@ function under(parent: string, child: string): boolean {
 export function zoneForPath(roots: Roots, abs: string): DoorwayZone | null {
   if (!isAbsolute(abs)) return null;
   for (const zone of ['inbox', 'playground'] as const) {
-    if (under(resolve(roots.doorway, zone), abs)) return zone;
+    // Exclusive: the zone folder's own path is not "in" the zone — a drop
+    // always names a file under it. See within()'s doc comment in paths.ts.
+    if (within(resolve(roots.doorway, zone), abs, { inclusive: false })) return zone;
   }
   return null;
 }

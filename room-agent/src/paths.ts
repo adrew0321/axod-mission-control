@@ -11,11 +11,24 @@ export interface Roots {
 
 export type PathVerdict = { ok: true; abs: string } | { ok: false; reason: string };
 
-function within(parent: string, child: string): boolean {
+/**
+ * True iff `child` resolves to a path inside `parent`. Compares against
+ * parent + separator so /x/workshop-evil is not "inside" /x/workshop.
+ *
+ * `inclusive` (default true) controls whether `child === parent` itself
+ * counts as "inside" — this gate needs it to (a path gate that refused the
+ * room's own root would be useless), but doorway.ts's `zoneForPath` does
+ * NOT: a bare zone directory with no file under it is not a drop, so it
+ * calls this with `{ inclusive: false }`. Shared here rather than
+ * duplicated so the two call sites can't silently drift on the boundary
+ * case again.
+ */
+export function within(parent: string, child: string, opts: { inclusive?: boolean } = {}): boolean {
+  const inclusive = opts.inclusive ?? true;
   const p = resolve(parent);
   const c = resolve(child);
-  // Compare against parent + separator so /x/workshop-evil is not "inside" /x/workshop.
-  return c === p || c.startsWith(p.endsWith(sep) ? p : p + sep);
+  if (inclusive && c === p) return true;
+  return c.startsWith(p.endsWith(sep) ? p : p + sep);
 }
 
 export function validatePath(roots: Roots, requested: string): PathVerdict {
