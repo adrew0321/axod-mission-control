@@ -6,7 +6,7 @@
 // hers to act in directly. There is no global mode to remember — the operator
 // chooses per item by where he drops it.
 // Pure — no fs, no network.
-import { basename, resolve, sep } from 'node:path';
+import { basename, isAbsolute, resolve, sep } from 'node:path';
 import type { Roots } from './paths';
 
 export type DoorwayZone = 'inbox' | 'playground';
@@ -29,17 +29,35 @@ function under(parent: string, child: string): boolean {
   return c.startsWith(p.endsWith(sep) ? p : p + sep);
 }
 
-/** Which doorway zone an absolute path falls in, or null for neither. */
+/**
+ * Which doorway zone an absolute path falls in, or null for neither.
+ * `abs` must actually be absolute: `resolve()` silently falls back to
+ * `process.cwd()` for relative input, which would make the result depend on
+ * process state rather than on `roots` and `abs` alone. Reject that outright
+ * instead of resolving against wherever the process happens to be running.
+ */
 export function zoneForPath(roots: Roots, abs: string): DoorwayZone | null {
+  if (!isAbsolute(abs)) return null;
   for (const zone of ['inbox', 'playground'] as const) {
     if (under(resolve(roots.doorway, zone), abs)) return zone;
   }
   return null;
 }
 
-/** Editor/download/OS scratch files that appear and vanish mid-copy. */
+/**
+ * Editor/download/OS scratch files that appear and vanish mid-copy.
+ * Deliberately enumerated rather than "any dot-prefixed name": transient
+ * scratch (.DS_Store, .goutputstream-*, AppleDouble ._*, .Trash-*) is
+ * low-stakes to mis-sort either way because it vanishes on its own. An
+ * ordinary dotfile like .gitignore or .env does NOT vanish — flagging it as
+ * noise would silently swallow the drop with no proposal and no action,
+ * forever. That's the failure this design exists to avoid.
+ */
 const NOISE = [
-  /^\./,                     // .DS_Store, .goutputstream-…
+  /^\.DS_Store$/,
+  /^\.goutputstream-/,
+  /^\._/,                    // AppleDouble resource-fork shadow files
+  /^\.Trash-/,
   /^~\$/,                    // Office lock files
   /\.(crdownload|part|partial|tmp|swp|swx)$/i,
 ];
@@ -71,8 +89,13 @@ export function buildDropReport(input: {
 }): DropReport {
   const name = basename(input.path);
   const ext = extOf(name);
+  // Bound the bytes fed to the decoder ourselves — MAX_HEAD_CHARS * 4 is
+  // generous enough that even worst-case 4-byte UTF-8 sequences survive to
+  // fill the char budget — so boundedness doesn't rest on the caller having
+  // already truncated `raw`. A dangling multi-byte sequence at that byte cut
+  // self-heals into a single U+FFFD rather than throwing.
   const head = looksBinary(input.raw)
     ? `(binary ${ext ? ext + ' ' : ''}file — ${input.sizeBytes} bytes; convert it before reading)`
-    : input.raw.toString('utf8').slice(0, MAX_HEAD_CHARS);
+    : input.raw.subarray(0, MAX_HEAD_CHARS * 4).toString('utf8').slice(0, MAX_HEAD_CHARS);
   return { zone: input.zone, name, path: input.path, sizeBytes: input.sizeBytes, ext, head };
 }

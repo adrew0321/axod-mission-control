@@ -30,13 +30,30 @@ test('a sibling folder with a zone-like prefix is not a zone', () => {
 });
 
 test('noise names are ignored', () => {
-  for (const n of ['.DS_Store', '~$resume.docx', 'resume.docx.crdownload', 'a.txt.part', '.goutputstream-X1', 'x.swp']) {
+  for (const n of [
+    '.DS_Store',
+    '~$resume.docx',
+    'resume.docx.crdownload',
+    'a.txt.part',
+    '.goutputstream-X1',
+    'x.swp',
+    '._resource',
+    '.Trash-1000',
+  ]) {
     assert.equal(isNoiseName(n), true, `${n} must be treated as noise`);
   }
 });
 
 test('real files are not noise', () => {
   for (const n of ['resume.docx', 'notes.md', 'photo.JPG', 'archive.tar.gz']) {
+    assert.equal(isNoiseName(n), false, `${n} must not be treated as noise`);
+  }
+});
+
+test('ordinary dotfiles are not noise — unlike scratch files they never vanish, so mis-flagging them creates a silent, permanent black hole', () => {
+  // A blanket /^\./ rule would flag all of these true. Pinning them false
+  // only passes under the enumerated-pattern rule, not the old blanket one.
+  for (const n of ['.gitignore', '.env', '.config.json']) {
     assert.equal(isNoiseName(n), false, `${n} must not be treated as noise`);
   }
 });
@@ -142,4 +159,44 @@ test('a UTF-8 character truncated at the raw buffer boundary does not throw or r
   assert.doesNotMatch(r.head, /binary/i);
   assert.ok(r.head.length <= MAX_HEAD_CHARS + 40, 'the head read stays bounded even with a split character');
   assert.equal(r.head.slice(0, 10), 'a'.repeat(10));
+});
+
+// --- Fix round 1: reviewer findings ---
+
+test('a non-absolute path is never routed, even when it would coincidentally resolve under the doorway via process.cwd()', () => {
+  // Regression for a cwd-dependent bug: resolve() falls back to
+  // process.cwd() for non-absolute input, so identical (roots, abs)
+  // arguments could return different zones depending on where the process
+  // happened to be running. Pointing `doorway` at the real cwd reproduces
+  // exactly the coincidence that made the old code return 'inbox': without
+  // the isAbsolute guard, resolve('inbox/resume.docx') would fall back to
+  // cwd and land under cwd + '/inbox', matching roots.doorway.
+  const cwdAsDoorway = { room: '/home/akira/workshop', doorway: process.cwd() };
+  assert.equal(zoneForPath(cwdAsDoorway, 'inbox/resume.docx'), null);
+});
+
+test('buildDropReport bounds the bytes handed to the decoder itself, not just the final head length', () => {
+  // A length-only assertion on r.head can't distinguish "the function
+  // truncated bytes before decoding" from "the function decoded everything
+  // and truncated the resulting string" — both produce an 800-char head for
+  // plain ASCII. Instrument Buffer#toString to observe how many bytes the
+  // decoder actually sees, so this fails under the old
+  // whole-buffer-then-slice implementation (which would see the entire
+  // multi-megabyte buffer) and passes only once decoding itself is bounded.
+  const originalToString = Buffer.prototype.toString;
+  let bytesSeenByDecoder = -1;
+  Buffer.prototype.toString = function (this: Buffer, ...args: Parameters<typeof originalToString>) {
+    bytesSeenByDecoder = this.length;
+    return originalToString.apply(this, args);
+  } as typeof originalToString;
+  try {
+    const raw = Buffer.from('x'.repeat(20_000)); // deliberately not pre-truncated by any caller
+    buildDropReport({ zone: 'inbox', path: '/mnt/doorway/inbox/huge.log', sizeBytes: raw.length, raw });
+  } finally {
+    Buffer.prototype.toString = originalToString;
+  }
+  assert.ok(
+    bytesSeenByDecoder >= 0 && bytesSeenByDecoder <= MAX_HEAD_CHARS * 4,
+    `decoder should see at most ${MAX_HEAD_CHARS * 4} bytes, saw ${bytesSeenByDecoder}`,
+  );
 });
