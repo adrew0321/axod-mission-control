@@ -99,6 +99,13 @@
       "when": 1784342228049,
       "tag": "0013_mute_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1786929930419,
+      "tag": "0014_room_proposals",
+      "breakpoints": true
     }
   ]
 }

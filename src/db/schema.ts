@@ -237,6 +237,20 @@ export const bottleneck_events = sqliteTable('bottleneck_events', {
   resolved_at: integer('resolved_at', { mode: 'timestamp' }),
 });
 
+export const room_proposals = sqliteTable('room_proposals', {
+  id: text('id').primaryKey(),
+  zone: text('zone').notNull(),               // 'inbox' — playground never proposes
+  name: text('name').notNull(),
+  path: text('path').notNull(),               // absolute, inside the doorway
+  size_bytes: integer('size_bytes').notNull(),
+  ext: text('ext'),
+  head: text('head'),                         // truncated first bytes
+  summary: text('summary').notNull(),
+  status: text('status').notNull(),           // 'open' | 'approved' | 'dismissed'
+  created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
+  decided_at: integer('decided_at', { mode: 'timestamp' }),
+});
+
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   project: one(projects, { fields: [sessions.project_id], references: [projects.id] }),
   messages: many(messages),
