@@ -65,5 +65,5 @@ test('the prompt tells her to stop and wait on a gated command, not retry', () =
 
 test('the prompt says her room work is hers and prod is off limits', () => {
   assert.match(AKIRA_SYSTEM_PROMPT, /room/i);
-  assert.match(AKIRA_SYSTEM_PROMPT, /prod|Mission Control/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /cannot reach Mission Control's own files/i);
 });
