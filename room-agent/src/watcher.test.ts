@@ -93,3 +93,48 @@ test('stop() ends reporting', async () => {
   await settle(300);
   assert.equal(c.seen.length, 0);
 });
+
+// --- Fix round 1: reviewer findings ---
+
+test('a zone missing at startup is retried on a backoff and starts working once it appears', async () => {
+  // Regression for "a zone whose watch() fails is dead forever": a late-mounting
+  // bind mount (container boot ordering) makes fs.watch() throw synchronously at
+  // construction. The watcher must not give up — it should retry on `retryMs`
+  // and pick the zone up once the directory exists.
+  const base = await mkdtemp(join(tmpdir(), 'room-watch-'));
+  const room = join(base, 'workshop');
+  const doorway = join(base, 'doorway');
+  await mkdir(room, { recursive: true });
+  await mkdir(join(doorway, 'playground'), { recursive: true });
+  // inbox deliberately does NOT exist yet — construction must fail and retry.
+  const roots = { room, doorway };
+  const c = collector();
+  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 100 });
+  await settle(150); // let the first construction attempt fail
+  await mkdir(join(doorway, 'inbox'), { recursive: true });
+  await settle(200); // let a retry land and start watching the now-real directory
+  await writeFile(join(doorway, 'inbox', 'late.txt'), 'hello');
+  await settle(400);
+  w.stop();
+  assert.equal(c.seen.length, 1);
+  assert.equal(c.seen[0].zone, 'inbox');
+  assert.equal(c.seen[0].name, 'late.txt');
+});
+
+test('stop() cancels a pending retry so a zone created after stop() is never picked up', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'room-watch-'));
+  const room = join(base, 'workshop');
+  const doorway = join(base, 'doorway');
+  await mkdir(room, { recursive: true });
+  await mkdir(join(doorway, 'playground'), { recursive: true });
+  // inbox still missing — this forces a pending retry timer to exist when stop() runs.
+  const roots = { room, doorway };
+  const c = collector();
+  const w = watchDoorway(roots, c.onDrop, { settleMs: 40, retryMs: 100 });
+  await settle(50); // construction has failed and a retry is now pending
+  w.stop();
+  await mkdir(join(doorway, 'inbox'), { recursive: true });
+  await writeFile(join(doorway, 'inbox', 'after-stop.txt'), 'x');
+  await settle(400); // well past retryMs — if the retry weren't cancelled, this would fire
+  assert.equal(c.seen.length, 0);
+});
