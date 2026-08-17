@@ -83,6 +83,28 @@ sed "s|__TSX__|$TSX|" "$(dirname "$0")/akira-room.service" \
   | lxc exec "$CONTAINER" -- tee /etc/systemd/system/akira-room.service > /dev/null
 lxc exec "$CONTAINER" -- bash -c 'systemctl daemon-reload && systemctl enable --now akira-room'
 
+# --- workshop remote ---------------------------------------------------------
+# Decision 6: her work survives a container rebuild via a bare repo on the
+# Mini — outside the container, reachable over the bridge — not a public
+# host. Durability without a public push channel; commits and pushes to it
+# are both ungated (Decision 6).
+WORKSHOP_REMOTE="$HOME/akira-workshop.git"
+if [ ! -d "$WORKSHOP_REMOTE" ]; then
+  git init --bare "$WORKSHOP_REMOTE"
+  echo "created workshop remote at $WORKSHOP_REMOTE"
+fi
+
+lxc config device remove "$CONTAINER" workshop-remote >/dev/null 2>&1 || true
+lxc config device add "$CONTAINER" workshop-remote disk source="$WORKSHOP_REMOTE" path=/mnt/workshop-remote
+
+lxc exec "$CONTAINER" -- sudo -u akira bash -lc '
+  cd /home/akira/workshop
+  git rev-parse --git-dir >/dev/null 2>&1 || git init
+  git remote get-url origin >/dev/null 2>&1 || git remote add origin /mnt/workshop-remote
+  git config user.email "akira@axodcreative.com"
+  git config user.name "AKIRA"
+'
+
 sleep 8
 echo
 echo "=== agent log ==="
