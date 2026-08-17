@@ -31,9 +31,13 @@ function readLogLines(): Record<string, unknown>[] {
     .map((l) => JSON.parse(l));
 }
 
+// Most tests here simulate an operator watching the HUD (the normal case for
+// /api/akira/stream). watched defaults true so a gate can actually open;
+// the "no operator watching" tests below build their own ctx with watched:
+// false to simulate a headless, doorway-triggered turn.
 function freshCtx(): { ctx: AkiraToolContext; emitted: { type: string; [k: string]: unknown }[] } {
   const emitted: { type: string; [k: string]: unknown }[] = [];
-  return { ctx: { emit: (e) => emitted.push(e) }, emitted };
+  return { ctx: { emit: (e) => emitted.push(e), watched: true }, emitted };
 }
 
 test('a rejected dispatch (room companion offline) still ends in a terminal log line', async () => {
@@ -76,7 +80,7 @@ test('a gated command the operator denies logs dispatch, gated (with its own rea
   rmSync(logPath, { force: true });
   const { ctx, emitted } = freshCtx();
   const unreg = registerCompanion(
-    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', reason: 'looks like a dev server' }) },
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', gated: true, reason: 'looks like a dev server' }) },
     'room',
   );
   try {
@@ -111,7 +115,7 @@ test('a gated command the operator approves logs dispatch, gated, approved, resu
         if (cmd.approved) {
           resolveResult({ id: cmd.id, status: 'ok', text: 'started', exitCode: 0 });
         } else {
-          resolveResult({ id: cmd.id, status: 'blocked', reason: 'looks like a dev server' });
+          resolveResult({ id: cmd.id, status: 'blocked', gated: true, reason: 'looks like a dev server' });
         }
       },
     },
@@ -129,6 +133,87 @@ test('a gated command the operator approves logs dispatch, gated, approved, resu
     const lines = readLogLines();
     assert.deepEqual(lines.map((l) => l.event), ['dispatch', 'gated', 'approved', 'result']);
     assert.equal(lines[3].status, 'ok');
+  } finally {
+    unreg();
+  }
+});
+
+test('a path-refused result (blocked, but NOT gated) never opens a gate, and names the refusal rather than "done"', async () => {
+  // Reproduces the exact failure mode from the review: a cwd that fails the
+  // path gate is 'blocked' but carries no `gated` flag. If runShell keyed on
+  // status === 'blocked' instead of the flag, this would open a gate that
+  // approval can never satisfy (the path check doesn't consult `approved`)
+  // and, worse, present() would fall through to `ok(r.text ?? 'done')` for a
+  // result that carries no text — telling AKIRA a command ran when it never did.
+  rmSync(logPath, { force: true });
+  const { ctx, emitted } = freshCtx();
+  const unreg = registerCompanion(
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', reason: 'path outside the room and doorway' }) },
+    'room',
+  );
+  try {
+    const result = await runShell('ls -la', '/etc', ctx);
+
+    assert.equal(emitted.length, 0, 'a path refusal must never emit a hard_gate — approval cannot fix it');
+    assert.equal(result.isError, undefined, 'a refusal is content, not a thrown tool error');
+    assert.notEqual(result.content[0].text, 'done', 'must never degrade to the generic done fallback');
+    assert.match(result.content[0].text, /path outside the room and doorway/, 'must name the actual refusal');
+
+    const lines = readLogLines();
+    assert.deepEqual(lines.map((l) => l.event), ['dispatch', 'result']);
+    assert.equal(lines[1].status, 'blocked');
+  } finally {
+    unreg();
+  }
+});
+
+test('a classifier-gated result (gated: true) still opens a real gate', async () => {
+  // The positive counterpart to the test above: the ONE 'blocked' cause that
+  // must still reach the HUD is the one the classifier itself flagged.
+  rmSync(logPath, { force: true });
+  const { ctx, emitted } = freshCtx();
+  const unreg = registerCompanion(
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', gated: true, reason: 'starts a server' }) },
+    'room',
+  );
+  try {
+    const promise = runShell('npm run dev', undefined, ctx);
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(emitted.length, 1, 'a classifier gate must emit exactly one hard_gate');
+    assert.equal(emitted[0]?.type, 'hard_gate');
+    const gateId = String(emitted[0]?.gateId);
+    assert.equal(decideGate(gateId, 'denied'), true);
+    await promise;
+  } finally {
+    unreg();
+  }
+});
+
+test('when no operator is watching this turn, a gated command is denied immediately rather than parked', async () => {
+  // The stall fix: runRoomTurn (room-proposals-data.ts) calls runAkiraTurn
+  // with no `emit`, so ctx.watched is false. Opening a gate nobody can see
+  // would block the single serialized turn chain for the full
+  // GATE_TIMEOUT_MS (120s) before auto-denying anyway — this must resolve
+  // immediately instead, with no gate ever opened.
+  rmSync(logPath, { force: true });
+  const emitted: { type: string; [k: string]: unknown }[] = [];
+  const unwatchedCtx: AkiraToolContext = { emit: (e) => emitted.push(e), watched: false };
+  const unreg = registerCompanion(
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', gated: true, reason: 'starts a server' }) },
+    'room',
+  );
+  const start = Date.now();
+  try {
+    const result = await runShell('npm run dev', undefined, unwatchedCtx);
+
+    assert.ok(Date.now() - start < 5_000, 'must resolve immediately, not park for GATE_TIMEOUT_MS');
+    assert.equal(emitted.length, 0, 'no hard_gate — nobody is watching to answer it');
+    assert.equal(result.isError, undefined);
+    assert.match(result.content[0].text, /not.*watching|nobody.*watching/i);
+    assert.match(result.content[0].text, /report back/i);
+
+    const lines = readLogLines();
+    assert.deepEqual(lines.map((l) => l.event), ['dispatch', 'denied']);
   } finally {
     unreg();
   }

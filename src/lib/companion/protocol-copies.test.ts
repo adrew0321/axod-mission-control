@@ -32,3 +32,8 @@ test('the protocol declares the shell action and its fields', () => {
   assert.ok(/cwd\?: string/.test(src), 'Command is missing the cwd field');
   assert.ok(/exitCode\?: number \| null/.test(src), 'Result is missing exitCode');
 });
+
+test('the protocol declares the gated flag on Result', () => {
+  const src = readFileSync(join(process.cwd(), COPIES[0]), 'utf8');
+  assert.ok(/gated\?: boolean/.test(src), 'Result is missing gated');
+});

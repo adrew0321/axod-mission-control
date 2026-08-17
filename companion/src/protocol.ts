@@ -58,4 +58,10 @@ export interface Result {
   reason?: string;
   /** shell: the process exit code, or null when it was killed on timeout. */
   exitCode?: number | null;
+  /** shell: true iff a 'blocked' status came from the operator gate
+   *  (classifyShell refusing a long-running command) — the only 'blocked'
+   *  cause approval can clear. A 'blocked' result WITHOUT this flag (e.g. a
+   *  refused cwd) is a plain refusal: approval cannot fix it, and it must
+   *  never be presented to AKIRA as an opened gate. */
+  gated?: boolean;
 }

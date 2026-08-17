@@ -15,6 +15,15 @@ export const SHELL_TIMEOUT_MS = 150_000;
 
 function present(r: { status: string; text?: string; reason?: string }): ToolResult {
   if (r.status === 'error') return err(r.reason ?? 'the command failed to run');
+  // A 'blocked' result that reaches here is NOT the operator gate (that path
+  // never calls present() with the first, ungated result — see runShell
+  // below). It is a plain refusal, e.g. a cwd outside the room and doorway.
+  // Approval cannot clear it, so it must never read back as 'done'.
+  if (r.status === 'blocked') {
+    return ok(
+      `That command was refused (${r.reason ?? 'blocked'}). Do not retry it — if it needs a cwd inside the room or doorway, adjust the path and try again.`,
+    );
+  }
   return ok(r.text ?? 'done');
 }
 
@@ -26,14 +35,38 @@ export async function runShell(
   appendShellLog({ at: new Date(), event: 'dispatch', command, cwd });
   try {
     const first = await sendCommand({ action: 'shell', command, cwd }, SHELL_TIMEOUT_MS, 'room').result;
-    if (first.status !== 'blocked') {
+    // Key on the classifier's OWN flag, not on status === 'blocked' — a
+    // refused cwd is also 'blocked' but approval cannot clear it, and it must
+    // never be mistaken for an operator gate (see protocol.ts's `gated` doc).
+    if (!first.gated) {
       appendShellLog({ at: new Date(), event: 'result', command, cwd, exitCode: first.exitCode, status: first.status });
       return present(first);
     }
 
-    // Gated (Decision 7: a process that would outlive the command). Park it, ask
-    // the operator through the HUD, and wait — do not retry, do not work around it.
+    // Gated (Decision 7: a process that would outlive the command).
     const reason = first.reason ?? 'this would start something long-running';
+
+    if (!ctx.watched) {
+      // No operator-facing emit is attached to this turn — a doorway-triggered
+      // turn (runRoomTurn in room-proposals-data.ts) runs headless, with
+      // nobody at the HUD to see a gate card. Opening one anyway would park it
+      // in the broker for the full GATE_TIMEOUT_MS (120s), stalling the single
+      // serialized turn chain, and then auto-deny regardless. Fail fast
+      // instead: deny now, and tell her to report back rather than retry.
+      appendShellLog({
+        at: new Date(),
+        event: 'denied',
+        command,
+        cwd,
+        reason: `${reason} (no operator watching this turn — gate skipped)`,
+      });
+      return ok(
+        `That command would start something long-running (${reason}), and nobody is watching this turn right now to approve it. Do not retry it — report back what you were trying to do so the operator can approve it from the front door.`,
+      );
+    }
+
+    // Park it, ask the operator through the HUD, and wait — do not retry, do
+    // not work around it.
     appendShellLog({ at: new Date(), event: 'gated', command, cwd, reason });
     const { id, decision } = openGate({ target: 'room', reason, command });
     ctx.emit({ type: 'hard_gate', gateId: id, ref: '', reason, command });

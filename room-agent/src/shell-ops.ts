@@ -34,7 +34,10 @@ export async function execShell(
 
   const gate = classifyShell(command);
   if (gate.gated && !cmd.approved) {
-    return { id: cmd.id, status: 'blocked', reason: gate.reason ?? 'gated command' };
+    // The ONLY 'blocked' cause an operator approval can clear. Every other
+    // 'blocked' result below is a plain refusal — `gated` stays unset so
+    // room-shell.ts never mistakes it for something the operator can approve.
+    return { id: cmd.id, status: 'blocked', gated: true, reason: gate.reason ?? 'gated command' };
   }
 
   let cwd = roots.room;
