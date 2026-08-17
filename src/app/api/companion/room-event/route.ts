@@ -32,7 +32,9 @@ export async function POST(req: Request) {
     return Response.json({ ok: true, proposed: Boolean(created), id: created?.id ?? null });
   }
   if (b.zone === 'playground') {
-    runRoomTurn(playgroundTurnInstruction(drop));
+    // Coalesced by path: a file re-saved several times while its turn is
+    // still queued/running gets one turn, not one per save.
+    runRoomTurn(playgroundTurnInstruction(drop), drop.path);
     return Response.json({ ok: true, acting: true });
   }
   return new Response('unknown zone', { status: 400 });

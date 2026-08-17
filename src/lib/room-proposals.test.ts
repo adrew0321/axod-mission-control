@@ -26,9 +26,29 @@ test('a text summary carries a first line of content, condensed', () => {
     sizeBytes: 300,
     head: '# Q3 plan\n\n\nShip the room.\nThen the browser.\n',
   });
-  assert.match(s, /Q3 plan/);
-  assert.ok(!s.includes('\n\n\n'), 'blank runs are collapsed');
-  assert.ok(s.length <= 280, `summary must stay short, got ${s.length}`);
+  // Exact match, not a substring check: a mutant that deletes the blank-run
+  // filter or the 3-line cap must fail this, not slip through on a loose
+  // .match(/Q3 plan/) that would pass regardless.
+  assert.equal(s, 'notes.md · md · 300 B — # Q3 plan Ship the room. Then the browser.');
+});
+
+test('the summary caps at three lines of head content', () => {
+  const s = summarizeDrop({
+    name: 'many.md',
+    ext: 'md',
+    sizeBytes: 400,
+    head: 'Line one\nLine two\nLine three\nSENTINEL_FOURTH_LINE_MUST_BE_DROPPED\n',
+  });
+  assert.ok(
+    !s.includes('SENTINEL_FOURTH_LINE_MUST_BE_DROPPED'),
+    'a 4th line of head content must not reach the summary',
+  );
+});
+
+test('a newline in the filename cannot inject a line into the summary', () => {
+  const s = summarizeDrop({ name: 'ev\nil.md', ext: 'md', sizeBytes: 5, head: 'hi' });
+  assert.ok(!s.includes('\n'), 'the summary must be a single line even if the filename is not');
+  assert.match(s, /ev il\.md/);
 });
 
 test('a very long head is truncated with an ellipsis', () => {

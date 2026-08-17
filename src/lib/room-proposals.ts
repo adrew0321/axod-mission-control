@@ -28,7 +28,12 @@ const MAX_SUMMARY = 280;
 /** Filename, type, size, and a condensed first look. Bounded on purpose. */
 export function summarizeDrop(d: { name: string; ext: string; sizeBytes: number; head: string }): string {
   const kind = d.ext ? d.ext.toLowerCase() : 'file';
-  const lead = `${d.name} · ${kind} · ${formatBytes(d.sizeBytes)}`;
+  // A dropped file's name is not fully operator-authored (it's whatever the
+  // source handed us) and this summary feeds the proposal UI, a Discord
+  // embed, and — via inboxTurnInstruction — AKIRA's instruction text. A
+  // newline in the name could read as an injected instruction line there.
+  const safeName = d.name.replace(/\s+/g, ' ').trim();
+  const lead = `${safeName} · ${kind} · ${formatBytes(d.sizeBytes)}`;
   const body = (d.head ?? '')
     .split('\n')
     .map((l) => l.trim())

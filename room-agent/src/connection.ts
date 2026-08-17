@@ -19,11 +19,21 @@ export function connect(
   }
 
   async function postDrop(r: DropReport): Promise<void> {
-    await fetch(`${cfg.miniUrl}/api/companion/room-event`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
-      body: JSON.stringify(r),
-    }).catch((e) => console.error('[room] drop POST failed:', e?.message ?? e));
+    try {
+      const res = await fetch(`${cfg.miniUrl}/api/companion/room-event`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
+        body: JSON.stringify(r),
+      });
+      // A redirect (e.g. the session gate bouncing an unauthenticated request
+      // to /login) is followed silently by fetch and looks like success unless
+      // we check ok — that exact failure mode has hit this file three times.
+      if (!res.ok) {
+        console.error(`[room] drop POST rejected: ${res.status} ${res.url} (${r.path})`);
+      }
+    } catch (e) {
+      console.error('[room] drop POST failed:', e instanceof Error ? e.message : e);
+    }
   }
 
   async function loop() {

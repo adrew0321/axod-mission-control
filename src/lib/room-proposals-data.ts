@@ -81,10 +81,39 @@ export async function recordInboxDrop(d: {
 // the same chain discipline the room agent uses for commands.
 let turnChain: Promise<unknown> = Promise.resolve();
 
+// Playground drops are ungated (the folder carries the permission) but were
+// never meant to be unbounded: a file saved several times at different sizes
+// (so the watcher's own settle-detection can't collapse them) would otherwise
+// queue one full serialized turn per save. The queued turn re-reads the file
+// when it finally runs, so it always sees the final state — a duplicate
+// entry queued behind it is pure waste, not a missed update. Coalesce by the
+// key passed in (the drop's path) for as long as a turn for it is queued or
+// running.
+const pendingKeys = new Set<string>();
+
 /** Queue a headless AKIRA turn. Fire-and-forget by design: the caller is an
- *  HTTP handler that must not block on a full agent turn. */
-export function runRoomTurn(instruction: string): void {
+ *  HTTP handler that must not block on a full agent turn.
+ *
+ *  When `coalesceKey` is given and a turn for that key is already queued or
+ *  in flight, this call is a no-op rather than a second enqueue.
+ *
+ *  `runAkiraTurn` resolves (does not throw) on a failed turn — status
+ *  'error' with a `reason` — so both the resolved-error and the rejected
+ *  paths are logged; nothing fails silently. */
+export function runRoomTurn(instruction: string, coalesceKey?: string): void {
+  if (coalesceKey) {
+    if (pendingKeys.has(coalesceKey)) return;
+    pendingKeys.add(coalesceKey);
+  }
   turnChain = turnChain
     .then(() => runAkiraTurn({ instruction }))
-    .catch((e) => console.error('[room-event] turn failed:', e instanceof Error ? e.message : e));
+    .then((result) => {
+      if (result.status === 'error') {
+        console.error('[room-event] turn resolved with error:', result.reason);
+      }
+    })
+    .catch((e) => console.error('[room-event] turn failed:', e instanceof Error ? e.message : e))
+    .finally(() => {
+      if (coalesceKey) pendingKeys.delete(coalesceKey);
+    });
 }
