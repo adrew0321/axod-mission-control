@@ -6,7 +6,7 @@
 //     memory/INDEX.md is clobbered by the next remember
 //   - markdown-only: keeps the vault a document tree
 // SOUL.md, the root CLAUDE.md, and skills/ are deliberately writable.
-import { existsSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { vaultDir } from './memory/store';
 
@@ -19,10 +19,27 @@ export interface VaultPathCheck {
   abs?: string;
 }
 
-/** The deepest ancestor of `p` that exists, symlink-resolved. */
+/**
+ * True if `p` is present in a way realpathSync can resolve: an ordinary
+ * existing entry, or a symlink whose own lstat succeeds even though its
+ * target is missing (a dangling symlink). existsSync alone is not enough —
+ * it stats THROUGH the link, so it reports false for a dangling symlink and
+ * the ancestor walk below would skip straight past it, leaving its literal
+ * (unresolved) name to be reattached unjudged.
+ */
+function isPresent(p: string): boolean {
+  if (existsSync(p)) return true;
+  try {
+    return lstatSync(p).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
+/** The deepest ancestor of `p` that is present, symlink-resolved. */
 function realExistingAncestor(p: string): string {
   let cur = p;
-  while (!existsSync(cur)) {
+  while (!isPresent(cur)) {
     const parent = dirname(cur);
     if (parent === cur) return cur;
     cur = parent;
@@ -41,7 +58,7 @@ export function checkVaultPath(relPath: string, root: string): VaultPathCheck {
   // Resolve the deepest existing ancestor BEFORE judging containment, so a
   // symlink inside the vault pointing outside it cannot act as a bridge.
   let probe = abs;
-  while (!existsSync(probe) && dirname(probe) !== probe) probe = dirname(probe);
+  while (!isPresent(probe) && dirname(probe) !== probe) probe = dirname(probe);
   const realProbe = realExistingAncestor(probe);
   const real = realProbe + abs.slice(probe.length);
 
@@ -49,7 +66,7 @@ export function checkVaultPath(relPath: string, root: string): VaultPathCheck {
   if (!inside) return { ok: false, reason: 'outside-vault' };
 
   const rel = real.slice(realRoot.length + 1);
-  if (rel.split(sep)[0] === 'memory') return { ok: false, reason: 'memory-zone' };
+  if (rel.split(sep)[0].toLowerCase() === 'memory') return { ok: false, reason: 'memory-zone' };
 
   return { ok: true, abs: real };
 }
