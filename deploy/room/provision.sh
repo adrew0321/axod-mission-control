@@ -68,11 +68,15 @@ REPO_ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 lxc file push -rq "$REPO_ROOT/room-agent" "$CONTAINER"/home/akira/
 lxc exec "$CONTAINER" -- bash -lc 'cd /home/akira/room-agent && pnpm install --silent'
 
-# The room shares Mission Control's COMPANION_TOKEN. Read it straight from the live
-# .env (mc-owned; passwordless via the sudo allowlist) and pipe it in over stdin so it
-# never appears in a process argument list.
-TOKEN=$(sudo -n -u mc grep -m1 '^COMPANION_TOKEN=' "$LIVE_ENV" | cut -d= -f2- | tr -d '\r"')
-[ -n "$TOKEN" ] || { echo "COMPANION_TOKEN not found in $LIVE_ENV"; exit 1; }
+# The room gets its OWN credential, never the laptop Companion's (Decision 5): the
+# room holds this on disk and a shell in the room can read it. Mission Control fails
+# closed when the two are equal, so refuse here rather than provision a room that can
+# never connect. Read from the live .env (mc-owned; passwordless via the sudo
+# allowlist) and pipe it in over stdin so it never lands in a process argument list.
+TOKEN=$(sudo -n -u mc grep -m1 '^ROOM_COMPANION_TOKEN=' "$LIVE_ENV" | cut -d= -f2- | tr -d '\r"' || true)
+LAPTOP_TOKEN=$(sudo -n -u mc grep -m1 '^COMPANION_TOKEN=' "$LIVE_ENV" | cut -d= -f2- | tr -d '\r"' || true)
+[ -n "$TOKEN" ] || { echo "ROOM_COMPANION_TOKEN not set in $LIVE_ENV — mint one with: openssl rand -hex 32"; exit 1; }
+[ "$TOKEN" != "$LAPTOP_TOKEN" ] || { echo "ROOM_COMPANION_TOKEN must differ from COMPANION_TOKEN — Mission Control rejects the room when they match"; exit 1; }
 printf 'ROOM_TOKEN=%s\nMINI_URL=http://%s:3000\nROOM_ROOT=/home/akira/workshop\nROOM_DOORWAY=/mnt/doorway\n' \
   "$TOKEN" "$GW" | lxc exec "$CONTAINER" -- tee /home/akira/room-agent/.env > /dev/null
 lxc exec "$CONTAINER" -- bash -c 'chmod 600 /home/akira/room-agent/.env; chown -R akira:akira /home/akira/room-agent'
