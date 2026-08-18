@@ -52,15 +52,29 @@ export function checkVaultPath(relPath: string, root: string): VaultPathCheck {
   if (!trimmed) return { ok: false, reason: 'empty-path' };
   if (!trimmed.toLowerCase().endsWith('.md')) return { ok: false, reason: 'not-markdown' };
 
-  const realRoot = existsSync(root) ? realpathSync(root) : resolve(root);
-  const abs = resolve(realRoot, trimmed);
+  // isPresent() stops the ancestor walk AT a dangling symlink so it gets
+  // resolved rather than skipped (see above) — but realpathSync still can't
+  // resolve a target that isn't there, so it throws ENOENT for exactly that
+  // case. The same call throws for EACCES, for ELOOP on a symlink cycle
+  // inside the vault, and for the race where an ancestor is removed between
+  // the presence check and the resolve. All of that is a failure to resolve
+  // the path, not a green light: fail closed, as outside-vault, rather than
+  // letting the exception escape checkVaultPath's { ok, reason } contract.
+  let real: string;
+  let realRoot: string;
+  try {
+    realRoot = existsSync(root) ? realpathSync(root) : resolve(root);
+    const abs = resolve(realRoot, trimmed);
 
-  // Resolve the deepest existing ancestor BEFORE judging containment, so a
-  // symlink inside the vault pointing outside it cannot act as a bridge.
-  let probe = abs;
-  while (!isPresent(probe) && dirname(probe) !== probe) probe = dirname(probe);
-  const realProbe = realExistingAncestor(probe);
-  const real = realProbe + abs.slice(probe.length);
+    // Resolve the deepest existing ancestor BEFORE judging containment, so a
+    // symlink inside the vault pointing outside it cannot act as a bridge.
+    let probe = abs;
+    while (!isPresent(probe) && dirname(probe) !== probe) probe = dirname(probe);
+    const realProbe = realExistingAncestor(probe);
+    real = realProbe + abs.slice(probe.length);
+  } catch {
+    return { ok: false, reason: 'outside-vault' };
+  }
 
   const inside = real === realRoot || real.startsWith(realRoot + sep);
   if (!inside) return { ok: false, reason: 'outside-vault' };

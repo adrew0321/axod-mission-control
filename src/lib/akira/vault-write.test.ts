@@ -97,6 +97,29 @@ test('a dangling symlink pointing outside the vault is rejected, not followed', 
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
+// Windows junctions (symlinkSync's 'junction' type) can be created without
+// Developer Mode, unlike ordinary Windows symlinks -- the type argument is
+// ignored on POSIX, where this becomes a plain symlink. That makes this one
+// portable enough to actually run (not skip) everywhere, including this box.
+test('a dangling link inside the vault fails closed as outside-vault, not a thrown exception', () => {
+  const d = vault();
+  const target = mkdtempSync(join(tmpdir(), 'akira-junction-target-'));
+  try {
+    symlinkSync(target, join(d, 'ops', 'escape-dangling'), 'junction');
+    rmSync(target, { recursive: true, force: true });
+    // realpathSync throws ENOENT resolving a dangling link's target.
+    // checkVaultPath must catch that and fail closed as outside-vault,
+    // not let the exception escape its { ok, reason } contract.
+    assert.deepEqual(
+      checkVaultPath('ops/escape-dangling/child.md', d),
+      { ok: false, reason: 'outside-vault' },
+    );
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+    rmSync(target, { recursive: true, force: true });
+  }
+});
+
 test('a symlink INSIDE the vault resolves and is allowed', (t) => {
   const d = vault();
   try {
