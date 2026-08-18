@@ -1,12 +1,12 @@
 // One-time, idempotent vault migration: flat notes -> memory/ zone, plus the
 // shared document tree and the vault's own map. Safe to run twice.
-import { readdirSync, readFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, mkdirSync, renameSync, writeFileSync, cpSync, lstatSync, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { vaultDir, writeIndex } from '../src/lib/akira/memory/store';
 import { isNoteFile } from '../src/lib/akira/memory/note';
 
-export const ZONES = ['memory', 'projects', 'ops', 'research', 'outputs', 'personal'] as const;
+export const ZONES = ['memory', 'projects', 'ops', 'research', 'outputs', 'personal', 'skills'] as const;
 
 const ROOT_KEEP = new Set(['SOUL.md', 'SOUL.proposed.md', 'CLAUDE.md', 'INDEX.md']);
 
@@ -17,6 +17,7 @@ const ZONE_BLURB: Record<string, string> = {
   research: 'Raw captures distilled into durable pages.',
   outputs: 'Specs, plans, and reports worth finding again.',
   personal: 'Goals, journals, reviews.',
+  skills: 'Named workflows AKIRA can run. Each is a folder with a SKILL.md. Edit them here.',
 };
 
 const CLAUDE_MD = `# AKIRA's vault
@@ -52,7 +53,45 @@ ${ZONES.map((z) => `- \`${z}/\` — ${ZONE_BLURB[z]}`).join('\n')}
 See CLAUDE.md for the navigation pattern.
 `;
 
-export function migrateVault(dir: string = vaultDir()): { moved: number; created: string[]; stranded: string[] } {
+/**
+ * Point the vault's .claude/skills at the Obsidian-visible skills/ zone. This
+ * symlink is the whole reason skills can live somewhere Obsidian will show.
+ * Non-fatal by design: the dev laptop is Windows, where symlinkSync needs
+ * Developer Mode or admin, and that is where the tests run. Only the Mini has
+ * to succeed.
+ */
+export function ensureSkillsLink(dir: string): 'created' | 'exists' | 'unsupported' {
+  const claudeDir = join(dir, '.claude');
+  const link = join(claudeDir, 'skills');
+  // lstatSync (not existsSync) so a BROKEN symlink still counts as present —
+  // existsSync follows the link and would report false, and we would then try
+  // to create one that already exists.
+  if (lstatSync(link, { throwIfNoEntry: false })) return 'exists';
+  try {
+    mkdirSync(claudeDir, { recursive: true });
+    symlinkSync('../skills', link, 'dir');
+    return 'created';
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/** Copy shipped skills in, never over an existing one. Vault edits win. */
+export function seedSkills(dir: string, seedRoot = join(process.cwd(), 'vault-seed', 'skills')): string[] {
+  if (!existsSync(seedRoot)) return [];
+  const dest = join(dir, 'skills');
+  mkdirSync(dest, { recursive: true });
+  const added: string[] = [];
+  for (const name of readdirSync(seedRoot)) {
+    const to = join(dest, name);
+    if (existsSync(to)) continue; // operator's copy wins
+    cpSync(join(seedRoot, name), to, { recursive: true });
+    added.push(name);
+  }
+  return added;
+}
+
+export function migrateVault(dir: string = vaultDir()): { moved: number; created: string[]; stranded: string[]; skillsLink: 'created' | 'exists' | 'unsupported'; seeded: string[] } {
   // Pre-migration, the flat vault's root INDEX.md IS the generated recall
   // index — safe (in fact required) to replace on the very first run. Once
   // migrated, memory/ exists and the root INDEX.md is the operator-editable
@@ -124,7 +163,10 @@ export function migrateVault(dir: string = vaultDir()): { moved: number; created
   }
   writeIndex(join(dir, 'memory'));
 
-  return { moved, created, stranded };
+  const seeded = seedSkills(dir);
+  const skillsLink = ensureSkillsLink(dir);
+
+  return { moved, created, stranded, skillsLink, seeded };
 }
 
 // CLI entry: `pnpm vault:migrate`
@@ -134,8 +176,12 @@ if (process.argv[1]?.endsWith('migrate-vault.ts')) {
     console.error(`No vault at ${dir}`);
     process.exit(1);
   }
-  const { moved, created, stranded } = migrateVault(dir);
+  const { moved, created, stranded, skillsLink, seeded } = migrateVault(dir);
   console.log(`Vault migrated at ${dir}: ${moved} notes moved, zones created: ${created.join(', ') || 'none'}`);
+  console.log(`Skills: link ${skillsLink}, seeded: ${seeded.join(', ') || 'none'}`);
+  if (skillsLink === 'unsupported') {
+    console.error('WARNING: .claude/skills symlink could not be created — AKIRA will not see vault skills.');
+  }
 
   // Commit through the vault's own git repo, synchronously, so the CLI does
   // not exit before the commit lands (gitCommitPush is fire-and-forget async

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { migrateVault, ZONES } from './migrate-vault';
@@ -122,5 +122,43 @@ test('migrateVault reports no stranded notes when memory/ pre-exists empty', () 
     assert.ok(existsSync(join(d, 'memory', 'hold-when-told.md')));
     assert.ok(existsSync(join(d, 'memory', 'forge-mc-designs.md')));
     assert.deepEqual(out.stranded, [], 'nothing should be left stranded at the root');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('migrateVault creates the skills zone and links .claude/skills to it', (t) => {
+  const d = seeded();
+  try {
+    const out = migrateVault(d);
+    assert.ok(existsSync(join(d, 'skills')), 'skills zone exists');
+    if (out.skillsLink === 'unsupported') {
+      t.skip('symlink creation unavailable (Windows without Developer Mode)');
+      return;
+    }
+    assert.equal(out.skillsLink, 'created');
+    assert.ok(lstatSync(join(d, '.claude', 'skills')).isSymbolicLink());
+    assert.ok(existsSync(join(d, '.claude', 'skills', 'vault-gardening', 'SKILL.md')),
+      'the link resolves to the seeded skills');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('migrateVault seeds the shipped skills', () => {
+  const d = seeded();
+  try {
+    const out = migrateVault(d);
+    assert.ok(out.seeded.includes('vault-gardening'));
+    assert.ok(out.seeded.includes('distil-research'));
+    assert.ok(existsSync(join(d, 'skills', 'vault-gardening', 'SKILL.md')));
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('a seeded skill the operator has edited is never overwritten', () => {
+  const d = seeded();
+  try {
+    migrateVault(d);
+    const p = join(d, 'skills', 'vault-gardening', 'SKILL.md');
+    writeFileSync(p, 'HUMAN EDITED SKILL');
+    const second = migrateVault(d);
+    assert.equal(readFileSync(p, 'utf8'), 'HUMAN EDITED SKILL');
+    assert.ok(!second.seeded.includes('vault-gardening'), 'not re-reported as seeded');
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
