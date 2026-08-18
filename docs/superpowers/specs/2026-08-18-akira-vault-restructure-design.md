@@ -146,11 +146,17 @@ data/akira-memory/          # vault root — unchanged path (D3)
 **Migration script (`scripts/`)**
 
 - Create `memory/` and the five domain folders; move the 17 `*.md` notes into
-  `memory/`, leaving `SOUL.md`, `INDEX.md`, and `SOUL.proposed.md` if present at
-  the root.
-- Seed the root `CLAUDE.md`, the root `INDEX.md`, and a stub `INDEX.md` per
-  domain folder.
-- Regenerate `memory/INDEX.md`; commit through the existing git path.
+  `memory/`, leaving `SOUL.md` and `SOUL.proposed.md` if present at the root. A
+  note that cannot be moved (a filename collision with one already in
+  `memory/`) is reported back as stranded rather than silently left invisible.
+- The old root `INDEX.md` is the generated recall index. It is regenerated
+  under `memory/`, and the root instead gets a fresh zone map, seeded
+  alongside `CLAUDE.md` and a stub `INDEX.md` per domain folder.
+- Commits the result — `git add -A` then `git commit`, not a push — run
+  synchronously in the CLI entry only, so the script does not exit before the
+  commit lands. Does not go through `gitCommitPush`, which is async and
+  fire-and-forget by design and would let the CLI exit before its child
+  processes ran.
 - Idempotent: safe to run twice.
 
 ## Testing
@@ -175,8 +181,12 @@ the pattern to extend.
 5. Ops, not code: install Obsidian on the Mini and open
    `/srv/mission-control/data/akira-memory` as a vault.
 
-The `memoryDir()` fallback means steps 1 and 2 can happen in either order
-without breaking reads.
+The `memoryDir()` fallback makes deploy-before-migrate safe: a pre-migration
+vault keeps reading and writing exactly where it always did. Migrate-before-
+restart is **not** safe — a still-running old build reads `vaultDir()` for
+notes, finds the root empty after migration, and a `remember` call during that
+window writes to a root the new build will never look at again. Always restart
+the new build first, then migrate.
 
 ## Open questions
 

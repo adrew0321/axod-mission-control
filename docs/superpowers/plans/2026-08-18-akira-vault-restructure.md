@@ -649,6 +649,17 @@ Expected: FAIL — cannot find module `./migrate-vault`.
 
 - [ ] **Step 3: Write the minimal implementation**
 
+> **Superseded by `d833059`, and again by the final-review fix wave — see the
+> shipped file, not this snippet.** The `writeFileSync` calls for the root
+> `CLAUDE.md` and `INDEX.md` shown below are unconditional; the shipped code
+> guards both with an `alreadyMigrated` check captured *before any mkdir* so a
+> re-run never clobbers an operator's hand-edited root files. The shipped
+> `scripts/migrate-vault.ts` also adds stranded-note detection and a
+> synchronous git commit in the CLI entry that this snippet predates.
+> Re-executing this exact snippet reintroduces the operator-edit clobber the
+> later fix removed. Read `scripts/migrate-vault.ts` for the real
+> implementation.
+
 Create `scripts/migrate-vault.ts`:
 
 ```typescript
@@ -850,4 +861,9 @@ Follow the `ship-mc-feature` workflow for the release itself. Vault-specific ste
 5. Confirm in the HUD that the memory panel no longer reports lessons over budget.
 6. Ops, not code: install Obsidian on the Mini and open `/srv/mission-control/data/akira-memory` as a vault.
 
-The `memoryDir()` fallback from Task 1 means steps 1 and 2 are order-independent.
+The `memoryDir()` fallback from Task 1 makes deploy-before-migrate (steps 1
+then 2, as listed) safe. Migrate-before-restart is **not** safe — a
+still-running old build reads `vaultDir()` for notes, finds the root empty
+after migration, and a `remember` call in that window writes to a root the new
+build will never look at again. Always restart the new build first, then
+migrate.
