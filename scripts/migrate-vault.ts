@@ -51,6 +51,13 @@ See CLAUDE.md for the navigation pattern.
 `;
 
 export function migrateVault(dir: string = vaultDir()): { moved: number; created: string[] } {
+  // Pre-migration, the flat vault's root INDEX.md IS the generated recall
+  // index — safe (in fact required) to replace on the very first run. Once
+  // migrated, memory/ exists and the root INDEX.md is the operator-editable
+  // zone map, which must never be clobbered again. Use memory/'s existence,
+  // captured before we create it below, to tell the two situations apart.
+  const alreadyMigrated = existsSync(join(dir, 'memory'));
+
   const created: string[] = [];
   for (const z of ZONES) {
     const p = join(dir, z);
@@ -71,12 +78,22 @@ export function migrateVault(dir: string = vaultDir()): { moved: number; created
       continue; // a directory entry ending in .md, or unreadable — leave it alone
     }
     if (!isNoteFile(md)) continue; // stray file, not a memory note
-    renameSync(src, join(dir, 'memory', f));
+    const dest = join(dir, 'memory', f);
+    if (existsSync(dest)) continue; // name collision with an existing memory note — never overwrite, leave at root for a human to resolve
+    renameSync(src, dest);
     moved++;
   }
 
-  writeFileSync(join(dir, 'CLAUDE.md'), CLAUDE_MD);
-  writeFileSync(join(dir, 'INDEX.md'), ROOT_INDEX);
+  // CLAUDE.md is new territory — the flat vault never had one — so "write
+  // only when missing" is enough to protect operator edits on every re-run.
+  if (!existsSync(join(dir, 'CLAUDE.md'))) writeFileSync(join(dir, 'CLAUDE.md'), CLAUDE_MD);
+
+  // INDEX.md is trickier: pre-migration it's the stale flat-vault recall
+  // index and must be replaced; post-migration it's the operator-editable
+  // zone map and must never be clobbered again.
+  if (!alreadyMigrated || !existsSync(join(dir, 'INDEX.md'))) {
+    writeFileSync(join(dir, 'INDEX.md'), ROOT_INDEX);
+  }
   for (const z of ZONES) {
     if (z === 'memory') continue; // generated below
     const p = join(dir, z, 'INDEX.md');
