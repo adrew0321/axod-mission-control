@@ -64,39 +64,80 @@ test('indexText excludes lesson notes; lessonsText returns them in full', () => 
     assert.ok(idx.includes('[[mini-is-utc]]'));
     assert.ok(!idx.includes('[[terse-briefs]]')); // lessons are NOT in the memory index
 
-    const lessons = lessonsText(d);
+    const lessons = lessonsText(d).text;
     assert.ok(lessons.includes('A’Keem wants the morning brief in 2 sentences.')); // full body
     assert.ok(!lessons.includes('The Mini runs UTC.')); // non-lessons excluded
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
-test('lessonsText is empty when there are no lessons', () => {
+
+test('memoryDir returns the memory/ subfolder when it exists', () => {
+  const dir = vault();
+  try {
+    mkdirSync(join(dir, 'memory'));
+    assert.equal(memoryDir(dir), join(dir, 'memory'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('memoryDir falls back to the vault root before the migration', () => {
+  const dir = vault();
+  try {
+    assert.equal(memoryDir(dir), dir);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('notes written after the migration land in memory/, not the root', () => {
+  const dir = vault();
+  try {
+    mkdirSync(join(dir, 'memory'));
+    writeNote({ title: 'Zoned', description: 'd', type: 'fact', body: 'b' }, memoryDir(dir));
+    assert.equal(readNote('zoned', memoryDir(dir))?.body, 'b');
+    assert.equal(readNote('zoned', dir), null); // not at the root
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('lessonsText reports what it included and what it dropped', () => {
   const d = vault();
   try {
-    writeNote({ title: 'x', description: 'y', type: 'fact', body: 'z' }, d);
-    assert.equal(lessonsText(d), '');
+    for (let i = 0; i < 6; i++) {
+      writeNote({ title: `L${i}`, description: 'd', type: 'lesson', body: 'x'.repeat(50) }, d);
+    }
+    const out = lessonsText(d, { maxNotes: 100, maxChars: 120 });
+    assert.ok(out.included >= 1, 'at least one lesson always makes it in');
+    assert.equal(out.included + out.dropped, 6);
+    assert.ok(out.dropped > 0, 'the budget is too small for all six');
+    assert.ok(out.text.length > 0);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('lessonsText drops nothing when everything fits', () => {
+  const d = vault();
+  try {
+    writeNote({ title: 'Only', description: 'd', type: 'lesson', body: 'short' }, d);
+    const out = lessonsText(d, { maxNotes: 100, maxChars: 8192 });
+    assert.equal(out.dropped, 0);
+    assert.equal(out.included, 1);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
 test('lessonsText respects the note-count cap, newest first', () => {
   const d = vault();
   try {
-    for (let i = 0; i < 25; i++) {
-      writeNote({ title: `lesson ${i}`, description: `d${i}`, type: 'lesson', body: `body ${i}` }, d);
+    for (let i = 0; i < 8; i++) {
+      writeNote({ title: `N${i}`, description: 'd', type: 'lesson', body: 'body' }, d);
     }
     const out = lessonsText(d, { maxNotes: 5, maxChars: 100_000 });
-    assert.equal((out.match(/body \d+/g) ?? []).length, 5);
+    assert.equal(out.included, 5);
+    assert.equal(out.dropped, 3);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
-test('lessonsText respects the char budget', () => {
+test('lessonsText is empty when there are no lessons', () => {
   const d = vault();
   try {
-    for (let i = 0; i < 10; i++) {
-      writeNote({ title: `L${i}`, description: `d${i}`, type: 'lesson', body: 'x'.repeat(50) }, d);
-    }
-    const out = lessonsText(d, { maxNotes: 100, maxChars: 120 });
-    assert.ok(out.length <= 200); // stops well before all 10 (~500+ chars of bodies)
+    assert.equal(lessonsText(d).text, '');
+    assert.equal(lessonsText(d).included, 0);
+    assert.equal(lessonsText(d).dropped, 0);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 

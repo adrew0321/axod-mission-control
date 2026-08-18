@@ -89,18 +89,25 @@ export function indexText(dir = memoryDir()): string {
   return buildIndex(nonLessonNotes(dir));
 }
 
+export interface LessonsResult {
+  text: string;
+  included: number;
+  dropped: number;
+}
+
 /**
  * Full bodies of the newest lesson notes, as an injectable guidance block.
- * Bounded by BOTH a note count and a char budget (whichever hits first) so
- * AKIRA's context stays lean. Empty string when there are no lessons.
+ * Bounded by BOTH a note count and a char budget (whichever hits first). The
+ * counts are returned so truncation surfaces in the UI instead of happening
+ * silently — pruning is a judgement call for A'Keem and AKIRA, not the code's.
  */
 export function lessonsText(
   dir = memoryDir(),
   opts: { maxNotes?: number; maxChars?: number } = {},
-): string {
+): LessonsResult {
   const maxNotes = opts.maxNotes ?? 20;
-  const maxChars = opts.maxChars ?? 4096;
-  const lessons = listNotes(dir).filter((n) => n.type === 'lesson'); // listNotes is newest-first
+  const maxChars = opts.maxChars ?? 8192;
+  const lessons = listNotes(dir).filter((n) => n.type === 'lesson'); // newest-first
   const blocks: string[] = [];
   let chars = 0;
   for (const n of lessons.slice(0, maxNotes)) {
@@ -109,7 +116,7 @@ export function lessonsText(
     blocks.push(block);
     chars += block.length;
   }
-  return blocks.join('\n\n');
+  return { text: blocks.join('\n\n'), included: blocks.length, dropped: lessons.length - blocks.length };
 }
 
 // --- git: best-effort, ASYNC + serialized. Never blocks the event loop (which

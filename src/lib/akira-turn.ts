@@ -92,7 +92,7 @@ export async function runAkiraTurn(
 
     let preamble = '';
     try {
-      preamble = soulLessonsPreamble(readSoul(), lessonsText());
+      preamble = soulLessonsPreamble(readSoul(), lessonsText().text);
     } catch {
       preamble = soulLessonsPreamble(readSoul(), ''); // lessons unavailable — SOUL still leads
     }
