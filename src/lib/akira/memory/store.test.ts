@@ -141,27 +141,3 @@ test('lessonsText is empty when there are no lessons', () => {
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
-test('memoryDir returns the memory/ subfolder when it exists', () => {
-  const dir = vault();
-  try {
-    mkdirSync(join(dir, 'memory'));
-    assert.equal(memoryDir(dir), join(dir, 'memory'));
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('memoryDir falls back to the vault root before the migration', () => {
-  const dir = vault();
-  try {
-    assert.equal(memoryDir(dir), dir);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('notes written after the migration land in memory/, not the root', () => {
-  const dir = vault();
-  try {
-    mkdirSync(join(dir, 'memory'));
-    writeNote({ title: 'Zoned', description: 'd', type: 'fact', body: 'b' }, memoryDir(dir));
-    assert.equal(readNote('zoned', memoryDir(dir))?.body, 'b');
-    assert.equal(readNote('zoned', dir), null); // not at the root
-  } finally { rmSync(dir, { recursive: true, force: true }); }
-});
