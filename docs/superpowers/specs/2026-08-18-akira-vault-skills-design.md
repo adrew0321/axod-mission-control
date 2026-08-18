@@ -123,6 +123,22 @@ Secondary blockers, had the answer been yes: no folder-exclusion setting (so
 `research/` as its own vault), a Node 24 requirement against the Mini's v22, and
 a CLI mid-migration to a separate repository.
 
+**D10 — AKIRA may write `SOUL.md` and the root `CLAUDE.md` directly.** The first
+draft gated both: SOUL because it already has a PIN-approved proposal flow, and
+the root `CLAUDE.md` because A injects it into every turn as the `## VAULT`
+block. A'Keem's call, 2026-08-18: that is too cautious, and sub-project C
+removes every boundary of this kind anyway, so building a guard here means
+tearing it out in the next slice.
+
+**Consequence, recorded because it is easy to miss:** this makes the existing
+SOUL proposal flow vestigial. `writeSoulProposal` / `readSoulProposal` /
+`clearSoulProposal` and the approve-reject diff view in the memory panel exist so
+AKIRA can propose an identity change and the operator can see the before-and-
+after before accepting. If she can write `SOUL.md` outright she has no reason to
+propose, and that UI stops being reached. Nothing is deleted in this slice — the
+flow still works if she chooses it, and her prompt continues to describe it — but
+it becomes optional rather than the only path.
+
 **D9 — Provisioned by extending `migrate-vault.ts`.** `skills` joins `ZONES` and
 the symlink is created when absent, rather than adding a second script. The
 migration is already idempotent and already runs on deploy.
@@ -154,18 +170,15 @@ below passes. Guards are evaluated against the **real** path — `realpathSync` 
 the parent, then `resolve` — so the `.claude/skills` symlink cannot be used to
 reach a rejected zone by an alternate name.
 
-| Guard | Rejects |
-|---|---|
-| Containment | Any path resolving outside `vaultDir()` — `..`, absolute paths, symlink escapes |
-| `memory/` | Owned by `remember`/`forget`; its `INDEX.md` is code-generated and hand-writing it would be silently overwritten |
-| `SOUL.md`, `SOUL.proposed.md` | PIN-protected identity, with its own approval flow |
-| Root `CLAUDE.md` | Injected into every turn as the `## VAULT` block (A's `vault-map.ts`). Letting her rewrite it freely would give her *more* power over her own standing instructions than she has over SOUL, which requires PIN approval. She may propose changes in chat; the operator edits it in Obsidian. |
-| Non-Markdown | Anything not ending `.md`, so the tool cannot drop executables or configs into the vault |
+| Guard | Rejects | Why it is not caution |
+|---|---|---|
+| Containment | Any path resolving outside `vaultDir()` — `..`, absolute paths, symlink escapes | A tool named `vault_write` writing outside the vault is a bug, not a policy. This guard survives C. |
+| `memory/` | Owned by `remember`/`forget` | Mechanism, not trust. A file written here without the note model fails `isNoteFile` and becomes invisible to `listNotes`; a hand-written `memory/INDEX.md` is silently clobbered by the next `remember`. She already has the correct tool for this zone. |
+| Non-Markdown | Anything not ending `.md` | Keeps the vault a document tree. Cheap, and nothing in this slice needs to write anything else. |
 
 Allowed: every document zone (`projects/`, `ops/`, `research/`, `outputs/`,
-`personal/`), every zone `INDEX.md` including the root one — which A's D4 already
-designates AKIRA-maintained and which is *not* injected into her prompt — and
-`skills/` (D5).
+`personal/`), every `INDEX.md` including the root map, `skills/` (D5), **and
+`SOUL.md` and the root `CLAUDE.md` (D10)**.
 
 Writes are committed through the existing `gitCommitPush`, the same
 fire-and-forget serialized path `remember`/`forget` already use. `vault_write`
@@ -219,7 +232,10 @@ they live in `skills/`, and that she may write new ones.
 
 - **`vault_write` guards carry the real coverage** — one case per row of the
   guard table, plus a symlink-escape attempt through `.claude/skills`, plus the
-  allowed zones. This is the security surface of the slice.
+  allowed zones. Containment is the surface that matters: assert that `..`,
+  absolute paths, and a symlink pointing outside the vault are all rejected, and
+  that `SOUL.md`, the root `CLAUDE.md`, and `skills/` are accepted (D5, D10) so a
+  future tightening cannot happen by accident.
 - **`ensureSkillsLink`** — already-exists and unsupported paths; creation itself
   is only assertable on a POSIX filesystem.
 - **Skill discovery end to end** — against a copy of the live vault, as Task 7
