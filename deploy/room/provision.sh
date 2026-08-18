@@ -53,6 +53,10 @@ lxc exec "$CONTAINER" -- bash -lc '
   set -e
   id akira &>/dev/null || useradd -m -s /bin/bash akira
   mkdir -p /home/akira/workshop && chown -R akira:akira /home/akira
+  # The workshop belongs to the uid the agent runs under — root inside the container,
+  # which the idmap makes the host operator. Left akira-owned, git refuses to operate
+  # on it ("dubious ownership") and nothing she writes reaches the host as his.
+  chown -R root:root /home/akira/workshop
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
   apt-get install -y -qq curl git ca-certificates >/dev/null
@@ -93,7 +97,9 @@ lxc exec "$CONTAINER" -- bash -c 'systemctl daemon-reload && systemctl enable --
 # host. Durability without a public push channel; commits and pushes to it
 # are both ungated (Decision 6).
 WORKSHOP_REMOTE="$HOME/akira-workshop.git"
-if [ ! -d "$WORKSHOP_REMOTE" ]; then
+# Guard on the repository, not the directory: a run that died inside `git init --bare`
+# leaves the directory behind, and a directory test would never re-initialise it.
+if [ ! -d "$WORKSHOP_REMOTE/objects" ]; then
   git init --bare "$WORKSHOP_REMOTE"
   echo "created workshop remote at $WORKSHOP_REMOTE"
 fi
@@ -101,9 +107,13 @@ fi
 lxc config device remove "$CONTAINER" workshop-remote >/dev/null 2>&1 || true
 lxc config device add "$CONTAINER" workshop-remote disk source="$WORKSHOP_REMOTE" path=/mnt/workshop-remote
 
-lxc exec "$CONTAINER" -- sudo -u akira bash -lc '
+# As root, because that is the uid the agent runs under (see akira-room.service) and
+# therefore the uid that has to be able to commit and push. `-d .git` rather than
+# `git rev-parse --git-dir`, which walks UP and would attach origin to an ancestor repo.
+lxc exec "$CONTAINER" -- bash -lc '
+  set -e
   cd /home/akira/workshop
-  git rev-parse --git-dir >/dev/null 2>&1 || git init
+  [ -d .git ] || git init
   git remote get-url origin >/dev/null 2>&1 || git remote add origin /mnt/workshop-remote
   git config user.email "akira@axodcreative.com"
   git config user.name "AKIRA"

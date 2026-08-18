@@ -4,7 +4,13 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=akira
+# Runs as root INSIDE the container, which is not root on the host: raw.idmap maps
+# container uid 0 to the host operator (see provision.sh), so everything the agent
+# writes through the doorway bind mount lands owned by him and opens normally in
+# LibreOffice. That mapping is the spec's control for "her output unopenable", and it
+# applies to uid 0 only — running as an ordinary `akira` user silently defeated it: her
+# writes mapped to host uid 1001001, leaving the doorway read-only to her and the
+# workshop remote unpushable. Do not reintroduce User=akira without remapping the idmap.
 WorkingDirectory=/home/akira/room-agent
 # __TSX__ is substituted by provision.sh with the container's actual tsx path
 # (/usr/bin/tsx when node came from NodeSource). Do not hardcode it here — a wrong
