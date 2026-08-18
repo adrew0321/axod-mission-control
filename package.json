@@ -12,13 +12,14 @@
     "build": "cross-env NODE_ENV=production next build",
     "start": "cross-env NEXT_MANUAL_SIG_HANDLE=true next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/*.test.ts src/lib/akira/*.test.ts src/lib/akira/memory/*.test.ts src/lib/voice/*.test.ts src/lib/companion/*.test.ts companion/src/*.test.ts src/lib/routing/*.test.ts room-agent/src/*.test.ts",
+    "test": "tsx --test src/lib/*.test.ts src/lib/akira/*.test.ts src/lib/akira/memory/*.test.ts src/lib/voice/*.test.ts src/lib/companion/*.test.ts companion/src/*.test.ts src/lib/routing/*.test.ts room-agent/src/*.test.ts scripts/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "seed": "tsx scripts/seed.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
-    "run:turn": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/run-turn.ts"
+    "run:turn": "cross-env NODE_OPTIONS=--conditions=react-server tsx scripts/run-turn.ts",
+    "vault:migrate": "tsx scripts/migrate-vault.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.228",
