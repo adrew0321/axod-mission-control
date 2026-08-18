@@ -898,7 +898,9 @@ cd vaultcheck && tar -xf ../vault.tar
 AKIRA_MEMORY_DIR="<scratchpad>/vaultcheck/akira-memory" pnpm vault:migrate
 ```
 
-Expected: `0 notes moved` (the copy is already migrated by sub-project A), `zones created: skills`, and a `Skills:` line reporting the link outcome and both seeded skills plus `obsidian-markdown`.
+Expected: a `Skills:` line reporting the link outcome and all three skills seeded (`vault-gardening`, `distil-research`, `obsidian-markdown`), plus `skills` among the zones created.
+
+The notes-moved count depends on whether sub-project A has been deployed to the Mini yet. **At the time this plan was written it had not** — A is merged to `dev` but undeployed, so the live vault is still flat and you should expect **17 notes moved** and all six of A's zones created alongside `skills`. If A has since been deployed and migrated, expect `0 notes moved` and only `skills` created. Either is correct; what matters is that the skills zone, the symlink, and the three seeded skills appear.
 
 - [ ] **Step 3: Assert the shape**
 
