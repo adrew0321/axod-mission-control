@@ -79,9 +79,18 @@ generating `memory/INDEX.md` exactly as it does today, and every other
 and thereafter maintained by AKIRA under a convention stated in the vault
 `CLAUDE.md`. No new generator is built.
 
-**D5 — `personal/` is committed, not ignored.** The remote is private. Ignoring
-it would mean the one irreplaceable zone is the only one without backup. Stated
-here so it is a decision rather than a default.
+**D5 — `personal/` is committed, not ignored.** Confirmed by A'Keem 2026-08-18:
+the `adrew0321/akira-memory` remote is private, and that is sufficient. Ignoring
+`personal/` would leave the one irreplaceable zone as the only one without
+backup. A separate remote for `personal/` alone was considered and not taken —
+it would mean a submodule inside the vault, which Obsidian handles poorly and
+which the async git queue in `store.ts` does not understand.
+
+**D6 — `projects/` mirrors the `projects` table by id.** Confirmed by A'Keem
+2026-08-18. Each folder is named for the project id, giving AKIRA a reliable
+join between vault knowledge and live fleet state; the human-readable title
+lives in that folder's `INDEX.md`. Projects arriving by companion ingestion get
+their folder created on first write, not eagerly.
 
 ## Vault shape
 
@@ -94,7 +103,7 @@ data/akira-memory/          # vault root — unchanged path (D3)
   memory/                   # AKIRA-owned. Existing note model, untouched.
     INDEX.md                #   recall index (generated)
     <slug>.md
-  projects/                 # per-project knowledge, mirrors the projects table
+  projects/<project-id>/    # per-project knowledge, keyed by projects.id (D6)
   ops/                      # runbooks, topology, backup chain, incidents
   research/                 # raw captures distilled into wiki pages
   outputs/                  # specs, plans, reports worth finding again
@@ -171,10 +180,6 @@ without breaking reads.
 
 ## Open questions
 
-- Does `projects/` mirror the `projects` table by id, or is it hand-organised?
-  Mirroring gets AKIRA a reliable join between vault knowledge and fleet state;
-  hand-organising is friendlier to read. Recommend mirroring by project id with
-  a human-readable title in each folder's `INDEX.md`.
 - The 15 lessons will keep growing. Raising the cap to 8192 buys room, not a
   policy. Whether lessons eventually need tiering (always-on vs situational) is
   a question for sub-project D, once run logs exist to score them against.
