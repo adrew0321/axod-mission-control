@@ -22,11 +22,15 @@ test('readVaultMap is empty when there is no CLAUDE.md', () => {
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
-test('readVaultMap truncates an oversized map', () => {
+test('readVaultMap truncates an oversized map (trim-before-slice order)', () => {
   const d = vault();
   try {
-    writeFileSync(join(d, 'CLAUDE.md'), 'y'.repeat(9000));
-    assert.equal(readVaultMap(d, 4096).length, 4096);
+    // Pad with spaces beyond the cap boundary to validate trim happens before slice
+    writeFileSync(join(d, 'CLAUDE.md'), '  ' + 'y'.repeat(9000) + '  ');
+    const result = readVaultMap(d, 4096);
+    // Both: result is capped at 4096 AND trim removed the leading spaces
+    assert.equal(result.length, 4096);
+    assert.equal(result[0], 'y'); // First char should be 'y', not a space
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
