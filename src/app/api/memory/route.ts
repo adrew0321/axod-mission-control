@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { verifyPin } from '@/lib/akira/memory/pin';
 import { pinLimiter } from '@/lib/akira/memory/pin-limiter';
-import { listNotes, vaultReady } from '@/lib/akira/memory/store';
+import { listNotes, lessonsText, vaultReady } from '@/lib/akira/memory/store';
 import { readSoul, readSoulProposal } from '@/lib/akira/memory/soul';
 
 export const runtime = 'nodejs';
@@ -23,9 +23,16 @@ export async function POST(req: Request) {
     return Response.json({ error: 'Wrong PIN' }, { status: 401 });
   }
   pinLimiter.recordSuccess();
-  if (!vaultReady()) return Response.json({ notes: [], soul: readSoul(), soulProposal: null });
+  if (!vaultReady()) {
+    return Response.json({ notes: [], soul: readSoul(), soulProposal: null, lessonsDropped: 0 });
+  }
   const notes = listNotes().map(({ slug, title, description, type, updated }) => ({
     slug, title, description, type, updated,
   }));
-  return Response.json({ notes, soul: readSoul(), soulProposal: readSoulProposal() });
+  return Response.json({
+    notes,
+    soul: readSoul(),
+    soulProposal: readSoulProposal(),
+    lessonsDropped: lessonsText().dropped,
+  });
 }
