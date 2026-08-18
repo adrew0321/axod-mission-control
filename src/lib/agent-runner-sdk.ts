@@ -61,6 +61,19 @@ export interface RunAgentOptions {
    */
   extraEnv?: Record<string, string>;
   /**
+   * Extra working-directory roots. The SDK reloads CLAUDE.md, skills, and
+   * plugins from each. AKIRA uses this to reach her vault's skills — the vault
+   * is a strict subdirectory of her cwd, which is what makes it addressable.
+   */
+  additionalDirectories?: string[];
+  /**
+   * Skills to enable. `'all'` enables every discovered skill; an array is an
+   * allowlist matching each SKILL.md `name`. Per the SDK, this is the single
+   * place skills are turned on — do NOT also add `'Skill'` to `allowedTools`.
+   * Omitted means "no SDK opinion", which is not the same as off.
+   */
+  skills?: string[] | 'all';
+  /**
    * Reasoning effort for this agent. Lower effort means fewer, more consolidated
    * tool calls and less preamble — the main latency and token lever we have that
    * doesn't change the model.
@@ -106,6 +119,8 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
     mcpServers,
     extraAllowedTools,
     extraEnv,
+    additionalDirectories,
+    skills,
     effort,
     maxTurns,
     maxBudgetUsd,
@@ -160,6 +175,8 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         ...(maxBudgetUsd ? { maxBudgetUsd } : {}),
         ...(mcpServers ? { mcpServers } : {}),
         ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}),
+        ...(additionalDirectories?.length ? { additionalDirectories } : {}),
+        ...(skills ? { skills } : {}),
         abortController,
       },
     });
