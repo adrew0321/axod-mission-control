@@ -24,6 +24,7 @@ import { type TranscriptMessage } from './conversation';
 import { indexText, gitPullDebounced, lessonsText } from './akira/memory/store';
 import { readSoul } from './akira/memory/soul';
 import { soulLessonsPreamble } from './akira/preamble';
+import { readVaultMap, vaultBlock } from './akira/memory/vault-map';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
 import { ROOM_TOOL_NAMES } from './akira/room-tools';
@@ -84,10 +85,18 @@ export async function runAkiraTurn(
     try {
       const idx = indexText();
       memoryBlock = idx
-        ? `\n\n## MEMORY\nNotes you've saved (read one with your Read tool at data/akira-memory/<slug>.md):\n${idx}`
+        ? `\n\n## MEMORY\nNotes you've saved (read one with your Read tool at data/akira-memory/memory/<slug>.md):\n${idx}`
         : `\n\n## MEMORY\n(empty — save durable facts with the remember tool)`;
     } catch {
       memoryBlock = '';
+    }
+
+    let vaultMapBlock = '';
+    try {
+      const block = vaultBlock(readVaultMap());
+      vaultMapBlock = block ? `\n\n${block}` : '';
+    } catch {
+      vaultMapBlock = ''; // an unreadable map must never break a turn
     }
 
     let preamble = '';
@@ -101,6 +110,7 @@ export async function runAkiraTurn(
       preamble + '\n\n' +
       buildAkiraPrompt(snapshot, roster, transcript, agentLabels) +
       memoryBlock +
+      vaultMapBlock +
       `\n\n## LAPTOP COMPANION\n${companionOnline()
         ? 'The laptop companion is CONNECTED — you may use browser_navigate/read/type/click. Work read→act→read. State the task and let the operator approve before starting; never retry a gated (blocked) action — wait for approval.'
         : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
