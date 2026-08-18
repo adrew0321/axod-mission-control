@@ -150,7 +150,7 @@ is closed at those hours and the companion is offline by definition.
 | Shell does damage | Container is the blast radius; `lxc restore` from snapshot |
 | Reaching personal files | Doorway is the only mount; rest of `/home/akeem` invisible |
 | Reaching prod | No route from room to `/srv/mission-control` or its database |
-| Her output unopenable | uid mapping on the bind mount so LibreOffice can open her files |
+| Her output unopenable | uid mapping on the bind mount so LibreOffice can open her files — **only works while the agent runs as container root**, which the idmap makes the operator; slice 1 ran it as `User=akira` and this control did nothing until v1.22.0 |
 | Desktop takes down prod | Prod is a separate systemd service under a separate user |
 | **Box sleeps, prod vanishes** | **Mask `sleep.target suspend.target hibernate.target hybrid-sleep.target`** — GNOME defaults to suspend-on-idle and would take `bridge.axodcreative.com` offline |
 | Desktop install drops SSH | `ubuntu-desktop` pulls NetworkManager; verify netplan renderer stays `networkd` before reboot |
@@ -233,10 +233,13 @@ Taken before writing the slice 2 plan. Measured first: the room today reaches `g
 |---|---|---|
 | **0** | Desktop install; sleep targets masked; netplan renderer verified; dev clone split from `/srv` | Operator's daily driver; prerequisite for the rest |
 | **1** | Room container; doorway + bind mount + uid mapping; room agent on the companion protocol; `registry.ts` target refactor; scoped `Write` | Workshop. Resume minus conversion. |
-| **2** | Gated `Bash`; doorway watcher; proposal emission | Resume complete, end to end |
+| **2** ✅ | Gated `Bash`; doorway watcher; proposal emission | Resume complete, end to end |
 | **3** | Chrome + Xvfb in the room; browser tools targeting `room` | Library; browsing at 03:00 |
 
 Slice 0 is ops with no code and no release. Slices 1–3 each end in a release and a deploy.
+
+**Shipped:** slice 0 and slice 1 as **v1.21.0** (2026-08-14); slice 2 as **v1.22.0** (2026-08-18) —
+see "Slice 2 — EXECUTED" in `docs/runbook-mini-desktop.md` for what the deploy found. Slice 3 remains.
 
 **Plan boundary:** the implementation plan drawn from this spec covers **slice 0 and slice 1 only**.
 Slices 2 and 3 depend on decisions that are cheaper to make once the room exists and has been lived in
@@ -274,14 +277,23 @@ because nothing in slice 1 can reach it — AKIRA has exactly `fs_list`/`fs_read
 **Slice 2 lands gated `Bash`, which is precisely what makes all three reachable**, so they are that
 slice's entry cost, not optional hardening.
 
-1. **Resolve symlinks before acting on a path.** `room-agent/src/paths.ts` is pure path math and
+1. ~~**Resolve symlinks before acting on a path.**~~ **DONE in slice 2 (v1.22.0)** —
+   `room-agent/src/paths-real.ts` resolves the parent with `fs.realpath` before any read or write,
+   and `paths-real.test.ts` covers the escape attempts. The framing below still holds: the
+   load-bearing control is the LXD mount namespace, and this gate is defence in depth *inside*
+   the room.
+   `room-agent/src/paths.ts` is pure path math and
    cannot see a symlink planted inside the room or doorway that points outside them. Today no protocol
    action can create one. Once `Bash` exists, `execFs` must resolve links — `fs.realpath` on the parent,
    or `O_NOFOLLOW` — before it reads or writes. Note the load-bearing control remains the LXD mount
    namespace (prod and `/home/akeem` are simply not in the container); the path gate is defence in depth
    *inside* the room, and should be described that way rather than as the boundary itself.
 
-2. **Give the room its own token.** *(Promoted to a blocker by Decision 5 — this lands before `Bash`,
+2. ~~**Give the room its own token.**~~ **DONE in slice 2 (v1.22.0), and verified on the Mini** —
+   `ROOM_COMPANION_TOKEN` is a separate secret checked against the target the connection claims.
+   The room's credential presented at `?target=laptop` returns 401 in production. Equal values fail
+   closed: the room cannot connect at all, rather than silently falling back to the shared secret.
+   *(Promoted to a blocker by Decision 5 — this lands before `Bash`,
    not alongside it.)* `verifyCompanionToken` checks one shared secret, so slice 1 requires
    `ROOM_TOKEN === COMPANION_TOKEN` and the two zones authenticate as the same principal. A compromised
    room could therefore connect as `?target=laptop`, displace the operator's real companion (the registry

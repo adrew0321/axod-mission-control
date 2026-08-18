@@ -304,3 +304,67 @@ invisible to the generator at that point, since it never had a snapshot to
 diff from. Regenerating blind is likely to emit a duplicate
 `CREATE TABLE room_proposals`. Check the live schema (or this migration's
 SQL) before trusting a freshly generated migration in that range.
+
+## Slice 2 — EXECUTED 2026-08-18
+
+Released as **v1.22.0** (`main` db7de32, tag `v1.22.0`) and deployed the same night.
+Snapshot of the working room: **`clean-slice2`**.
+
+Applied in this order:
+
+1. Copied the live DB to `data/pre-v1.22.0.db`, then `git pull --ff-only origin main`
+   in `/srv/mission-control`.
+2. **No `pnpm install`** — the release changed no dependency. Running it would have
+   prompted to purge `node_modules` and taken the hand-compiled `better-sqlite3`
+   binding with it.
+3. `pnpm db:migrate` — migration **0014**, `room_proposals`. A plain `CREATE TABLE`,
+   so none of the table-rebuild ceremony applied.
+4. `ROOM_COMPANION_TOKEN` minted with `openssl rand -hex 32`, appended to
+   `/srv/mission-control/.env`, then `systemctl restart mission-control`.
+5. `pnpm seed` — AKIRA's prompt lives in the database and slice 2 rewrote it. Confirmed
+   by querying `agents.system_prompt`, not by trusting the seed's exit code.
+6. `bash deploy/room/provision.sh` from `~/code/axod-mission-control`, then
+   `systemctl restart akira-room` inside the container.
+
+Note step 3: `pnpm -C /srv/mission-control db:migrate` does **not** work. Corepack
+resolves the package-manager spec from the *current* directory, which is the operator's
+home, and `mc` cannot read it — it fails with a bare `EACCES … /home/akeem/package.json`.
+Use `sudo -n -u mc bash -lc "cd /srv/mission-control && pnpm …"`.
+
+Verified: health `1.22.0` / `db:ok`, root route 200, `systemctl --failed` empty,
+`room_proposals` present, `[room] connected to http://10.138.75.1:3000` with both
+watcher lines, `/srv` empty and `/home` free of `akeem` inside the container, and the
+room's own token at `?target=laptop` returning **401**.
+
+### Two things the deploy found that the build could not
+
+**The provisioner was writing the wrong secret.** It read `COMPANION_TOKEN` and wrote it
+as the container's `ROOM_TOKEN` — precisely the value Mission Control now refuses, so
+every re-provision would have produced a room that could not connect. Fixed before the
+release: it reads `ROOM_COMPANION_TOKEN` and refuses to run when that is unset or equal
+to `COMPANION_TOKEN`. This also deleted the hand-editing of the container's `.env` that
+this runbook used to describe, and means the secret never has to be pasted anywhere —
+the provisioner reads it from the live `.env` itself.
+
+**The agent was running as the wrong user, and had been since slice 1.** `raw.idmap` maps
+container *root* to the operator, but `akira-room.service` ran the agent as `User=akira`,
+whose writes map to host uid 1001001. Measured here: `akira` could not write to
+`~/AKIRA/inbox`, `~/AKIRA/playground`, or the workshop remote. Slice 2's core loop —
+write your results back into the doorway — could not have worked, and neither could
+`git push` or installing a package. Fixed by dropping `User=` so the agent runs as root
+*inside* the container, which the idmap makes the unprivileged host operator rather than
+host root. After the change, a file written through the doorway arrives
+`-rw-r--r-- akeem akeem`, and the push to `~/akira-workshop.git` succeeds while the bare
+repo stays entirely operator-owned on the host.
+
+Both fixes are on `dev` (`994e102`) and are **not** in the `v1.22.0` tag. That is safe
+because provisioning runs from `~/code/axod-mission-control`, which tracks `dev`; the
+live app dir never executes these scripts.
+
+### The workshop repo is not backed up
+
+`~/akira-workshop.git` makes her work survive a *container rebuild*, which is all
+Decision 6 claims. It is not in the backup chain: `deploy/mc-backup.sh` copies exactly
+one file — the SQLite DB — into `/srv/backups`, and the offsite job ships only
+`/srv/backups` to R2. Moving the repo under `/srv` would not change that. Surviving the
+loss of the Mini itself needs a `git bundle` step added to the nightly backup.
