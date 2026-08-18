@@ -13,7 +13,15 @@ export function readVaultMap(dir: string = vaultDir(), maxChars = DEFAULT_MAX_CH
   const p = join(dir, VAULT_MAP_FILE);
   if (!existsSync(p)) return '';
   try {
-    return readFileSync(p, 'utf8').trim().slice(0, maxChars);
+    const trimmed = readFileSync(p, 'utf8').trim();
+    if (trimmed.length <= maxChars) return trimmed;
+    // Cut at the last newline before the cap rather than mid-line, so a
+    // truncated Markdown code fence can't visually swallow the rest of an
+    // injected prompt block. Fall back to the hard slice when there is no
+    // newline to cut at (e.g. one very long unbroken line).
+    const slice = trimmed.slice(0, maxChars);
+    const lastNewline = slice.lastIndexOf('\n');
+    return lastNewline > 0 ? slice.slice(0, lastNewline) : slice;
   } catch {
     return ''; // unreadable map must never break a turn
   }

@@ -141,3 +141,16 @@ test('lessonsText is empty when there are no lessons', () => {
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 
+test('lessonsText still includes an oversized first lesson rather than producing an empty block', () => {
+  const d = vault();
+  try {
+    // The body alone blows the budget. The `&& blocks.length > 0` guard is
+    // what stops this from producing a `## LESSONS` block with nothing in it.
+    writeNote({ title: 'Huge', description: 'd', type: 'lesson', body: 'x'.repeat(500) }, d);
+    const out = lessonsText(d, { maxNotes: 100, maxChars: 50 });
+    assert.equal(out.included, 1, 'the oversized first lesson is admitted anyway');
+    assert.equal(out.dropped, 0);
+    assert.ok(out.text.length > 0);
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+

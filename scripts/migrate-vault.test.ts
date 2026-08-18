@@ -100,10 +100,27 @@ test('migrateVault does not overwrite a memory/ note when a same-named note alre
 
     assert.equal(out.moved, 1, 'only the non-colliding note (hold-when-told.md) should be counted as moved');
     assert.ok(existsSync(join(d, 'forge-mc-designs.md')), 'the colliding root file must be left in place, not clobbered or lost');
+    assert.deepEqual(out.stranded, ['forge-mc-designs.md'], 'the collision skip must surface as a stranded note, not vanish silently');
     assert.match(
       readFileSync(join(d, 'memory', 'forge-mc-designs.md'), 'utf8'),
       /Existing memory copy/,
       'the pre-existing memory/ note must not be overwritten',
     );
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('migrateVault reports no stranded notes when memory/ pre-exists empty', () => {
+  const d = seeded();
+  try {
+    // An operator creating an empty memory/ folder in Obsidian before
+    // migrating must not shadow the notes still waiting to move into it.
+    mkdirSync(join(d, 'memory'), { recursive: true });
+
+    const out = migrateVault(d);
+
+    assert.equal(out.moved, 2, 'both notes must still move into the pre-existing empty memory/');
+    assert.ok(existsSync(join(d, 'memory', 'hold-when-told.md')));
+    assert.ok(existsSync(join(d, 'memory', 'forge-mc-designs.md')));
+    assert.deepEqual(out.stranded, [], 'nothing should be left stranded at the root');
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
