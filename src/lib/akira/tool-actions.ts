@@ -15,6 +15,12 @@ export const AKIRA_FORGET = 'mcp__akira__forget';
 
 export interface AkiraToolContext {
   emit: (e: { type: string; [k: string]: unknown }) => void;
+  /** True iff an operator-facing surface (the HUD, via a real SSE `emit`) is
+   *  attached to this turn and can see a `hard_gate` card. False for headless
+   *  turns — e.g. a doorway-triggered turn (runRoomTurn) — where `emit` is a
+   *  no-op and a gate would have nobody to answer it. Explicit rather than
+   *  inferred, so a tool never has to guess from the shape of `emit` itself. */
+  watched?: boolean;
 }
 
 export type ToolResult = { content: { type: 'text'; text: string }[]; isError?: boolean };

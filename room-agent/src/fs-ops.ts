@@ -1,9 +1,12 @@
 // Executes fs_* commands inside the room. Every path goes through the gate first;
 // a rejected path returns status 'blocked' (the same shape guard.ts produces for
-// the browser), never an exception.
+// the browser), never an exception. The gate also resolves symlinks (paths-real.ts),
+// so the `abs` it returns is the link-resolved path, not necessarily the literal one
+// requested — every fs call below operates on that resolved path.
 import { readFile, writeFile, readdir, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { validatePath, type Roots } from './paths';
+import { type Roots } from './paths';
+import { validatePathReal } from './paths-real';
 import type { Command, Result } from './protocol';
 
 export const MAX_READ_BYTES = 256 * 1024;
@@ -13,7 +16,7 @@ export async function execFs(roots: Roots, cmd: Command): Promise<Result> {
     return { id: cmd.id, status: 'error', reason: `unsupported action: ${cmd.action}` };
   }
 
-  const verdict = validatePath(roots, cmd.path ?? '');
+  const verdict = await validatePathReal(roots, cmd.path ?? '');
   if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
   const abs = verdict.abs;
 

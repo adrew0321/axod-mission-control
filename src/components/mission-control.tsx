@@ -49,6 +49,7 @@ import TaskBoardView from "@/components/task-board-view";
 import type { BoardColumns } from "@/lib/task-board";
 import ProposalsView from "@/components/proposals-view";
 import type { Proposal } from "@/lib/proposals";
+import type { RoomProposal } from "@/lib/room-proposals";
 import SkillsView from "@/components/skills-view";
 import type { AgentSkills } from "@/lib/skills";
 import SchedulerView from "@/components/scheduler-view";
@@ -69,6 +70,7 @@ export interface MissionControlProps {
   initialLiveFeedEvents: LiveFeedEvent[];
   initialTaskBoard: BoardColumns;
   initialProposals: Proposal[];
+  initialRoomProposals: RoomProposal[];
   initialSkills: AgentSkills[];
   initialSchedules: ScheduleRow[];
   initialDreams: DreamView[];
@@ -268,6 +270,7 @@ export default function MissionControl({
   initialLiveFeedEvents,
   initialTaskBoard,
   initialProposals,
+  initialRoomProposals,
   initialSkills,
   initialSchedules,
   initialDreams,
@@ -308,6 +311,13 @@ export default function MissionControl({
     const res = await fetch(`/api/proposals`);
     if (res.ok) setProposals((await res.json()) as Proposal[]);
   };
+
+  const [roomProposals, setRoomProposals] = useState<RoomProposal[]>(initialRoomProposals);
+
+  const refreshRoomProposals = useCallback(async () => {
+    const res = await fetch(`/api/room-proposals`);
+    if (res.ok) setRoomProposals((await res.json()) as RoomProposal[]);
+  }, []);
 
   // Proposal notifications: a tab-title count + a toast when a NEW proposal arrives.
   const prevProposalCount = useRef(initialProposals.length);
@@ -989,7 +999,7 @@ export default function MissionControl({
           activeSectionId={activeSection}
           onSectionChange={setActiveSection}
           onLogout={handleLogout}
-          counts={{ proposals: proposals.length }}
+          counts={{ proposals: proposals.length + roomProposals.length }}
         />
 
         {activeSection === "memory" ? (
@@ -1008,8 +1018,10 @@ export default function MissionControl({
         ) : activeSection === "proposals" ? (
           <ProposalsView
             proposals={proposals}
+            roomProposals={roomProposals}
             onSelectSession={handleSelectSession}
             onRefresh={refreshProposals}
+            onRefreshRoom={refreshRoomProposals}
           />
         ) : activeSection === "task-board" ? (
           <TaskBoardView

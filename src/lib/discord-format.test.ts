@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chunkReply } from './discord-format';
+import { chunkReply, roomProposalEmbed } from './discord-format';
 
 test('short text → single chunk', () => {
   assert.deepEqual(chunkReply('hello'), ['hello']);
@@ -115,4 +115,35 @@ test('proposalResultEmbed: color + text per kind', () => {
   assert.match(String(proposalResultEmbed('conflict').title), /conflict/i);
   assert.equal(proposalResultEmbed('conflict').color, 0xf59e0b);
   assert.match(String(proposalResultEmbed('stale').title), /already resolved/i);
+});
+
+const drop = {
+  id: 'rprop_abc',
+  zone: 'inbox' as const,
+  name: 'resume.docx',
+  path: '/mnt/doorway/inbox/resume.docx',
+  sizeBytes: 42_000,
+  ext: 'docx',
+  head: '(binary docx file)',
+  summary: 'resume.docx · docx · 41.0 KB',
+  status: 'open' as const,
+  createdAt: '2026-08-15T09:30:00.000Z',
+};
+
+test('a room proposal embed names the file and where it landed', () => {
+  const e = roomProposalEmbed(drop);
+  assert.match(e.title ?? '', /resume\.docx/);
+  assert.match(JSON.stringify(e), /inbox/i);
+  assert.match(e.description ?? '', /41\.0 KB/);
+});
+
+test('the embed carries the path so it can be opened without the UI', () => {
+  assert.match(JSON.stringify(roomProposalEmbed(drop)), /\/mnt\/doorway\/inbox\/resume\.docx/);
+});
+
+test('a room proposal embed sets a color, like every sibling embed', () => {
+  // roomProposalEmbed was the one embed builder that left color unset,
+  // leaving it Discord's default grey instead of matching the rest of the
+  // bot's visual language.
+  assert.equal(roomProposalEmbed(drop).color, 0x3b82f6);
 });

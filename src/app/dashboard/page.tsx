@@ -10,6 +10,7 @@ import { getOrCreateActiveSession } from "@/lib/active-project";
 import { getLiveFeed } from "@/lib/live-feed";
 import { getTaskBoard } from "@/lib/task-board-data";
 import { getProposals } from "@/lib/proposals-data";
+import { getOpenRoomProposals } from "@/lib/room-proposals-data";
 import { getSkills } from "@/lib/skills-data";
 import { getSchedules } from "@/lib/schedules-data";
 import { getDreams } from "@/lib/dreams-data";
@@ -204,6 +205,7 @@ export default async function DashboardPage() {
   const liveFeedEvents = await getLiveFeed();
   const initialTaskBoard = await getTaskBoard(project.id);
   const initialProposals = await getProposals();
+  const initialRoomProposals = await getOpenRoomProposals();
   const initialSkills = await getSkills();
   const initialSchedules = await getSchedules();
   const initialDreams = await getDreams();
@@ -227,6 +229,7 @@ export default async function DashboardPage() {
       initialLiveFeedEvents={liveFeedEvents}
       initialTaskBoard={initialTaskBoard}
       initialProposals={initialProposals}
+      initialRoomProposals={initialRoomProposals}
       initialSkills={initialSkills}
       initialSchedules={initialSchedules}
       initialDreams={initialDreams}

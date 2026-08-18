@@ -29,7 +29,12 @@ export function registerCompanion(s: CompanionSink, target: CompanionTarget = 'l
   sinks.get(target)?.close?.();
   sinks.set(target, s);
   return () => {
-    if (sinks.get(target) === s) sinks.delete(target);
+    // A displaced stream's cleanup can run after its replacement is already
+    // live. Everything below belongs to *this* sink's connection, so if we are
+    // no longer the registered sink there is nothing here to tear down — and
+    // rejecting would kill the live connection's in-flight commands.
+    if (sinks.get(target) !== s) return;
+    sinks.delete(target);
     // Fail only this target's in-flight commands — never silently hang, and never
     // take down the other machine's work.
     for (const [id, p] of pending) {
@@ -71,9 +76,12 @@ export function sendCommand(
   return { id, result };
 }
 
-export function resolveResult(r: Result): void {
+export function resolveResult(r: Result, target?: CompanionTarget): void {
   const p = pending.get(r.id);
   if (!p) return;
+  // When the caller knows which machine posted this result, a result may only
+  // settle a command that was dispatched to that same machine.
+  if (target && p.target !== target) return;
   clearTimeout(p.timer);
   pending.delete(r.id);
   p.resolve(r);

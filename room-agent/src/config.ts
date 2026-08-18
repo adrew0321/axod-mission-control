@@ -8,6 +8,8 @@ export interface RoomConfig {
 }
 
 export function loadConfig(): RoomConfig {
+  // ROOM_TOKEN is the room's OWN credential (Mission Control checks it against
+  // ROOM_COMPANION_TOKEN). It is deliberately not the laptop companion's token.
   const token = process.env.ROOM_TOKEN ?? '';
   if (!token) throw new Error('ROOM_TOKEN is required (set it in room-agent/.env)');
   return {

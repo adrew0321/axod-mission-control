@@ -162,9 +162,70 @@ Taken as defaults on 2026-08-13; each is cheap to revisit.
 1. **LXD** over Docker or systemd-nspawn. Snapshots are first-class, it behaves like a machine rather
    than a process — correct for a long-lived workspace — and uid mapping is well-trodden.
 2. **Unrestricted network egress** from the room initially. She needs it for `pandoc` and browsing.
-   Allowlisting is the obvious hardening step if it ever proves necessary.
+   ~~Allowlisting is the obvious hardening step if it ever proves necessary.~~ **Superseded by
+   Decision 4 (2026-08-15):** allowlisting was examined and rejected — it would delete slice 3's whole
+   purpose, and it does not hold once a shell and a browser share a container. The hardening went into
+   emptying the room instead.
 3. **Slice 0 is done at the machine**, monitor and keyboard attached — not blind over SSH. It is the
    one step with a real chance of dropping the network on a headless box.
+
+## Slice 2 — decisions (2026-08-15)
+
+Taken before writing the slice 2 plan. Measured first: the room today reaches `github.com` and
+`pypi.org` directly (HTTP 200 from inside the container), while `/srv` is empty and `/home` holds only
+`akira` and `ubuntu`. Egress is wide open; the isolation invariant holds.
+
+4. **Egress stays open — Decision 2 is reaffirmed, with its reasoning made explicit.** Closing it was
+   considered and rejected. Slice 3 puts Chrome *in the room* precisely so she can browse at 03:00 when
+   the laptop is closed and the companion is offline by definition; default-deny egress would delete
+   that capability outright. Nor would a wall hold: once a shell and a browser are co-resident, any
+   route the browser can take the shell can take too. Per-uid netfilter rules could separate them, but
+   that is machinery well beyond this slice, and everything cheaper — parsing command strings, proxy
+   environment variables — only *looks* like control, which is worse than none because it invites
+   trust it cannot earn.
+
+   **The control therefore moves from "can she reach the network" to "is there anything here worth
+   sending."** The realistic threat is not an adversarial AKIRA; it is prompt injection carried in
+   something she reads — a web page, or a file dropped in `inbox/` — and accidents. Both are answered
+   by an empty room plus an audit trail, not by a firewall.
+
+5. **Per-target companion tokens land BEFORE `Bash` does.** Previously carried as slice 2
+   prerequisite #2 and treated as hardening; Decision 4 promotes it to a blocker. Slice 1 requires
+   `ROOM_TOKEN === COMPANION_TOKEN`, so the room holds the shared secret that authenticates the
+   *laptop* — the machine carrying the operator's logged-in browser sessions. Without a shell that
+   secret is unreachable; with one it is a file she can read. The room must hold a credential that is
+   useless anywhere but the room.
+
+6. **The workshop remote is a bare repo on the Mini, not a public host.** Resolves the open question
+   "private remote, or is a snapshot sufficient?" — a local bare repo (e.g. `/srv/akira-workshop.git`,
+   outside the container, reachable over the bridge) delivers what the remote was for: her work
+   survives a container rebuild and its history is inspectable. It adds no public push channel, so the
+   durability story does not quietly become an exfiltration story. Mirroring it offsite stays an
+   operator action, out of band.
+
+   Consequently **commits and pushes are both ungated**: a push now travels to a repo on the same box
+   the room already talks to, and gating it would spend the operator's attention on a non-event.
+
+7. **`Bash` hard-gates exactly one thing: long-running or unbounded processes.** The Mini also hosts
+   prod, so a runaway process is the one thing in the room that can reach out and hurt something the
+   operator cares about. Everything else runs free — the room is hers to break, and `lxc restore`
+   makes breaking it cheap. Gating by "irreversible-looking command" is explicitly rejected for the
+   reasons in Decision 4.
+
+   **Doorway writes are deliberately NOT gated**, in `Bash` or anywhere else. An earlier draft gated
+   them and was wrong: slice 1 already ships ungated `fs_write` to the doorway — it is how she replies
+   to the operator, and the shipped verification step is literally "write `reply.txt` in the inbox."
+   Gating the same action in one tool and not the other would buy nothing (she would reach for
+   `fs_write` without even trying to evade) while making the model incoherent. **The folder carries the
+   permission**, and that rule survives the arrival of a shell intact.
+
+8. **Every shell command is logged where the operator can read it.** Detection is the primary control
+   under Decision 4, so the log is load-bearing rather than diagnostic.
+
+9. **Workshop output is reviewed through the existing proposal surface** — proposals table, proposal
+   summaries in the UI, Discord embeds from the ~30s poller. Resolves the open question. For non-code
+   artifacts the proposal carries a short text summary and a path; opening it is an ordinary file read.
+   No rendered preview and no new review surface in slice 2.
 
 ## Slices
 
@@ -199,10 +260,12 @@ Following `pnpm test` convention — `node:test` via `tsx`, extensionless import
 - ~~Does the room agent reconnect cleanly across container restarts, or does it need the displacement
   handling that `stream-lifecycle.ts` added for the laptop companion?~~ **Answered by slice 1's build —
   it needs it, and the mechanism is now known.** See "Carried into slice 2" below.
-- Should the workshop repo have a git remote (private, like `akira-memory`) so her work survives a
-  container rebuild, or is a snapshot sufficient? Leaning remote, for the same reason the vault has one.
-- How does the operator review her workshop output — the existing proposal/diff surface, or something
-  new? Prefer reusing the proposal surface; confirm it renders non-code artifacts acceptably.
+- ~~Should the workshop repo have a git remote (private, like `akira-memory`) so her work survives a
+  container rebuild, or is a snapshot sufficient?~~ **Resolved 2026-08-15 — Decision 6.** A remote,
+  but a bare repo on the Mini rather than a public host.
+- ~~How does the operator review her workshop output — the existing proposal/diff surface, or something
+  new?~~ **Resolved 2026-08-15 — Decision 9.** Reuse the proposal surface; non-code artifacts carry a
+  summary and a path rather than a rendered preview.
 
 ## Carried into slice 2
 
@@ -218,14 +281,16 @@ slice's entry cost, not optional hardening.
    namespace (prod and `/home/akeem` are simply not in the container); the path gate is defence in depth
    *inside* the room, and should be described that way rather than as the boundary itself.
 
-2. **Give the room its own token.** `verifyCompanionToken` checks one shared secret, so slice 1 requires
+2. **Give the room its own token.** *(Promoted to a blocker by Decision 5 — this lands before `Bash`,
+   not alongside it.)* `verifyCompanionToken` checks one shared secret, so slice 1 requires
    `ROOM_TOKEN === COMPANION_TOKEN` and the two zones authenticate as the same principal. A compromised
    room could therefore connect as `?target=laptop`, displace the operator's real companion (the registry
    closes the displaced sink), and receive browser commands intended for the machine that holds his
    logged-in sessions. Unreachable by AKIRA in slice 1 — she has no shell and no path to the token — but
    a shell changes that. Fix: a per-target secret, checked against the target the connection claims.
 
-3. **Guard the unregister closure's rejection loop.** In `src/lib/companion/registry.ts` the closure
+3. ~~**Guard the unregister closure's rejection loop.**~~ **FIXED 2026-08-15 (`aa4f400`), ahead of the
+   slice.** In `src/lib/companion/registry.ts` the closure
    returned by `registerCompanion` guards sink *deletion* on `sinks.get(target) === s`, but the loop that
    rejects that target's in-flight commands has no such guard. A displaced stream's late teardown
    therefore rejects the *current* connection's in-flight command with "companion disconnected". This is

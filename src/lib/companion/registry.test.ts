@@ -58,6 +58,26 @@ test('disconnecting the room does not fail laptop commands', async () => {
   unregL();
 });
 
+test('a displaced stream tearing down late leaves the live connection alone', async () => {
+  // The room agent reconnects on a 3s backoff loop, so a new stream regularly
+  // displaces an old one. The old stream's cleanup then runs *after* the new
+  // one is live, and must not touch commands that belong to the new connection.
+  const displaced = registerCompanion({ send: () => {} }, 'room');
+  const seen: { id: string }[] = [];
+  const live = registerCompanion({ send: (c) => seen.push(c) }, 'room');
+
+  const cmd = sendCommand({ action: 'fs_list', path: '.' }, 1000, 'room');
+  assert.equal(seen.length, 1, 'the command must go to the live sink');
+
+  displaced(); // late teardown of the stream that was replaced
+
+  assert.equal(isOnline('room'), true, 'the live sink must stay registered');
+  resolveResult({ id: cmd.id, status: 'ok', text: 'survived' });
+  assert.equal((await cmd.result).text, 'survived');
+
+  live();
+});
+
 test('target defaults to laptop', () => {
   const seen: { id: string }[] = [];
   const unreg = registerCompanion({ send: (c) => seen.push(c) }); // no target
@@ -65,5 +85,30 @@ test('target defaults to laptop', () => {
   assert.equal(isOnline('room'), false);
   sendCommand({ action: 'read' }).result.catch(() => {}); // no target
   assert.equal(seen.length, 1);
+  unreg();
+});
+
+test('a result may only settle a command dispatched to its own target', async () => {
+  // Defence in depth behind the token split: even if a credential leaked, a
+  // POST from the room must not settle a command that went to the laptop.
+  const unregL = registerCompanion({ send: () => {} }, 'laptop');
+  const unregR = registerCompanion({ send: () => {} }, 'room');
+
+  const laptopCmd = sendCommand({ action: 'read' }, 1000, 'laptop');
+
+  resolveResult({ id: laptopCmd.id, status: 'ok', text: 'from the room' }, 'room');
+  // Still pending — the room's post was ignored.
+  resolveResult({ id: laptopCmd.id, status: 'ok', text: 'from the laptop' }, 'laptop');
+  assert.equal((await laptopCmd.result).text, 'from the laptop');
+
+  unregL();
+  unregR();
+});
+
+test('resolveResult with no target still settles (back-compat)', async () => {
+  const unreg = registerCompanion({ send: () => {} }, 'laptop');
+  const cmd = sendCommand({ action: 'read' }, 1000);
+  resolveResult({ id: cmd.id, status: 'ok', text: 'ok' });
+  assert.equal((await cmd.result).text, 'ok');
   unreg();
 });
