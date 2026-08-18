@@ -76,9 +76,12 @@ export function sendCommand(
   return { id, result };
 }
 
-export function resolveResult(r: Result): void {
+export function resolveResult(r: Result, target?: CompanionTarget): void {
   const p = pending.get(r.id);
   if (!p) return;
+  // When the caller knows which machine posted this result, a result may only
+  // settle a command that was dispatched to that same machine.
+  if (target && p.target !== target) return;
   clearTimeout(p.timer);
   pending.delete(r.id);
   p.resolve(r);

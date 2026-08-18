@@ -107,7 +107,12 @@ export async function runAkiraTurn(
 
     const akira = allAgents.find((a) => a.id === AKIRA_AGENT_ID);
     const akiraCaps = resolveCaps(akira);
-    const server = createAkiraServer({ emit });
+    // `watched` tracks whether a real, operator-facing emit was supplied
+    // (the /api/akira/stream route wires one to the HUD's SSE connection) as
+    // opposed to the no-op default used by headless, doorway-triggered turns
+    // (room-proposals-data.ts's runRoomTurn calls runAkiraTurn with no emit
+    // at all). See room-shell.ts for why this matters for shell gates.
+    const server = createAkiraServer({ emit, watched: Boolean(opts.emit) });
 
     emit({ type: 'start' });
     let buffer = '';

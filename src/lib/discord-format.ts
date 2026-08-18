@@ -1,6 +1,7 @@
 import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js'; // type-only: erased at runtime, keeps this module pure
 import type { ScheduleRunRow, DreamRowLite } from './discord-notify-diff';
 import type { Proposal } from './proposals';
+import type { RoomProposal } from './room-proposals';
 
 const GREEN = 0x10b981;
 const RED = 0xef4444;
@@ -100,4 +101,21 @@ export function proposalResultEmbed(
   if (kind === 'conflict')
     return { title: '⚠️ Merge conflict — resolve in Mission Control', description, color: AMBER };
   return { title: 'Proposal already resolved', description, color: GREY };
+}
+
+/** A file the operator dropped in ~/AKIRA/inbox, awaiting his go-ahead.
+ *  No action row: approving starts a full agent turn, which belongs on the
+ *  dashboard rather than behind a Discord button. */
+export function roomProposalEmbed(p: RoomProposal): APIEmbed {
+  // A dropped file's path isn't fully operator-authored; a backtick in it would
+  // close the code span early, so strip backticks before interpolating.
+  const safePath = p.path.replace(/`/g, '');
+  return {
+    title: `📥 ${p.name} is in AKIRA's inbox`,
+    description: p.summary,
+    color: BLUE, // matches proposalEmbed/dreamEmbed — an item awaiting the operator's decision
+    fields: [{ name: 'path', value: `\`${safePath}\``, inline: false }],
+    footer: { text: 'Approve it in Proposals to have her work on it' },
+    timestamp: p.createdAt,
+  };
 }

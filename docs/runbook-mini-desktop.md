@@ -271,3 +271,36 @@ unmasked `suspend.target` on a production host was always a latent bug.
 - [ ] the temporary `/etc/sudoers.d/` drop-in is removed, if you used one
 - [ ] `~/code/axod-mission-control` exists on branch `dev`
 - [ ] `~/AKIRA/inbox` and `~/AKIRA/playground` exist
+
+## Slice 2 — the room's own credential
+
+The room no longer shares the laptop's secret. On the Mini:
+
+    # generate a fresh secret, distinct from COMPANION_TOKEN
+    openssl rand -hex 32
+
+Set it as `ROOM_COMPANION_TOKEN` in `/srv/mission-control/.env`, restart Mission
+Control, then set the SAME value as `ROOM_TOKEN` in the container's
+`/home/akira/room-agent/.env` and restart `akira-room`.
+
+**Order matters, and the failure is safe.** Between the two restarts the room's
+connect attempts return 401 and it retries on its 3s backoff; nothing is lost.
+Verify with `lxc exec akira-room -- journalctl -u akira-room -n 20` — expect
+`[room] connected to …`, not a repeating `stream 401`.
+
+If `ROOM_COMPANION_TOKEN` is unset, or equal to `COMPANION_TOKEN`, the room
+cannot connect. That is deliberate: falling back to the shared secret would
+silently restore the hole this closes.
+
+### Migration 0014 was hand-written — no snapshot file
+
+`drizzle/0014_room_proposals.sql` was written by hand, not generated, because
+this repo's `pnpm db:generate` is broken by pre-existing snapshot-lineage
+corruption (see the drizzle table-rebuild gotcha elsewhere in this repo's
+memory). It deliberately ships with **no** `drizzle/meta/0014_snapshot.json`.
+
+Whoever eventually repairs the snapshot lineage: `room_proposals` will be
+invisible to the generator at that point, since it never had a snapshot to
+diff from. Regenerating blind is likely to emit a duplicate
+`CREATE TABLE room_proposals`. Check the live schema (or this migration's
+SQL) before trusting a freshly generated migration in that range.
