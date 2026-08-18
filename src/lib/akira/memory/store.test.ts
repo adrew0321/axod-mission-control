@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { listNotes, readNote, writeNote, deleteNote, indexText, lessonsText } from './store';
+import { listNotes, readNote, writeNote, deleteNote, indexText, lessonsText, memoryDir } from './store';
 
 const vault = () => mkdtempSync(join(tmpdir(), 'akira-mem-'));
 
@@ -98,4 +98,29 @@ test('lessonsText respects the char budget', () => {
     const out = lessonsText(d, { maxNotes: 100, maxChars: 120 });
     assert.ok(out.length <= 200); // stops well before all 10 (~500+ chars of bodies)
   } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('memoryDir returns the memory/ subfolder when it exists', () => {
+  const dir = vault();
+  try {
+    mkdirSync(join(dir, 'memory'));
+    assert.equal(memoryDir(dir), join(dir, 'memory'));
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('memoryDir falls back to the vault root before the migration', () => {
+  const dir = vault();
+  try {
+    assert.equal(memoryDir(dir), dir);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('notes written after the migration land in memory/, not the root', () => {
+  const dir = vault();
+  try {
+    mkdirSync(join(dir, 'memory'));
+    writeNote({ title: 'Zoned', description: 'd', type: 'fact', body: 'b' }, memoryDir(dir));
+    assert.equal(readNote('zoned', memoryDir(dir))?.body, 'b');
+    assert.equal(readNote('zoned', dir), null); // not at the root
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

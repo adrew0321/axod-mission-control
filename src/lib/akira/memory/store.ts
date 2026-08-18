@@ -13,12 +13,21 @@ export function vaultDir(): string {
 export function vaultReady(dir = vaultDir()): boolean {
   return existsSync(dir);
 }
+/**
+ * The notes zone. Falls back to the vault root when memory/ is absent so the
+ * code deploy and the data migration are order-independent — a pre-migration
+ * vault keeps reading and writing exactly where it always did.
+ */
+export function memoryDir(dir = vaultDir()): string {
+  const sub = join(dir, 'memory');
+  return existsSync(sub) ? sub : dir;
+}
 function notePath(dir: string, slug: string): string {
   const p = resolve(dir, `${slug}.md`);
   if (!p.startsWith(resolve(dir))) throw new Error('unsafe slug'); // belt + suspenders
   return p;
 }
-export function listNotes(dir = vaultDir()): Note[] {
+export function listNotes(dir = memoryDir()): Note[] {
   if (!existsSync(dir)) return [];
   const notes: Note[] = [];
   for (const f of readdirSync(dir)) {
@@ -29,7 +38,7 @@ export function listNotes(dir = vaultDir()): Note[] {
   }
   return notes.sort((a, b) => (a.updated < b.updated ? 1 : a.updated > b.updated ? -1 : 0));
 }
-export function readNote(slug: string, dir = vaultDir()): Note | null {
+export function readNote(slug: string, dir = memoryDir()): Note | null {
   const s = safeSlug(slug);
   if (!s) return null;
   const p = notePath(dir, s);
@@ -37,7 +46,7 @@ export function readNote(slug: string, dir = vaultDir()): Note | null {
 }
 export function writeNote(
   input: { title: string; description: string; type: string; body: string; slug?: string },
-  dir = vaultDir(),
+  dir = memoryDir(),
 ): Note {
   const slug = safeSlug(input.slug || input.title);
   if (!slug) throw new Error('could not derive a safe slug from the title');
@@ -57,7 +66,7 @@ export function writeNote(
   writeIndex(dir);
   return note;
 }
-export function deleteNote(slug: string, dir = vaultDir()): boolean {
+export function deleteNote(slug: string, dir = memoryDir()): boolean {
   const s = safeSlug(slug);
   if (!s) return false;
   const p = notePath(dir, s);
@@ -72,11 +81,11 @@ function nonLessonNotes(dir: string): Note[] {
   return listNotes(dir).filter((n) => n.type !== 'lesson');
 }
 
-export function writeIndex(dir = vaultDir()): void {
+export function writeIndex(dir = memoryDir()): void {
   if (!existsSync(dir)) return;
   writeFileSync(join(dir, 'INDEX.md'), buildIndex(nonLessonNotes(dir)) + '\n');
 }
-export function indexText(dir = vaultDir()): string {
+export function indexText(dir = memoryDir()): string {
   return buildIndex(nonLessonNotes(dir));
 }
 
@@ -86,7 +95,7 @@ export function indexText(dir = vaultDir()): string {
  * AKIRA's context stays lean. Empty string when there are no lessons.
  */
 export function lessonsText(
-  dir = vaultDir(),
+  dir = memoryDir(),
   opts: { maxNotes?: number; maxChars?: number } = {},
 ): string {
   const maxNotes = opts.maxNotes ?? 20;
