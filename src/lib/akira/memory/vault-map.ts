@@ -1,7 +1,10 @@
 // The vault's own map: conventions and navigation pattern, authored as
 // CLAUDE.md at the vault root so it is editable in Obsidian and present for any
 // Claude Code opened directly in the vault. Injected into AKIRA's turn because
-// she runs with cwd at Mission Control, where a vault CLAUDE.md never auto-loads.
+// she runs with cwd at Mission Control, where a vault CLAUDE.md never auto-loaded.
+// Since sub-project B the vault is ALSO passed as an SDK additionalDirectory,
+// which may load this file a second time. Kept for now because it is capped and
+// order-stable; if a deploy shows the map twice, drop this block, not the file.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { vaultDir } from './store';

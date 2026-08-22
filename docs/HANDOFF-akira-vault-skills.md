@@ -67,11 +67,51 @@ corrected in the same commit.
 (the 8 skips are the Windows symlink tests). Baseline before this branch was
 671/667/0/4.
 
+## Review pass (2026-08-22)
+
+Final whole-branch review done. The `vault-write.ts` guards hold — containment,
+traversal, symlink bridges, and dangling links all fail closed, and the two
+earlier review rounds did real work. Six findings, none a broken guard; all fixed
+in one commit.
+
+1. **Her prompt instructed her to use Read/Glob/Grep, which she does not have.**
+   Pre-existing on `dev` — `808e6f9` removed the tools, `a5e4a0a` wrote the
+   prompt, and they never reconciled. It matters now because A has never shipped,
+   so this release is the first time it runs live. The paragraph now states the
+   absence and tells her to relay when a file's contents are genuinely needed.
+2. **`skills: 'all'` picked up MC's own `ship-mc-feature`.** Her cwd is
+   `/srv/mission-control`, the runner sets `settingSources: ['project']`, and
+   `.claude/skills/ship-mc-feature/SKILL.md` is committed and not gitignored — so
+   it deploys and gets discovered. `CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1` covers
+   bundled skills only, not project ones. Replaced with an explicit allowlist
+   read from the vault per turn (`src/lib/akira/vault-skills.ts`), which still
+   lets her author new skills — they go live on her next turn.
+3. **`additionalDirectories: [vaultDir()]` was unguarded** while every other
+   vault touchpoint checks `vaultReady()` first. Now conditional. (Checked: the
+   Mini has no `AKIRA_MEMORY_DIR`, so the vault resolves under cwd and satisfies
+   the SDK's strict-subdirectory rule.)
+4. **`ensureSkillsLink` reported `exists` for a plain directory.** A non-symlink
+   squatting on `.claude/skills` printed green on the one rollout step whose job
+   is proving the link. New `occupied` state plus a warning.
+5. **`seeded: none` was ambiguous** between "already seeded" and "seed source not
+   found" (it resolves from `process.cwd()`). Now distinct text plus a warning.
+6. **The vault `CLAUDE.md` may now be injected twice** — once as the capped
+   `## VAULT` block, once by the SDK via `additionalDirectories`. Could not be
+   settled from the SDK types; the injection is left in place (safe either way)
+   and `vault-map.ts`'s comment no longer claims it never auto-loads. **Check at
+   deploy** and drop the block if the map appears twice.
+
+Not changed on purpose: the SDK deprecates `'Skill'` inside `allowedTools`, and
+it lands there because `autoRun` concatenates `allowedTools` + `extraAllowedTools`.
+It is required in `tools` (the restriction gate) and works today; removing it from
+the auto-run list risks a permission round-trip — the hang this runner exists to
+avoid. Revisit with a probe, not a guess.
+
+`tsc --noEmit` clean. `pnpm test`: **694 / 686 pass / 0 fail / 8 skipped**.
+
 ## What's left
 
-1. **Final whole-branch review** on the most capable model — the ledger asks for it
-   and it has not been done.
-2. Merge to `dev`, release, deploy. Follow `ship-mc-feature`.
+Merge to `dev`, release, deploy. Follow `ship-mc-feature`.
 
 ### Rollout, vault-specific
 
@@ -97,8 +137,9 @@ corrected in the same commit.
   her own vault) and the live DB. The follow-up slice is scoped vault-read tools.
   Deliberately not reworded now: the follow-up's tool names aren't chosen, and
   guessing them means rewriting twice.
-- `ensureSkillsLink`'s `catch {}` is unconditional — on the Mini a genuine failure
-  logs the same as success. Watch step 2 of the rollout.
+- ~~`ensureSkillsLink`'s `catch {}` is unconditional~~ — stale. The CLI already
+  prints a WARNING on `unsupported`; the real silent-success path was a plain
+  directory reporting `exists`, fixed in the review pass above.
 
 ## Constraints that already bit us
 

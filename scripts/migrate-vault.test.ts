@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, existsSync, readFileSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { migrateVault, ZONES } from './migrate-vault';
+import { migrateVault, seedSkills, ZONES } from './migrate-vault';
 
 const note = (title: string, type: string) =>
   `---\ntitle: ${title}\ndescription: d\ntype: ${type}\ncreated: 2026-01-01T00:00:00.000Z\nupdated: 2026-01-02T00:00:00.000Z\n---\nBody of ${title}.`;
@@ -138,6 +138,25 @@ test('migrateVault creates the skills zone and links .claude/skills to it', (t) 
     assert.ok(lstatSync(join(d, '.claude', 'skills')).isSymbolicLink());
     assert.ok(existsSync(join(d, '.claude', 'skills', 'vault-gardening', 'SKILL.md')),
       'the link resolves to the seeded skills');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('a plain directory squatting on .claude/skills reports occupied, not exists', () => {
+  const d = seeded();
+  try {
+    mkdirSync(join(d, '.claude', 'skills'), { recursive: true });
+    const out = migrateVault(d);
+    assert.equal(out.skillsLink, 'occupied',
+      'a non-symlink must not report as a working link — the rollout reads this line to prove it');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('seedSource distinguishes "already seeded" from "seed source missing"', () => {
+  const d = seeded();
+  try {
+    assert.equal(migrateVault(d).seedSource, 'ok');
+    assert.equal(seedSkills(d, join(d, 'no-such-seed-root')).source, 'missing');
+    assert.deepEqual(seedSkills(d, join(d, 'no-such-seed-root')).added, []);
   } finally { rmSync(d, { recursive: true, force: true }); }
 });
 

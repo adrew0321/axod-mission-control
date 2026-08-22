@@ -22,7 +22,8 @@ import {
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
-import { indexText, gitPullDebounced, lessonsText, vaultDir } from './akira/memory/store';
+import { indexText, gitPullDebounced, lessonsText, vaultDir, vaultReady } from './akira/memory/store';
+import { listVaultSkillNames } from './akira/vault-skills';
 import { readSoul } from './akira/memory/soul';
 import { soulLessonsPreamble } from './akira/preamble';
 import { readVaultMap, vaultBlock } from './akira/memory/vault-map';
@@ -143,8 +144,16 @@ export async function runAkiraTurn(
       maxTurns: akiraCaps.maxTurns,
       maxBudgetUsd: akiraCaps.maxBudgetUsd,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
-      additionalDirectories: [vaultDir()],
-      skills: 'all',
+      // Guarded: the SDK requires every additional root to be a real, strict
+      // subdirectory of cwd. An unconfigured vault would hand it a path that
+      // isn't there on every single turn.
+      ...(vaultReady() ? { additionalDirectories: [vaultDir()] } : {}),
+      // Deliberately NOT 'all'. Discovery spans every working-directory root,
+      // and her cwd is Mission Control, which ships .claude/skills/ship-mc-feature
+      // — a developer release workflow she has no tools to execute. Naming the
+      // vault's own skills keeps MC's workflows out of her context. Read fresh
+      // each turn, so a skill she writes with vault_write is live on the next.
+      skills: listVaultSkillNames(),
       extraEnv: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1' },
       extraAllowedTools: [
         AKIRA_NAVIGATE,

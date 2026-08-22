@@ -73,7 +73,11 @@ export interface RunAgentOptions {
    * `tools` (the base capability set, line ~163), and THAT gate does exclude it.
    * So in this codebase the caller MUST include `'Skill'` in `allowedTools` or
    * skills are discovered and silently uncallable. Confirmed by probe 2026-08-18.
-   * Omitted means "no SDK opinion", which is not the same as off.
+   * (The SDK deprecates `'Skill'` inside its own `allowedTools`, where it also
+   * lands because autoRun concatenates the two lists. Left alone on purpose:
+   * removing it risks a permission round-trip, the hang this runner exists to
+   * avoid.) Array entries match each SKILL.md `name`, falling back to the
+   * directory name. Omitted means "no SDK opinion", which is not the same as off.
    */
   skills?: string[] | 'all';
   /**
