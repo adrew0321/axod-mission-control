@@ -22,6 +22,7 @@ export function MemoryPanel() {
   const [soulProposal, setSoulProposal] = useState<SoulProposal | null>(null);
   const [proposalMsg, setProposalMsg] = useState("");
   const [proposalBusy, setProposalBusy] = useState(false);
+  const [lessonsDropped, setLessonsDropped] = useState(0);
   const pinRef = useRef(""); // held only while unlocked, for delete calls
   const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -47,6 +48,7 @@ export function MemoryPanel() {
       const data = await r.json();
       pinRef.current = pin; setNotes(data.notes); setSoul(data.soul ?? "");
       setSoulProposal(data.soulProposal ?? null);
+      setLessonsDropped(data.lessonsDropped ?? 0);
       setOpen(true); setPin(""); armRelock();
     } catch { setError("Couldn't reach the server."); }
     finally { setBusy(false); }
@@ -106,7 +108,9 @@ export function MemoryPanel() {
         <span style={{ color: unlocked ? "#37d39b" : "#ffb84d" }}>{unlocked ? "🔓" : "🔒"}</span>
         <span style={{ fontWeight: 700, color: "#eaffff" }}>Settings</span>
         <span style={{ marginLeft: "auto", ...meta }}>
-          {unlocked ? `Unlocked · ${notes!.length} notes` : "Locked — memory & sensitive info"}
+          {unlocked
+            ? `Unlocked · ${notes!.length} notes${lessonsDropped > 0 ? ` · ${lessonsDropped} lessons over budget` : ""}`
+            : "Locked — memory & sensitive info"}
         </span>
       </div>
 

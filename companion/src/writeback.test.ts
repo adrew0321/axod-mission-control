@@ -20,6 +20,10 @@ function scenario(extraMiniCommit = false) {
   const laptop = tmp('wb-laptop-');
   execFileSync('git', ['clone', '--branch', 'dev', '--single-branch', mini, laptop]);
   execFileSync('git', ['-C', laptop, 'remote', 'remove', 'origin']);
+  // A clone inherits none of the source repo's local config, and one test commits here.
+  // Without this the suite passes only on a machine with a global git identity — it failed
+  // on the Mini, where the operator account has none.
+  git(laptop, 'config', 'user.email', 't@t'); git(laptop, 'config', 'user.name', 'T');
   git(mini, 'switch', '-c', 'mc/s1');
   writeFileSync(join(mini, 'a.txt'), '1'); git(mini, 'add', '-A'); git(mini, 'commit', '-m', 'c1');
   if (extraMiniCommit) { writeFileSync(join(mini, 'b.txt'), '2'); git(mini, 'add', '-A'); git(mini, 'commit', '-m', 'c2'); }

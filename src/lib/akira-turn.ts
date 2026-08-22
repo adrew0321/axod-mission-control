@@ -17,13 +17,16 @@ import {
   AKIRA_GET_SESSION,
   AKIRA_REMEMBER,
   AKIRA_FORGET,
+  AKIRA_VAULT_WRITE,
 } from './akira/tools';
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
-import { indexText, gitPullDebounced, lessonsText } from './akira/memory/store';
+import { indexText, gitPullDebounced, lessonsText, vaultDir, vaultReady } from './akira/memory/store';
+import { listVaultSkillNames } from './akira/vault-skills';
 import { readSoul } from './akira/memory/soul';
 import { soulLessonsPreamble } from './akira/preamble';
+import { readVaultMap, vaultBlock } from './akira/memory/vault-map';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
 import { ROOM_TOOL_NAMES } from './akira/room-tools';
@@ -84,15 +87,23 @@ export async function runAkiraTurn(
     try {
       const idx = indexText();
       memoryBlock = idx
-        ? `\n\n## MEMORY\nNotes you've saved (read one with your Read tool at data/akira-memory/<slug>.md):\n${idx}`
+        ? `\n\n## MEMORY\nNotes you've saved (read one with your Read tool at data/akira-memory/memory/<slug>.md):\n${idx}`
         : `\n\n## MEMORY\n(empty — save durable facts with the remember tool)`;
     } catch {
       memoryBlock = '';
     }
 
+    let vaultMapBlock = '';
+    try {
+      const block = vaultBlock(readVaultMap());
+      vaultMapBlock = block ? `\n\n${block}` : '';
+    } catch {
+      vaultMapBlock = ''; // an unreadable map must never break a turn
+    }
+
     let preamble = '';
     try {
-      preamble = soulLessonsPreamble(readSoul(), lessonsText());
+      preamble = soulLessonsPreamble(readSoul(), lessonsText().text);
     } catch {
       preamble = soulLessonsPreamble(readSoul(), ''); // lessons unavailable — SOUL still leads
     }
@@ -101,6 +112,7 @@ export async function runAkiraTurn(
       preamble + '\n\n' +
       buildAkiraPrompt(snapshot, roster, transcript, agentLabels) +
       memoryBlock +
+      vaultMapBlock +
       `\n\n## LAPTOP COMPANION\n${companionOnline()
         ? 'The laptop companion is CONNECTED — you may use browser_navigate/read/type/click. Work read→act→read. State the task and let the operator approve before starting; never retry a gated (blocked) action — wait for approval.'
         : 'The laptop companion is OFFLINE — browser actions are unavailable; tell the operator their laptop companion isn\'t connected if they ask for browser work.'}`;
@@ -132,6 +144,17 @@ export async function runAkiraTurn(
       maxTurns: akiraCaps.maxTurns,
       maxBudgetUsd: akiraCaps.maxBudgetUsd,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
+      // Guarded: the SDK requires every additional root to be a real, strict
+      // subdirectory of cwd. An unconfigured vault would hand it a path that
+      // isn't there on every single turn.
+      ...(vaultReady() ? { additionalDirectories: [vaultDir()] } : {}),
+      // Deliberately NOT 'all'. Discovery spans every working-directory root,
+      // and her cwd is Mission Control, which ships .claude/skills/ship-mc-feature
+      // — a developer release workflow she has no tools to execute. Naming the
+      // vault's own skills keeps MC's workflows out of her context. Read fresh
+      // each turn, so a skill she writes with vault_write is live on the next.
+      skills: listVaultSkillNames(),
+      extraEnv: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1' },
       extraAllowedTools: [
         AKIRA_NAVIGATE,
         AKIRA_OPEN,
@@ -140,6 +163,7 @@ export async function runAkiraTurn(
         AKIRA_GET_SESSION,
         AKIRA_REMEMBER,
         AKIRA_FORGET,
+        AKIRA_VAULT_WRITE,
         ...BROWSER_TOOL_NAMES,
         ...ROOM_TOOL_NAMES,
       ],
