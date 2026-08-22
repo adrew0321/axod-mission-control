@@ -17,11 +17,12 @@ import {
   AKIRA_GET_SESSION,
   AKIRA_REMEMBER,
   AKIRA_FORGET,
+  AKIRA_VAULT_WRITE,
 } from './akira/tools';
 import { ensureAkiraThread, AKIRA_AGENT_ID, AKIRA_SESSION_ID } from './akira/bootstrap';
 import { trimTranscript } from './akira/transcript';
 import { type TranscriptMessage } from './conversation';
-import { indexText, gitPullDebounced, lessonsText } from './akira/memory/store';
+import { indexText, gitPullDebounced, lessonsText, vaultDir } from './akira/memory/store';
 import { readSoul } from './akira/memory/soul';
 import { soulLessonsPreamble } from './akira/preamble';
 import { readVaultMap, vaultBlock } from './akira/memory/vault-map';
@@ -142,6 +143,9 @@ export async function runAkiraTurn(
       maxTurns: akiraCaps.maxTurns,
       maxBudgetUsd: akiraCaps.maxBudgetUsd,
       mcpServers: { [AKIRA_SERVER_NAME]: server },
+      additionalDirectories: [vaultDir()],
+      skills: 'all',
+      extraEnv: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1' },
       extraAllowedTools: [
         AKIRA_NAVIGATE,
         AKIRA_OPEN,
@@ -150,6 +154,7 @@ export async function runAkiraTurn(
         AKIRA_GET_SESSION,
         AKIRA_REMEMBER,
         AKIRA_FORGET,
+        AKIRA_VAULT_WRITE,
         ...BROWSER_TOOL_NAMES,
         ...ROOM_TOOL_NAMES,
       ],

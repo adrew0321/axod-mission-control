@@ -15,6 +15,7 @@ import {
   relayHandler,
 } from './tool-actions';
 import { writeNote, deleteNote, gitCommitPush, vaultReady } from '@/lib/akira/memory/store';
+import { vaultWrite } from './vault-write';
 
 export {
   AKIRA_SERVER_NAME,
@@ -25,6 +26,7 @@ export {
   AKIRA_GET_SESSION,
   AKIRA_REMEMBER,
   AKIRA_FORGET,
+  AKIRA_VAULT_WRITE,
 } from './tool-actions';
 export type { AkiraToolContext } from './tool-actions';
 
@@ -140,7 +142,26 @@ export function createAkiraServer(ctx: AkiraToolContext) {
     },
   );
 
-  const base = [navigate, open, relay, listSessions, getSession, remember, forget];
+  const vaultWriteTool = tool(
+    'vault_write',
+    "Write a Markdown file into your vault's document tree — projects/, ops/, research/, outputs/, personal/, skills/, any INDEX.md, SOUL.md, or the vault map. Creates parent folders. Overwrites an existing file, so read it first if you mean to append. You CANNOT write into memory/ — use remember/forget for notes. Add the file's line to its folder's INDEX.md in the same turn.",
+    {
+      path: z.string().min(1).describe('Path relative to the vault root, ending in .md — e.g. research/agentic-os.md'),
+      content: z.string().describe('The full Markdown content. This replaces the file.'),
+    },
+    async (a) => {
+      if (!vaultReady()) return err("Your vault isn't configured on this server yet.");
+      try {
+        const r = vaultWrite(a.path, a.content);
+        gitCommitPush(`vault: write ${r.path}`);
+        return ok(`Wrote ${r.path} (${r.bytes} bytes).`);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : 'vault_write failed.');
+      }
+    },
+  );
+
+  const base = [navigate, open, relay, listSessions, getSession, remember, forget, vaultWriteTool];
   const tools = [
     ...base,
     ...(isOnline('laptop') ? browserToolDefs(ctx) : []),
