@@ -61,6 +61,26 @@ export interface RunAgentOptions {
    */
   extraEnv?: Record<string, string>;
   /**
+   * Extra working-directory roots. The SDK reloads CLAUDE.md, skills, and
+   * plugins from each. AKIRA uses this to reach her vault's skills — the vault
+   * is a strict subdirectory of her cwd, which is what makes it addressable.
+   */
+  additionalDirectories?: string[];
+  /**
+   * Skills to enable. `'all'` enables every discovered skill; an array is an
+   * allowlist matching each SKILL.md `name`. The SDK says you need not add
+   * `'Skill'` to `allowedTools` — but this runner also feeds `allowedTools` into
+   * `tools` (the base capability set, line ~163), and THAT gate does exclude it.
+   * So in this codebase the caller MUST include `'Skill'` in `allowedTools` or
+   * skills are discovered and silently uncallable. Confirmed by probe 2026-08-18.
+   * (The SDK deprecates `'Skill'` inside its own `allowedTools`, where it also
+   * lands because autoRun concatenates the two lists. Left alone on purpose:
+   * removing it risks a permission round-trip, the hang this runner exists to
+   * avoid.) Array entries match each SKILL.md `name`, falling back to the
+   * directory name. Omitted means "no SDK opinion", which is not the same as off.
+   */
+  skills?: string[] | 'all';
+  /**
    * Reasoning effort for this agent. Lower effort means fewer, more consolidated
    * tool calls and less preamble — the main latency and token lever we have that
    * doesn't change the model.
@@ -106,6 +126,8 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
     mcpServers,
     extraAllowedTools,
     extraEnv,
+    additionalDirectories,
+    skills,
     effort,
     maxTurns,
     maxBudgetUsd,
@@ -160,6 +182,8 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         ...(maxBudgetUsd ? { maxBudgetUsd } : {}),
         ...(mcpServers ? { mcpServers } : {}),
         ...(extraEnv ? { env: { ...process.env, ...extraEnv } } : {}),
+        ...(additionalDirectories?.length ? { additionalDirectories } : {}),
+        ...(skills ? { skills } : {}),
         abortController,
       },
     });

@@ -17,6 +17,9 @@ export const AKIRA_AGENT = {
   // NO Read/Glob/Grep — see the note in scripts/seed.ts. These execute in the MC
   // process as `mc` with cwd=/srv/mission-control, so they reach .env and the live
   // database. room_read covers files; relay covers code.
-  tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite'] as string[],
+  // 'Skill' is required for her vault skills to be invocable at all: this codebase
+  // feeds tools_allowlist into the SDK's `tools` (the base capability set), not
+  // just `allowedTools`, so without it skills are discovered but uncallable.
+  tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite', 'Skill'] as string[],
   color: 'from-sky-300 to-cyan-400',
 };
