@@ -68,8 +68,11 @@ export interface RunAgentOptions {
   additionalDirectories?: string[];
   /**
    * Skills to enable. `'all'` enables every discovered skill; an array is an
-   * allowlist matching each SKILL.md `name`. Per the SDK, this is the single
-   * place skills are turned on — do NOT also add `'Skill'` to `allowedTools`.
+   * allowlist matching each SKILL.md `name`. The SDK says you need not add
+   * `'Skill'` to `allowedTools` — but this runner also feeds `allowedTools` into
+   * `tools` (the base capability set, line ~163), and THAT gate does exclude it.
+   * So in this codebase the caller MUST include `'Skill'` in `allowedTools` or
+   * skills are discovered and silently uncallable. Confirmed by probe 2026-08-18.
    * Omitted means "no SDK opinion", which is not the same as off.
    */
   skills?: string[] | 'all';

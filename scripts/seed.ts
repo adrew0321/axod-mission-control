@@ -241,7 +241,9 @@ async function main() {
       // readable set includes the secrets. She has room_read for files and `relay`
       // for anything needing real code access. Was:
       //   ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite']
-      tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite'],
+      // 'Skill' is required for her vault skills to be invocable: tools_allowlist
+      // feeds the SDK's `tools` (base capability set), not just `allowedTools`.
+      tools_allowlist: ['WebFetch', 'WebSearch', 'TodoWrite', 'Skill'],
       color: 'from-sky-300 to-cyan-400',
       effort: 'low',
       max_turns: 15,
