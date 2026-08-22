@@ -109,9 +109,35 @@ avoid. Revisit with a probe, not a guess.
 
 `tsc --noEmit` clean. `pnpm test`: **694 / 686 pass / 0 fail / 8 skipped**.
 
-## What's left
+## SHIPPED — v1.23.0, deployed to the Mini 2026-08-22
 
-Merge to `dev`, release, deploy. Follow `ship-mc-feature`.
+Merged to `dev`, released as `v1.23.0` (main `47146ae`), deployed. This release
+carried sub-project A as well, which had been sitting on `dev` undeployed since
+2026-08-18.
+
+Deploy evidence:
+
+- No new deps and no drizzle migrations, so `pnpm install` and `db:migrate` were
+  correctly skipped.
+- Restarted BEFORE `vault:migrate`, per A's ordering rule. Health `1.23.0`,
+  `db:ok`, front door 200, no failed units, all tickers up, Discord logged in,
+  graceful shutdown drained in 2ms.
+- `pnpm vault:migrate`: `20 notes moved, zones created: projects, ops, research,
+  outputs, personal, skills, memory` and **`Skills: link created`** — the symlink
+  is real on the Mini (`.claude/skills -> ../skills`), which no laptop run could
+  ever prove. Vault git tree clean, commit `19dc2da`.
+- Reseeded: AKIRA's stored prompt went 5786 → 6908 chars and her allowlist went
+  `["WebFetch","WebSearch","TodoWrite"]` → `[...,"Skill"]`. Verified the live row
+  carries the skills paragraph, the honest tools list, and no Read/Glob/Grep
+  claims. DB backed up first to `data/pre-v1.23.0.db`.
+- `listVaultSkillNames()` on the Mini returns exactly
+  `["distil-research","obsidian-markdown","vault-gardening"]` — MC's own
+  `ship-mc-feature` is correctly excluded.
+
+**Still open:** the live-turn check (ask AKIRA to list her skills through the
+HUD) is an operator step and has not been done. And finding 6 above — whether
+the vault `CLAUDE.md` now appears twice in her context — is answerable now that
+this is live.
 
 ### Rollout, vault-specific
 
