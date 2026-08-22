@@ -119,15 +119,30 @@ classifies self-affecting commands.
 `registerCompanion` already key off the target and need no change. `registry.test.ts`
 extends rather than changes — the existing single-laptop path must keep passing.
 
-### 2. `host-agent/` — a new service
+### 2. `mini-agent/` — one package, two modes
 
-A sibling package to `room-agent/`, same shape: `config.ts` (its own `HOST_TOKEN`,
-checked against `HOST_COMPANION_TOKEN` on the MC side — deliberately not the room's
-or the laptop's credential), `connection.ts` (reused wire), `shell-ops.ts`,
-`fs-ops.ts`. Runs as a systemd unit as root, reaching MC at `127.0.0.1:3000`.
+**Refined 2026-08-22 while writing the C1 plan.** This section originally called
+for a sibling `host-agent/` package. Reading the code changed it: `shell-ops.ts`
+is 242 lines of process-group kill, UTF-8/surrogate-safe output capping, and
+SIGPIPE disambiguation carrying comments like "Fix round 3 (coordinator review)",
+and `shell-gate.ts` is 575 lines. A second copy would drift, and every future fix
+would need applying twice — `protocol.ts` already needs a dedicated test to hold
+three copies identical.
 
-No path scoping. `paths.ts`/`paths-real.ts` have no analogue here; that is the
-point of the sub-project.
+So `room-agent/` is renamed `mini-agent/` and gains a mode. One codebase, two
+systemd units, two credentials. The modes differ by an `ExecPolicy`:
+
+- **room** — path-scoped (`paths.ts`/`paths-real.ts`) and gated (`shell-gate.ts`),
+  exactly as today. Its existing tests pin this and must pass unchanged.
+- **host** — neither. No scoping, no gate. That is the point of the sub-project.
+
+Everything else — the wire, the reconnect loop, the process handling — is shared.
+The host unit runs as root, reaching MC at `127.0.0.1:3000` with its own
+`HOST_TOKEN`, checked against `HOST_COMPANION_TOKEN` on the MC side and
+deliberately not the room's or the laptop's credential.
+
+The running container is unaffected by the rename until it is re-provisioned,
+which is a deliberate operator step.
 
 **Provisioning is an operator step.** Root on the Mini is NOPASSWD-allowlisted for
 `restart` and `daemon-reload` only, so unit installation cannot be automated from
