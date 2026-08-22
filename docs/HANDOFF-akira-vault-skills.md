@@ -1,70 +1,113 @@
 # Handoff — AKIRA in-vault skills (sub-project B)
 
-Written 2026-08-22. Branch: `feat/akira-vault-skills` @ `e0efbed`, clean tree,
-10 commits ahead of `dev`. `dev` itself is 14 ahead of `origin/dev` (unpushed —
-sub-project A, the vault, merged 2026-08-18 and was never pushed or deployed).
+Updated 2026-08-22. Branch: `feat/akira-vault-skills`, clean tree, pushed to origin.
+`dev` is pushed too (`2d7eb51`) — sub-project A is on the remote but still NOT
+deployed to the Mini.
 
 ## What this is
 
-Sub-project B of the AKIRA agentic-OS program: give AKIRA real skills that live
-inside her Obsidian vault (`data/akira-memory/skills/<name>/SKILL.md`), reached
-by the SDK through a `.claude/skills` symlink, plus the one new tool she needs to
-write them (`vault_write`, scoped to the document tree — never `memory/`).
+Sub-project B of the AKIRA agentic-OS program: skills that live inside AKIRA's
+Obsidian vault (`data/akira-memory/skills/<name>/SKILL.md`), reached by the SDK
+through a `.claude/skills` symlink, plus the one new tool she needs to write them
+(`vault_write`, scoped to the document tree, blocked from `memory/`).
 
 - Spec: `docs/superpowers/specs/2026-08-18-akira-vault-skills-design.md`
 - Plan: `docs/superpowers/plans/2026-08-18-akira-vault-skills.md` (8 tasks)
+- Ledger (rulings R1–R15, briefs, review diffs):
+  `.superpowers/sdd/2026-08-18-akira-vault-skills/progress.md`
 
-The plan's checkboxes were never ticked — trust the commit list below, not the
-boxes.
+The plan's checkboxes were never ticked — trust the commit list, not the boxes.
+**The ledger overrides the plan** where they disagree (see Task 4 below).
 
-## Done (committed)
+## All 8 tasks are in
 
 | Task | What | Commit |
 |---|---|---|
-| 1 | `additionalDirectories` + `skills` threaded to the SDK in `src/lib/agent-runner-sdk.ts` | `6ce7479` |
-| 2 | Probe — skill discovery follows the symlink, bundled skills suppress. Design holds. Scratch harness deleted, no commit | — |
+| 1 | `additionalDirectories` + `skills` threaded to the SDK | `6ce7479` |
+| 2 | Probe — discovery follows the link; bundled skills suppress. First BLOCKED verdict was a false negative (the harness omitted `Skill`) | — |
 | 3 | `src/lib/akira/vault-write.ts` + tests — the path guards | `3b4f321` |
-| 5 | Seed skills under `vault-seed/skills/`: `vault-gardening`, `distil-research`, vendored MIT `obsidian-markdown` | `33f7936` |
-| 6 | `scripts/migrate-vault.ts` provisions the skills zone, the symlink, and copies seeds (copy only when absent — operator edits win) | `819feb2` |
-| — | Two review-driven hardening rounds on the guards: dangling-symlink escape, case-sensitivity gap, and `checkVaultPath` failing closed instead of throwing | `6487131`, `e0efbed` |
+| — | Two review rounds: dangling-symlink escape, case-sensitivity gap, fail-closed `checkVaultPath` | `6487131`, `e0efbed` |
+| 5 | Seed skills in `vault-seed/skills/`: `vault-gardening`, `distil-research`, vendored MIT `obsidian-markdown` | `33f7936` |
+| 6 | Migration provisions the skills zone, the symlink, and copies seeds (only when absent — operator edits win) | `819feb2` |
+| 4 | `vault_write` registered; turn passes `additionalDirectories`/`skills`/`extraEnv` | `45c7a27` |
+| 7 | `Skills:` paragraph in her system prompt | `842df88` |
+| 4b | **`'Skill'` added to her `tools_allowlist`** in `src/lib/akira/agent.ts` and `scripts/seed.ts` | `e7cff9c` |
+| 8 | E2E against a copy of the live vault — passed, see below | — |
 
-`pnpm test` as of this handoff: **685 tests / 677 pass / 0 fail / 8 skipped**.
+### Why 4b exists
 
-## Remaining — start here
+The plan's Task 4 is incomplete and following it verbatim ships a silent no-op.
+This runner feeds `allowedTools` into the SDK's `tools` (the base capability set),
+not just `allowedTools` (the auto-run list) — so without `'Skill'` the skills are
+discovered and nothing can invoke them. The Task 2 probe surfaced it; the operator
+ruled on 2026-08-18 to add `Skill` now and defer scoped vault-read tools to a
+follow-up slice. `agent-runner-sdk.ts`'s doc comment said the opposite and was
+corrected in the same commit.
 
-**Task 4 — register the tool and wire the turn.** This is the gap: `vault-write.ts`
-exists and is tested, but nothing outside its own test imports it, so AKIRA cannot
-call it yet. Plan lines 420–507 have the exact code.
-- `src/lib/akira/tool-actions.ts` — add `export const AKIRA_VAULT_WRITE = 'mcp__akira__vault_write';` after `AKIRA_FORGET`
-- `src/lib/akira/tools.ts` — add the `vaultWriteTool` definition after `forget`, add it to the `base` array
-- `src/lib/akira-turn.ts` — add `AKIRA_VAULT_WRITE` to `extraAllowedTools`, and after the `mcpServers:` line add `additionalDirectories: [vaultDir()]`, `skills: 'all'`, `extraEnv: { CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1' }`
+## Task 8 evidence (2026-08-22, on the laptop)
 
-**Task 7 — tell AKIRA she has skills.** One paragraph in her system prompt (plan
-line 852).
+- Live vault pulled read-only from the Mini; it is still flat, confirming A is
+  undeployed. Migration moved 17 notes, created all six of A's zones plus `skills`.
+- Re-run: `0 notes moved, zones created: none / Skills: link unsupported, seeded:
+  none` — idempotent.
+- Shape: `skills/` holds `distil-research`, `obsidian-markdown`, `vault-gardening`,
+  each with valid `name`/`description` frontmatter. `memory/` holds 21 notes.
+- `Skills: link unsupported` — Windows cannot create the symlink without elevation.
+  **The symlink is verified on the Mini at deploy, not here.**
+- Skills reaching a real agent was proved locally through a hand-made junction
+  (the Task 2 approach; needs no elevation). The agent answered:
+  `changelog-generator, env-secrets-manager, mcp-server-builder, distil-research,
+  obsidian-markdown, vault-gardening` — all three vault skills present, no bundled
+  skills. The three extras are the operator's own `~/.claude/skills` on this
+  laptop; on the Mini AKIRA runs as `mc`, which has no user skills dir. Known
+  deferred minor.
+- Scratch harness, junction, and vault copy deleted.
 
-**Task 8 — E2E against a copy of the live vault** (plan line 881). Copy the vault
-to the scratchpad, run the migration against the copy, assert the shape, prove the
-skills reach a real agent. No commit; it gates the release.
+`pnpm exec tsc --noEmit` clean. `pnpm test`: **685 / 677 pass / 0 fail / 8 skipped**
+(the 8 skips are the Windows symlink tests). Baseline before this branch was
+671/667/0/4.
 
-## Rollout (after all tasks land) — `ship-mc-feature`
+## What's left
 
-1. Merge to `dev`, release, deploy to the Mini.
-2. **Restart the new build BEFORE migrating** — sub-project A's ordering rule.
-3. `cd /srv/mission-control && sudo -n -u mc pnpm vault:migrate` — the `Skills:`
-   line must report `link created` (or `exists`) plus the seeded skills.
-4. **Reseed agents** — AKIRA's prompt changed; a stale seeded prompt is a known
-   trap in this repo.
-5. `systemctl --failed`.
-6. `git status` in the vault — the migration's commit is wrapped in an
-   unconditional catch, so a real failure looks exactly like a clean tree.
-7. In a live turn, ask AKIRA to list her skills; all three must appear.
-8. Update `docs/runbook-akira-memory.md` with the skills zone and the symlink.
+1. **Final whole-branch review** on the most capable model — the ledger asks for it
+   and it has not been done.
+2. Merge to `dev`, release, deploy. Follow `ship-mc-feature`.
 
-## Constraints that bit us already
+### Rollout, vault-specific
+
+1. **Restart the new build BEFORE migrating** — sub-project A's ordering rule.
+2. `cd /srv/mission-control && sudo -n -u mc pnpm vault:migrate`. The `Skills:` line
+   must report `link created` (or `exists`), and this is where the symlink is
+   actually proven.
+3. **Reseed agents** — both her prompt AND her `tools_allowlist` changed. Skipping
+   the reseed makes the entire slice inert.
+4. `systemctl --failed`.
+5. `git status` in the vault — the migration's commit is wrapped in an unconditional
+   catch, so a real failure is indistinguishable from a clean tree.
+6. In a live turn, ask AKIRA to list her skills; all three must appear.
+7. Update `docs/runbook-akira-memory.md` with the skills zone and the symlink.
+
+## Parked, by decision — not defects
+
+- **Both seed skills ship inert.** `vault-gardening` says "Glob the zone" / "Read
+  the INDEX.md"; `distil-research` says "Read the raw capture" / "Grep the vault".
+  She has none of Read/Glob/Grep — they were removed on purpose because they run as
+  `mc` with cwd=/srv/mission-control, which holds `.env` (SESSION_SECRET,
+  CLAUDE_CODE_OAUTH_TOKEN, COMPANION_TOKEN, and AKIRA_MEMORY_PIN — the PIN gating
+  her own vault) and the live DB. The follow-up slice is scoped vault-read tools.
+  Deliberately not reworded now: the follow-up's tool names aren't chosen, and
+  guessing them means rewriting twice.
+- `ensureSkillsLink`'s `catch {}` is unconditional — on the Mini a genuine failure
+  logs the same as success. Watch step 2 of the rollout.
+
+## Constraints that already bit us
 
 - This repo IS the live app dir for the MC project — never `git checkout` or
-  branch-switch it out from under a running session; use a worktree.
+  branch-switch it; use a worktree. `.worktrees/` is MC's own.
 - Never push directly to `main`. Feature branch → `dev`; `main` is release-only.
-- Windows: `pnpm test` uses `tsx --test`, extensionless imports only.
-- The vault is a separate private git repo, so shipped skills live in
-  `vault-seed/` in THIS repo and the migration copies them across.
+- Symlinks fail EPERM on Windows. Don't "fix" the migration to use junctions.
+- A scratch harness importing `agent-runner-sdk.ts` needs
+  `NODE_OPTIONS="--conditions=react-server"` and an async `main()` wrapper.
+- Backticks inside `AKIRA_SYSTEM_PROMPT` must be escaped — it's a template literal.
+- `room-agent/src/shell-ops.test.ts` has a known load flake; re-run it alone before
+  calling it a regression.
