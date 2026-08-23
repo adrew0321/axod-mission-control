@@ -2,11 +2,11 @@
 // room-tools.ts (which is 'server-only') so it can be exercised directly by
 // node:test via tsx — 'server-only' throws on import outside the react-server
 // resolve condition, and `pnpm test` doesn't set that condition. See
-// shell-log.ts for why the audit log itself lives on the Mission Control side,
+// action-log.ts for why the audit log itself lives on the Mission Control side,
 // and gates.ts for why a gated command awaits the operator inside the same turn.
 import { sendCommand } from '@/lib/companion/registry';
 import { openGate } from '@/lib/companion/gates';
-import { appendShellLog } from './shell-log';
+import { appendActionLog } from './action-log';
 import { type AkiraToolContext, type ToolResult, ok, err } from './tool-actions';
 
 // Longer than the room's own SHELL_TIMEOUT_MS (120s) so the room's kill-and-report
@@ -32,14 +32,14 @@ export async function runShell(
   cwd: string | undefined,
   ctx: AkiraToolContext,
 ): Promise<ToolResult> {
-  appendShellLog({ at: new Date(), event: 'dispatch', command, cwd });
+  appendActionLog({ at: new Date(), target: 'room', event: 'dispatch', command, cwd });
   try {
     const first = await sendCommand({ action: 'shell', command, cwd }, SHELL_TIMEOUT_MS, 'room').result;
     // Key on the classifier's OWN flag, not on status === 'blocked' — a
     // refused cwd is also 'blocked' but approval cannot clear it, and it must
     // never be mistaken for an operator gate (see protocol.ts's `gated` doc).
     if (!first.gated) {
-      appendShellLog({ at: new Date(), event: 'result', command, cwd, exitCode: first.exitCode, status: first.status });
+      appendActionLog({ at: new Date(), target: 'room', event: 'result', command, cwd, exitCode: first.exitCode, status: first.status });
       return present(first);
     }
 
@@ -53,8 +53,9 @@ export async function runShell(
       // in the broker for the full GATE_TIMEOUT_MS (120s), stalling the single
       // serialized turn chain, and then auto-deny regardless. Fail fast
       // instead: deny now, and tell her to report back rather than retry.
-      appendShellLog({
+      appendActionLog({
         at: new Date(),
+        target: 'room',
         event: 'denied',
         command,
         cwd,
@@ -67,12 +68,12 @@ export async function runShell(
 
     // Park it, ask the operator through the HUD, and wait — do not retry, do
     // not work around it.
-    appendShellLog({ at: new Date(), event: 'gated', command, cwd, reason });
+    appendActionLog({ at: new Date(), target: 'room', event: 'gated', command, cwd, reason });
     const { id, decision } = openGate({ target: 'room', reason, command });
     ctx.emit({ type: 'hard_gate', gateId: id, ref: '', reason, command });
 
     const decided = await decision;
-    appendShellLog({ at: new Date(), event: decided === 'approved' ? 'approved' : 'denied', command, cwd });
+    appendActionLog({ at: new Date(), target: 'room', event: decided === 'approved' ? 'approved' : 'denied', command, cwd });
     if (decided === 'denied') {
       return ok(
         `The operator did not approve that command (${reason}). Do not retry it and do not work around it — tell him what you were trying to do and ask how he'd like to proceed.`,
@@ -84,7 +85,7 @@ export async function runShell(
       SHELL_TIMEOUT_MS,
       'room',
     ).result;
-    appendShellLog({ at: new Date(), event: 'result', command, cwd, exitCode: second.exitCode, status: second.status });
+    appendActionLog({ at: new Date(), target: 'room', event: 'result', command, cwd, exitCode: second.exitCode, status: second.status });
     return present(second);
   } catch (e) {
     // sendCommand's promise REJECTS (rather than resolving to a status) when the
@@ -94,7 +95,7 @@ export async function runShell(
     // is load-bearing — without a terminal line here, "still running", "silently
     // swallowed", and "the room went dark" are indistinguishable after the fact.
     const reason = e instanceof Error ? e.message : String(e);
-    appendShellLog({ at: new Date(), event: 'result', command, cwd, status: 'error', reason });
+    appendActionLog({ at: new Date(), target: 'room', event: 'result', command, cwd, status: 'error', reason });
     return err(reason);
   }
 }
