@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { tool } from '@anthropic-ai/claude-agent-sdk';
 import { sendCommand } from '@/lib/companion/registry';
 import { type AkiraToolContext, type ToolResult, ok, err } from './tool-actions';
-import { runShell } from './room-shell';
+import { runShell } from './agent-shell';
 
 export const AKIRA_ROOM_LIST = 'mcp__akira__room_list';
 export const AKIRA_ROOM_READ = 'mcp__akira__room_read';
@@ -60,7 +60,7 @@ export function roomToolDefs(ctx: AkiraToolContext) {
         command: z.string().min(1).describe('The command line, run through bash -lc.'),
         cwd: z.string().optional().describe('Working directory. Defaults to your workshop root.'),
       },
-      (a) => runShell(a.command, a.cwd, ctx),
+      (a) => runShell(a.command, a.cwd, 'room', ctx),
     ),
   ];
 }
