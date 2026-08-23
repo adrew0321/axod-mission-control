@@ -28,8 +28,11 @@ with `read` and search it with `bash`, both on `target: "host"`; write it with
    is a dead end. Search one topic at a time and read what you find before
    linking it — a wikilink to a page that does not say what you assumed is worse
    than no link.
-5. Add its line to `research/INDEX.md` with `vault_write`, preserving the
-   existing lines.
+5. Add its line to `research/INDEX.md`. **`read` the index first** — at
+   `/srv/mission-control/data/akira-memory/research/INDEX.md` on
+   `target: "host"` — then `vault_write` the whole file back with your line
+   added. `vault_write` replaces the file entirely; it does not append, so
+   writing without reading first would silently drop every existing entry.
 6. Report the claim and the links you made, in a few sentences.
 
 ## Page structure

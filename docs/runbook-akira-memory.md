@@ -160,7 +160,13 @@ were in v1.26.0, to use `list`/`read`/`bash` on `target: "host"` instead of the
    sudo -u mc git add skills/<name>/SKILL.md
    sudo -u mc git -c user.name=AKIRA -c user.email=akira@axod \
      commit -m "skills: update <name> from vault-seed"
+   sudo -u mc git push
    ```
+   **Do not skip the push.** Every write AKIRA makes through `vault_write` goes
+   through `gitCommitPush`, which commits *and* pushes. A hand-made commit that
+   is only committed lands on the Mini's disk alone — the private
+   `adrew0321/akira-memory` remote and any Obsidian mirror never see it, and the
+   next `gitPullDebounced` can stall on the divergence.
 
 3. No restart or reseed is needed — the skill list is read from disk on every
    turn, so the next turn picks it up.

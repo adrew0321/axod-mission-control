@@ -13,7 +13,8 @@ trust it and descend only where it points.
 This skill fixes one zone at a time.
 
 Your vault lives on the host at `/srv/mission-control/data/akira-memory`. Read it
-with `list` and `read` on `target: "host"`; write it with `vault_write`, which
+with `read` and search it with `bash` (`list` shows one directory at a time and
+does not recurse), both on `target: "host"`; write it with `vault_write`, which
 takes vault-relative paths.
 
 ## Steps
@@ -23,8 +24,14 @@ takes vault-relative paths.
 2. Find the zone's documents:
    `bash` on `target: "host"` with
    `find /srv/mission-control/data/akira-memory/<zone> -name '*.md' -not -name 'INDEX.md'`
-3. `read` the zone's `INDEX.md` on `target: "host"`, at
-   `/srv/mission-control/data/akira-memory/<zone>/INDEX.md`.
+3. `read` **every** `INDEX.md` the zone contains, on `target: "host"` — the
+   zone's own at `/srv/mission-control/data/akira-memory/<zone>/INDEX.md`, and
+   one per subfolder if the zone has them. `projects/` does: each
+   `projects/<project-id>/` carries its own index, and comparing those files
+   against the zone-level index instead would garden the wrong file. Find them
+   the same way as step 2:
+   `find /srv/mission-control/data/akira-memory/<zone> -name 'INDEX.md'`
+   Each document belongs to the index in **its own** folder.
 4. For each folder that has documents, compute which of its files have no line
    in that folder's `INDEX.md`.
 5. For each missing file, `read` it and write **one line** that says what it is
