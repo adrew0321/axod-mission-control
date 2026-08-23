@@ -131,3 +131,39 @@ not, however, silent-safe — don't delete `memory/` casually.
 - The app repo ignores `data/akira-memory/` — it's a separate repo.
 - Memory is plaintext (so Obsidian can read it); privacy = private repo + login + the
   PIN-locked Settings panel. Never store secrets in memory.
+
+## Updating a shipped skill in the live vault (one-time operator step)
+
+`pnpm vault:migrate` copies skills from `vault-seed/skills/` **only when a skill
+of that name is absent**. That is deliberate — an edit made in Obsidian must
+always win over a shipped copy. The consequence is that changing a skill in this
+repo does **not** update the copy already in her vault.
+
+So when a shipped skill is revised (as `vault-gardening` and `distil-research`
+were in v1.26.0, to use `list`/`read`/`bash` on `target: "host"` instead of the
+`Read`/`Glob`/`Grep` tools she never had), the live copy must be replaced by hand:
+
+1. **Check she has not edited it first.** In the vault:
+   ```bash
+   cd /srv/mission-control/data/akira-memory
+   git log --oneline -- skills/<name>/
+   ```
+   If the only commits are migrations, overwriting is safe. **If she or the
+   operator has edited it, stop** — reconcile by hand rather than clobbering; the
+   only-when-absent rule exists precisely to protect that edit.
+
+2. Copy the revised skill in and commit it in the vault's own repo:
+   ```bash
+   sudo -u mc cp /srv/mission-control/vault-seed/skills/<name>/SKILL.md \
+     /srv/mission-control/data/akira-memory/skills/<name>/SKILL.md
+   cd /srv/mission-control/data/akira-memory
+   sudo -u mc git add skills/<name>/SKILL.md
+   sudo -u mc git -c user.name=AKIRA -c user.email=akira@axod \
+     commit -m "skills: update <name> from vault-seed"
+   ```
+
+3. No restart or reseed is needed — the skill list is read from disk on every
+   turn, so the next turn picks it up.
+
+4. Confirm in a live turn: ask her to run the skill and check she uses
+   `target: "host"` paths rather than claiming a tool she does not have.
