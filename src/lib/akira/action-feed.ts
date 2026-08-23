@@ -1,5 +1,5 @@
 import 'server-only';
-import { asc, desc, gt } from 'drizzle-orm';
+import { asc, isNull, eq } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/db/client';
 import { agent_actions } from '@/db/schema';
@@ -30,12 +30,19 @@ export interface ActionRow {
  *  included because per D5 no result follows a Mission Control restart. */
 const TERMINAL_EVENTS = new Set(['result', 'intent', 'denied']);
 
-let started = false;
+// Survive Next dev HMR / a distinct instrumentation module graph: keep the
+// "have I registered my sink yet" bit on globalThis, matching preview.ts's
+// idiom, so a second module instance of this file doesn't register a second
+// sink (double-posted actions) — or, if action-log.ts's sinks array is ever
+// backed the same way while this flag is not, silently register nowhere.
+const state: { started: boolean } =
+  (globalThis as { __mcActionFeedState?: { started: boolean } }).__mcActionFeedState ??
+  ((globalThis as { __mcActionFeedState?: { started: boolean } }).__mcActionFeedState = { started: false });
 
 /** Register the DB sink. Idempotent — safe to call more than once at boot. */
 export function startActionFeed(): void {
-  if (started) return;
-  started = true;
+  if (state.started) return;
+  state.started = true;
   registerActionSink((e: ActionLogEvent) => {
     if (!TERMINAL_EVENTS.has(e.event)) return;
     // Fire-and-forget: a feed insert must never delay or break a turn. The file
@@ -60,43 +67,22 @@ export function startActionFeed(): void {
   console.log('[action-feed] started');
 }
 
-/** The newest action timestamp, for priming. null when the table is empty. */
-export async function readLatestActionAt(): Promise<number | null> {
-  const row = await db
-    .select({ at: agent_actions.at })
-    .from(agent_actions)
-    .orderBy(desc(agent_actions.at))
-    .limit(1)
-    .then((r) => r[0]);
-  return row ? row.at.getTime() : null;
+/** Actions not yet delivered to the feed, OLDEST first. Delivery state lives in
+ *  the row, not in a module variable, so a restart resumes exactly where it
+ *  stopped instead of skipping whatever was queued (spec D2). */
+export async function readUnpostedActions(limit = 50): Promise<ActionRow[]> {
+  const rows = await db.select().from(agent_actions)
+    .where(isNull(agent_actions.posted_at))
+    .orderBy(asc(agent_actions.at))
+    .limit(limit);
+  return rows.map((r) => ({
+    id: r.id, atMs: r.at.getTime(), target: r.target, event: r.event, command: r.command,
+    cwd: r.cwd, exitCode: r.exit_code, status: r.status, reason: r.reason,
+  }));
 }
 
-/** Actions strictly newer than `sinceMs`, OLDEST first, capped at `limit`.
- *  Querying forward from the cursor (rather than backward from "now") means a
- *  burst larger than `limit` drains across successive ticks instead of being
- *  truncated away by a newest-first window — a newest-first read would let a
- *  large-enough burst push older, still-unposted rows permanently out of the
- *  window before they're ever fetched. `sinceMs === null` means "never primed"
- *  (see readLatestActionAt / the caller's prime step), so it reads from the
- *  oldest row on hand rather than filtering on a cursor that doesn't exist yet. */
-export async function readActionsSince(sinceMs: number | null, limit = 50): Promise<ActionRow[]> {
-  const rows = await (sinceMs === null
-    ? db.select().from(agent_actions).orderBy(asc(agent_actions.at)).limit(limit)
-    : db
-        .select()
-        .from(agent_actions)
-        .where(gt(agent_actions.at, new Date(sinceMs)))
-        .orderBy(asc(agent_actions.at))
-        .limit(limit));
-  return rows.map((r) => ({
-    id: r.id,
-    atMs: r.at.getTime(),
-    target: r.target,
-    event: r.event,
-    command: r.command,
-    cwd: r.cwd,
-    exitCode: r.exit_code,
-    status: r.status,
-    reason: r.reason,
-  }));
+/** Mark one action delivered. Best-effort: a failure here re-posts next tick,
+ *  which is the right direction under D2 (a duplicate is visible, a drop is not). */
+export async function markActionPosted(id: string): Promise<void> {
+  await db.update(agent_actions).set({ posted_at: new Date() }).where(eq(agent_actions.id, id));
 }

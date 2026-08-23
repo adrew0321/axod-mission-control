@@ -1,30 +1,7 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { pickNewActions, type ActionLite } from './action-feed-diff';
-
-const row = (id: string, atMs: number): ActionLite => ({
-  id, atMs, target: 'host', event: 'result', command: `cmd-${id}`,
-  cwd: null, exitCode: 0, status: 'ok', reason: null,
-});
-
-test('a null cursor takes everything and advances to the newest', () => {
-  const out = pickNewActions(null, [row('a', 100), row('b', 200)]);
-  assert.deepEqual(out.newActions.map((a) => a.id), ['a', 'b']);
-  assert.equal(out.next, 200);
-});
-
-test('only rows strictly newer than the cursor are new', () => {
-  const out = pickNewActions(150, [row('a', 100), row('b', 200)]);
-  assert.deepEqual(out.newActions.map((a) => a.id), ['b']);
-  assert.equal(out.next, 200);
-});
-
-test('an empty batch leaves the cursor untouched', () => {
-  assert.deepEqual(pickNewActions(150, []), { newActions: [], next: 150 });
-});
-
-test('a row exactly at the cursor is not re-posted', () => {
-  const out = pickNewActions(200, [row('b', 200)]);
-  assert.deepEqual(out.newActions, []);
-  assert.equal(out.next, 200);
-});
+// pickNewActions and its cursor-diff tests were removed: the action feed no
+// longer diffs against an in-memory cursor (see action-feed.ts's
+// readUnpostedActions / markActionPosted — delivery state now lives in the
+// row's posted_at column, durable across a restart). ActionLite itself is
+// still live — discord-format.ts imports it for actionEmbed — so this module
+// stays; there is nothing here to unit-test on its own beyond the type shape,
+// which the discord-format.ts tests exercise through actionEmbed.

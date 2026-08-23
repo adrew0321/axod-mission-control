@@ -7,5 +7,6 @@ CREATE TABLE `agent_actions` (
 	`cwd` text,
 	`exit_code` integer,
 	`status` text,
-	`reason` text
+	`reason` text,
+	`posted_at` integer
 );

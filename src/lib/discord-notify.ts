@@ -7,7 +7,7 @@ import { getChannelsForProject } from './discord-bindings';
 import { getProposals } from './proposals-data';
 import { getDreams } from './dreams-data';
 import { getOpenRoomProposals } from './room-proposals-data';
-import { readLatestActionAt, readActionsSince } from './akira/action-feed';
+import { readUnpostedActions, markActionPosted } from './akira/action-feed';
 import {
   diffScheduleRuns,
   pickNewDreams,
@@ -34,18 +34,10 @@ let scheduleCursor = new Map<string, number>();
 let dreamCursor: number | null = null;
 let proposalCursor = new Set<string>();
 let roomProposalCursor = new Set<string>();
-let actionCursor: number | null = null;
 // The room gather can fail independently of the other three (see tick()), so it needs
 // its own "have I been primed" bit — priming for it may complete on a later tick than
 // the shared `primed` flag below.
 let roomProposalPrimed = false;
-// The action cursor's own primed bit. Unlike roomProposalCursor (a Set, where
-// "empty" only ever means "nothing open"), actionCursor is a number | null
-// watermark, and pickNewActions/readActionsSince against a null cursor and an
-// empty table both legitimately produce `null` too — so "cursor is null" can't
-// double as "never primed" the way it can be read for other sources. This flag
-// removes that ambiguity: it is set true only by a successful priming read.
-let actionPrimed = false;
 let primed = false;
 
 /** Send an embed to every channel bound to a project. Returns false on send failure
@@ -77,33 +69,53 @@ async function tick(): Promise<void> {
   if (!client) return; // gateway not connected yet
 
   // --- gather current state ---
-  const schedRows: ScheduleRunRow[] = (
-    await db
-      .select({
-        id: schedules.id,
-        projectId: schedules.project_id,
-        title: schedules.title,
-        lastRunAt: schedules.last_run_at,
-        lastStatus: schedules.last_status,
-      })
-      .from(schedules)
-  ).map((s) => ({
-    id: s.id,
-    projectId: s.projectId,
-    title: s.title,
-    lastRunAtMs: s.lastRunAt ? s.lastRunAt.getTime() : null,
-    lastStatus: s.lastStatus,
-  }));
+  // Each of these three used to be awaited bare: a persistent throw in any one of
+  // them rejected tick() before the action section ever ran, taking the D2 safety
+  // feed dark for a reason unrelated to actions. Guarded the same way the room and
+  // action gathers already were; null just skips that source for this tick (its
+  // cursor is left untouched, so a later successful gather resumes normally).
+  const schedGather: ScheduleRunRow[] | null = await db
+    .select({
+      id: schedules.id,
+      projectId: schedules.project_id,
+      title: schedules.title,
+      lastRunAt: schedules.last_run_at,
+      lastStatus: schedules.last_status,
+    })
+    .from(schedules)
+    .then((rows) =>
+      rows.map((s) => ({
+        id: s.id,
+        projectId: s.projectId,
+        title: s.title,
+        lastRunAtMs: s.lastRunAt ? s.lastRunAt.getTime() : null,
+        lastStatus: s.lastStatus,
+      })),
+    )
+    .catch((err) => {
+      console.error('[discord-notify] schedule gather failed:', err instanceof Error ? err.message : err);
+      return null;
+    });
 
-  const dreamRows: DreamRowLite[] = (await getDreams()).map((d) => ({
-    id: d.id,
-    createdAtMs: new Date(d.createdAt).getTime(),
-    status: d.status,
-    insightCount: d.insights.length,
-  }));
+  const dreamGather: DreamRowLite[] | null = await getDreams()
+    .then((ds) =>
+      ds.map((d) => ({
+        id: d.id,
+        createdAtMs: new Date(d.createdAt).getTime(),
+        status: d.status,
+        insightCount: d.insights.length,
+      })),
+    )
+    .catch((err) => {
+      console.error('[discord-notify] dream gather failed:', err instanceof Error ? err.message : err);
+      return null;
+    });
 
-  const proposals = await getProposals();
-  const currIds = new Set(proposals.map((p) => p.sessionId));
+  const proposalGather = await getProposals().catch((err) => {
+    console.error('[discord-notify] proposal gather failed:', err instanceof Error ? err.message : err);
+    return null;
+  });
+  const currIds = proposalGather ? new Set(proposalGather.map((p) => p.sessionId)) : null;
 
   // Newest, least-exercised gather of the four: isolate it so a persistent bug here
   // degrades to "no room embeds" instead of blocking schedules/dreams/proposals below.
@@ -121,25 +133,40 @@ async function tick(): Promise<void> {
       return null;
     });
 
-  // Queried forward from the cursor (ascending, `at > actionCursor`), not backward
-  // from "now" — a newest-first window would let a burst larger than the limit push
-  // older, not-yet-posted rows permanently out of view. Pre-prime (actionCursor still
-  // null) this legitimately reads the oldest rows on hand; that result is discarded
-  // below rather than posted, so it never surfaces as a backlog dump.
-  const actionRows = await readActionsSince(actionCursor, 50).catch((err) => {
+  // Delivery state for actions lives in the row (posted_at), not in a cursor here,
+  // so there is nothing to prime — a restart just resumes from whatever is still
+  // unposted (see action-feed.ts). This runs unconditionally, including on the
+  // very first tick: on a fresh deploy the table is empty and there is nothing to
+  // post, but if unposted rows already exist at startup they are delivered, not
+  // skipped, which is the correct direction under D2.
+  const actionRows = await readUnpostedActions(50).catch((err) => {
     console.error('[discord-notify] action gather failed:', err instanceof Error ? err.message : err);
     return null;
   });
 
-  const sched = diffScheduleRuns(scheduleCursor, schedRows);
-  const dreamD = pickNewDreams(dreamCursor, dreamRows);
-  const prop = diffProposals(proposalCursor, currIds);
+  // --- AKIRA's actions: route to the home project channel (not project-scoped) ---
+  if (actionRows) {
+    for (const a of actionRows) {
+      // Stop at the first failure so the rest retry next tick. Delivery is
+      // recorded per row, so a restart resumes here rather than skipping ahead.
+      if (!(await postToProject(client, DREAM_PROJECT_ID, actionEmbed(a)))) break;
+      await markActionPosted(a.id).catch((err) =>
+        console.warn('[discord-notify] marking action posted failed:', err instanceof Error ? err.message : err));
+    }
+  }
+
+  const sched = schedGather ? diffScheduleRuns(scheduleCursor, schedGather) : null;
+  const dreamD = dreamGather ? pickNewDreams(dreamCursor, dreamGather) : null;
+  const prop = currIds ? diffProposals(proposalCursor, currIds) : null;
 
   // --- first tick: prime cursors, post nothing ---
   if (!primed) {
-    scheduleCursor = sched.next;
-    dreamCursor = dreamD.next;
-    proposalCursor = prop.next;
+    // Only prime a source whose gather actually succeeded this tick; a source
+    // that failed is left untouched (empty Map/Set/null), matching the room
+    // source's own delayed-priming handling below.
+    if (sched) scheduleCursor = sched.next;
+    if (dreamD) dreamCursor = dreamD.next;
+    if (prop) proposalCursor = prop.next;
     // Only mark the room source primed if this tick's gather actually succeeded.
     // If it failed, roomProposalCursor stays empty and unprimed so a later successful
     // gather is treated as a (delayed) priming tick, not a diff against an empty cursor
@@ -148,43 +175,38 @@ async function tick(): Promise<void> {
       roomProposalCursor = roomGather.diff.next;
       roomProposalPrimed = true;
     }
-    // Prime from the true latest timestamp, NOT from actionRows: with a null
-    // cursor, actionRows is the OLDEST window in the table (see the gather
-    // above), so deriving "latest" from it would under-seed the cursor whenever
-    // more than `limit` actions already exist and dump that backlog on tick 2.
-    // `undefined` (thrown) vs `null` (empty table) is deliberate — see the
-    // `actionPrimed` declaration for why the cursor's own value can't carry this.
-    const latestActionAt = await readLatestActionAt().catch(() => undefined);
-    if (latestActionAt !== undefined) {
-      actionCursor = latestActionAt;
-      actionPrimed = true;
-    }
     primed = true;
     return;
   }
 
   // --- schedules: advance per-id on successful post ---
-  for (const run of sched.newRuns) {
-    if (await postToProject(client, run.projectId, scheduleEmbed(run))) {
-      scheduleCursor.set(run.id, run.lastRunAtMs as number);
+  if (sched) {
+    for (const run of sched.newRuns) {
+      if (await postToProject(client, run.projectId, scheduleEmbed(run))) {
+        scheduleCursor.set(run.id, run.lastRunAtMs as number);
+      }
     }
   }
 
   // --- dreams: route to the home project channel ---
-  for (const d of dreamD.newDreams) {
-    if (await postToProject(client, DREAM_PROJECT_ID, dreamEmbed(d))) {
-      dreamCursor = Math.max(dreamCursor ?? 0, d.createdAtMs);
+  if (dreamD) {
+    for (const d of dreamD.newDreams) {
+      if (await postToProject(client, DREAM_PROJECT_ID, dreamEmbed(d))) {
+        dreamCursor = Math.max(dreamCursor ?? 0, d.createdAtMs);
+      }
     }
   }
 
   // --- proposals: add on success, then drop any that are no longer present ---
-  for (const id of prop.newIds) {
-    const p = proposals.find((x) => x.sessionId === id);
-    if (p && (await postToProject(client, p.projectId, proposalEmbed(p), [proposalActionRow(p.sessionId)]))) {
-      proposalCursor.add(id);
+  if (prop && proposalGather && currIds) {
+    for (const id of prop.newIds) {
+      const p = proposalGather.find((x) => x.sessionId === id);
+      if (p && (await postToProject(client, p.projectId, proposalEmbed(p), [proposalActionRow(p.sessionId)]))) {
+        proposalCursor.add(id);
+      }
     }
+    proposalCursor = new Set([...proposalCursor].filter((id) => currIds.has(id)));
   }
-  proposalCursor = new Set([...proposalCursor].filter((id) => currIds.has(id)));
 
   // --- AKIRA's inbox: route to the home project channel (drops are not project-scoped) ---
   if (roomGather) {
@@ -206,34 +228,6 @@ async function tick(): Promise<void> {
   }
   // else: this tick's gather failed — cursor and roomProposalPrimed are left untouched,
   // so the next successful gather resumes exactly where this one would have.
-
-  // --- AKIRA's actions: route to the home project channel (not project-scoped) ---
-  if (actionRows) {
-    if (!actionPrimed) {
-      // Priming failed on the original tick 1; this is the first successful gather
-      // since then. Seed the cursor from the true latest timestamp — not from
-      // actionRows, which (read against a still-null cursor) is the oldest window
-      // in the table, not the latest — and post nothing, same as ordinary priming.
-      const latestActionAt = await readLatestActionAt().catch(() => undefined);
-      if (latestActionAt !== undefined) {
-        actionCursor = latestActionAt;
-        actionPrimed = true;
-      }
-    } else {
-      // actionRows already arrives filtered to `at > actionCursor` and ascending
-      // (readActionsSince), so no further diff/sort is needed here.
-      for (const a of actionRows) {
-        // Stop at the first failure: the cursor stays at the last SUCCESS, so this
-        // action and everything after it retry on the next tick. Advancing past a
-        // failure (e.g. with Math.max over an ascending list) would drop it
-        // permanently — under D2 that is an action the operator never learns about.
-        if (!(await postToProject(client, DREAM_PROJECT_ID, actionEmbed(a)))) break;
-        actionCursor = a.atMs;
-      }
-    }
-  }
-  // else: this tick's gather failed — actionCursor and actionPrimed are left
-  // untouched, so the next successful gather resumes exactly where this one would have.
 }
 
 /** Start the notification poller. Idempotent; only when the bot token is set. */

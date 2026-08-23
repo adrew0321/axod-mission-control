@@ -272,6 +272,10 @@ export const agent_actions = sqliteTable('agent_actions', {
   exit_code: integer('exit_code'),
   status: text('status'),
   reason: text('reason'),
+  // NULL until this row has been successfully posted to the feed. Delivery state
+  // must be durable: a module-level cursor is lost on restart, and per D5 AKIRA
+  // restarting Mission Control is routine — the unposted tail would vanish.
+  posted_at: integer('posted_at', { mode: 'timestamp_ms' }),
 });
 
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({

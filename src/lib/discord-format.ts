@@ -139,13 +139,19 @@ export function actionEmbed(a: ActionLite): APIEmbed {
   const lines = [`\`${safe(a.command)}\``];
   if (a.cwd) lines.push(`in \`${safe(a.cwd)}\``);
   if (a.event === 'intent') {
-    lines.push('_Started — this restarts Mission Control, so no result will follow._');
+    lines.push('_Started — this restarts Mission Control, so no result follows if it succeeds._');
   } else {
     if (a.exitCode !== null) lines.push(`exit ${a.exitCode}`);
     if (a.reason) lines.push(safe(a.reason));
   }
+  // A `denied` gate and a failed `result` both render red with an exit code the
+  // operator has to decode — neither says WHY on its own. Surface the event in
+  // the title for anything but the common terminal case (a plain `result`), and
+  // the status whenever it isn't 'ok', so "refused" and "failed" read apart.
+  const titleSuffix =
+    a.event !== 'result' ? ` · ${a.event}` : a.status && a.status !== 'ok' ? ` · ${a.status}` : '';
   return {
-    title: `AKIRA · ${a.target}`,
+    title: `AKIRA · ${a.target}${titleSuffix}`,
     description: lines.join('\n').slice(0, 4000),
     color: ok ? GREEN : RED,
     timestamp: new Date(a.atMs).toISOString(),

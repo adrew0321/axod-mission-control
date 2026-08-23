@@ -15,14 +15,3 @@ export interface ActionLite {
   status: string | null;
   reason: string | null;
 }
-
-/** Rows strictly newer than the cursor are new. next = the newest timestamp seen. */
-export function pickNewActions(
-  lastSeenMs: number | null,
-  rows: ActionLite[],
-): { newActions: ActionLite[]; next: number | null } {
-  const newActions = rows.filter((a) => lastSeenMs == null || a.atMs > lastSeenMs);
-  const maxMs = rows.reduce((m, a) => Math.max(m, a.atMs), lastSeenMs ?? -Infinity);
-  const next = maxMs === -Infinity ? lastSeenMs : maxMs;
-  return { newActions, next };
-}

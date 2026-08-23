@@ -67,7 +67,19 @@ export function formatActionLogLine(e: ActionLogEvent): string {
  * boot (see action-feed.ts, wired in instrumentation.ts).
  */
 type ActionSink = (e: ActionLogEvent) => void;
-const sinks: ActionSink[] = [];
+// Survive Next dev HMR / a distinct instrumentation module graph: keep the
+// registry on globalThis, matching preview.ts's idiom. action-log.ts is
+// imported from BOTH request-handling code (appendActionLog, below) and the
+// instrumentation entrypoint (action-feed.ts's startActionFeed, registering
+// the sink) — if those two import graphs ever resolved to separate module
+// instances of this file, a bare module-level array would leave each graph
+// with its own empty `sinks`: the sink would register into one array while
+// appendActionLog iterates the other, and the feed would go dark with no
+// error anywhere (see action-feed.ts's IMPORTANT-2 note for the paired half
+// of this fix — it must be backed the same way, or not at all).
+const sinks: ActionSink[] =
+  (globalThis as { __mcActionLogSinks?: ActionSink[] }).__mcActionLogSinks ??
+  ((globalThis as { __mcActionLogSinks?: ActionSink[] }).__mcActionLogSinks = []);
 
 /** Register a sink. Returns an unregister function. */
 export function registerActionSink(fn: ActionSink): () => void {
