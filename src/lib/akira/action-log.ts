@@ -72,7 +72,10 @@ const sinks: ActionSink[] = [];
 /** Register a sink. Returns an unregister function. */
 export function registerActionSink(fn: ActionSink): () => void {
   sinks.push(fn);
+  let removed = false;
   return () => {
+    if (removed) return;
+    removed = true;
     const i = sinks.indexOf(fn);
     if (i >= 0) sinks.splice(i, 1);
   };

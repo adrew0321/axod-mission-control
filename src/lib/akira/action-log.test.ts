@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { formatActionLogLine, actionLogPath, registerActionSink, clearActionSinks, appendActionLog } from './action-log';
+import { formatActionLogLine, actionLogPath, registerActionSink, clearActionSinks, appendActionLog, type ActionLogEvent } from './action-log';
 
 function readLogLines(): Record<string, unknown>[] {
   const p = actionLogPath();
@@ -127,5 +127,19 @@ test('the file log is still written when a sink throws', () => {
     const before = readLogLines().length;
     appendActionLog({ at: new Date(), target: 'room', event: 'result', command: 'file still written', status: 'ok' });
     assert.equal(readLogLines().length, before + 1);
+  } finally { clearActionSinks(); }
+});
+
+test('unregister is idempotent and removes only its own registration', () => {
+  clearActionSinks();
+  const seen: string[] = [];
+  const fn = (e: ActionLogEvent) => seen.push(e.command);
+  try {
+    const unregisterA = registerActionSink(fn);
+    registerActionSink(fn); // the SAME reference, registered twice
+    unregisterA();
+    unregisterA(); // calling it again must NOT remove the second registration
+    appendActionLog({ at: new Date(), target: 'host', event: 'result', command: 'once', status: 'ok' });
+    assert.deepEqual(seen, ['once'], 'exactly one registration survives');
   } finally { clearActionSinks(); }
 });
