@@ -338,26 +338,39 @@ const hostPolicy: ExecPolicy = { mode: 'host', defaultCwd: '/' };
 // no-validation design being tested. Probe the real capability (same idiom
 // as `canSpawnBash`/`canAddressProcessGroup` above) rather than guessing from
 // `process.platform`, and throw loudly if it's ever unavailable somewhere
-// other than this Windows box.
+// other than this Windows box — this is the one test proving host mode's
+// no-validation cwd handling, and the deployment target is Linux, so a
+// silent Linux-side skip would hide exactly the property it exists to prove.
 function canUseSlashTmpAsCwd(): boolean {
   const probe = spawnSync('bash', ['-lc', 'pwd'], { cwd: '/tmp', timeout: 15_000 });
   return probe.error === undefined && probe.status === 0;
 }
 
+function tmpCwdCapability(): boolean {
+  const ok = canUseSlashTmpAsCwd();
+  if (!ok && process.platform !== 'win32') {
+    throw new Error("'/tmp' unexpectedly unusable as a spawn cwd on a non-Windows host — this must not be a silent skip");
+  }
+  return ok;
+}
+
 const tmpCwdSkip = skip
-  || (canUseSlashTmpAsCwd()
+  || (tmpCwdCapability()
     ? false
     : "this host can't use '/tmp' as a literal spawn cwd (Windows path-form artifact — see task-5 report, not a room/host logic issue)");
 
-test('host mode runs a command the room gate would have blocked', { skip }, async () => {
-  // `sleep 30 &` is exactly what classifyShell refuses in the room (Decision 7).
-  // On the host there is no gate at all (spec D2), so it must simply run.
-  const r = await execShell(hostPolicy, {
-    id: 'c1', action: 'shell', command: 'echo started',
-  }, 10_000);
-  assert.equal(r.status, 'ok');
-  assert.equal(r.gated, undefined, 'host mode must never return a gated result');
-  assert.match(r.text ?? '', /started/);
+test('a command the room gate refuses runs ungated on the host', { skip }, async () => {
+  const gatedCommand = 'nohup echo hi';
+
+  // Room: the classifier refuses it, and this is the one 'blocked' an operator can clear.
+  const roomResult = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: gatedCommand }));
+  assert.equal(roomResult.status, 'blocked');
+  assert.equal(roomResult.gated, true);
+
+  // Host: no gate at all (spec D2) — same command, it simply runs.
+  const hostResult = await execShell(hostPolicy, cmd({ command: gatedCommand }), 10_000);
+  assert.equal(hostResult.status, 'ok');
+  assert.equal(hostResult.gated, undefined, 'host mode must never return a gated result');
 });
 
 test('host mode honours an absolute cwd outside any room root', { skip: tmpCwdSkip }, async () => {
@@ -366,6 +379,22 @@ test('host mode honours an absolute cwd outside any room root', { skip: tmpCwdSk
   }, 10_000);
   assert.equal(r.status, 'ok');
   assert.match(r.text ?? '', /tmp/);
+});
+
+test('host mode resolves a relative cwd against defaultCwd, not the process cwd', { skip }, async () => {
+  // Mirrors the room's own "runs in the room root by default" test above: a
+  // filesystem marker proves where the command actually ran without
+  // depending on how a given shell renders paths. A relative cmd.cwd must
+  // anchor to defaultCwd (matching execFs's host branch) rather than
+  // resolving against wherever the mini-agent process itself happens to be
+  // running from.
+  const base = await mkdtemp(join(tmpdir(), 'mini-host-cwd-'));
+  const sub = join(base, 'sub');
+  await mkdir(sub, { recursive: true });
+  await writeFile(join(sub, 'marker.txt'), 'here');
+  const r = await execShell({ mode: 'host', defaultCwd: base }, cmd({ command: 'ls', cwd: 'sub' }), 10_000);
+  assert.equal(r.status, 'ok');
+  assert.match(r.text ?? '', /marker\.txt/, 'a relative cwd must resolve against defaultCwd, not the mini-agent process cwd');
 });
 
 test('host mode still reports a non-zero exit code truthfully', { skip }, async () => {

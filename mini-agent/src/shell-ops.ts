@@ -1,13 +1,17 @@
-// Executes `shell` commands inside the room. Two controls, both here:
+// Executes `shell` commands for both the room and the host. Two controls,
+// both room-only:
 //   1. classifyShell refuses anything that would outlive the command (Decision 7),
 //      unless the operator already approved it.
-//   2. Everything that runs gets a wall-clock timeout and its own process group,
-//      so a timeout kills the whole tree rather than orphaning children on a box
-//      that also hosts prod.
+//   2. cmd.cwd is validated against the room's path scope.
+// The host has neither (D1/D2) — see the isRoom/else branch below.
+// Everything that runs — room or host — gets a wall-clock timeout and its own
+// process group, so a timeout kills the whole tree rather than orphaning
+// children on a box that also hosts prod.
 // A refused command returns status 'blocked' — the same shape guard.ts produces
 // for the browser — never an exception.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
+import { resolve } from 'node:path';
 import { classifyShell } from './shell-gate';
 import { validatePathReal } from './paths-real';
 import { isRoom, type ExecPolicy } from './policy';
@@ -50,7 +54,11 @@ export async function execShell(
     }
   } else {
     // Host: no gate, no path scope. Spec D1/D2 — this is the point of slice C1.
-    cwd = cmd.cwd || policy.defaultCwd;
+    // A relative cmd.cwd must not resolve against the mini-agent process's own
+    // cwd (whatever the shipped unit happens to set that to) — anchor it
+    // against the configured defaultCwd instead, mirroring execFs's host
+    // branch, so the same input means the same thing in both actions.
+    cwd = cmd.cwd ? resolve(policy.defaultCwd, cmd.cwd) : policy.defaultCwd;
   }
 
   return new Promise<Result>((resolve) => {

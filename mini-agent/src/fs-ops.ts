@@ -1,8 +1,10 @@
-// Executes fs_* commands inside the room. Every path goes through the gate first;
-// a rejected path returns status 'blocked' (the same shape guard.ts produces for
-// the browser), never an exception. The gate also resolves symlinks (paths-real.ts),
-// so the `abs` it returns is the link-resolved path, not necessarily the literal one
-// requested — every fs call below operates on that resolved path.
+// Executes fs_* commands for both the room and the host. In the room, every
+// path goes through the gate first; a rejected path returns status 'blocked'
+// (the same shape guard.ts produces for the browser), never an exception. The
+// gate also resolves symlinks (paths-real.ts), so the `abs` it returns is the
+// link-resolved path, not necessarily the literal one requested — every fs
+// call below operates on that resolved path. The host has no gate (D1/D2);
+// see the isRoom/else branch below.
 import { readFile, writeFile, readdir, mkdir, stat } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { validatePathReal } from './paths-real';
