@@ -59,6 +59,30 @@ export function formatActionLogLine(e: ActionLogEvent): string {
   return JSON.stringify(row) + '\n';
 }
 
+/**
+ * Extra destinations for action events. The DB write lives here rather than in
+ * a direct import because this module is unit-tested by `pnpm test`, and pulling
+ * in the db client would drag `server-only` with it — which throws outside the
+ * react-server resolve condition. A server-only module registers its sink at
+ * boot (see action-feed.ts, wired in instrumentation.ts).
+ */
+type ActionSink = (e: ActionLogEvent) => void;
+const sinks: ActionSink[] = [];
+
+/** Register a sink. Returns an unregister function. */
+export function registerActionSink(fn: ActionSink): () => void {
+  sinks.push(fn);
+  return () => {
+    const i = sinks.indexOf(fn);
+    if (i >= 0) sinks.splice(i, 1);
+  };
+}
+
+/** Drop every sink. For tests. */
+export function clearActionSinks(): void {
+  sinks.length = 0;
+}
+
 /** Append to the log and mirror to stdout (journald). Best-effort: a logging
  *  failure must never take down a turn. */
 export function appendActionLog(e: ActionLogEvent): void {
@@ -70,5 +94,15 @@ export function appendActionLog(e: ActionLogEvent): void {
     appendFileSync(p, line, 'utf8');
   } catch (err) {
     console.warn('[akira-action] log append failed:', err instanceof Error ? err.message : err);
+  }
+
+  // Sinks are best-effort and independent: one throwing must neither break the
+  // turn nor stop the others. The file write above already happened.
+  for (const sink of sinks) {
+    try {
+      sink(e);
+    } catch (err) {
+      console.warn('[akira-action] sink failed:', err instanceof Error ? err.message : err);
+    }
   }
 }
