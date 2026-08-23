@@ -128,15 +128,16 @@ export function roomProposalEmbed(p: RoomProposal): APIEmbed {
  * an output field is ever added here.
  */
 export function actionEmbed(a: ActionLite): APIEmbed {
-  // A command or reason isn't fully operator-authored (AKIRA composes commands
-  // freely); a backtick in either would close the code span early, so strip
+  // A command, cwd, or reason isn't fully operator-authored (AKIRA composes
+  // commands and passes a cwd freely on every bash/read/write tool call); a
+  // backtick in any of them would close the code span early, so strip
   // backticks before interpolating — same precedent as roomProposalEmbed's
   // safePath above. This is a trust concern (the operator must read exactly
   // what ran), not a D7 concern (no secret exposure).
   const safe = (s: string) => s.replace(/`/g, '');
   const ok = a.event === 'result' && a.status === 'ok' && (a.exitCode ?? 0) === 0;
   const lines = [`\`${safe(a.command)}\``];
-  if (a.cwd) lines.push(`in \`${a.cwd}\``);
+  if (a.cwd) lines.push(`in \`${safe(a.cwd)}\``);
   if (a.event === 'intent') {
     lines.push('_Started — this restarts Mission Control, so no result will follow._');
   } else {

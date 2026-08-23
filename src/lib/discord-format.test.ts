@@ -185,15 +185,17 @@ test('actionEmbed marks an intent as having no result to follow', () => {
   assert.match(JSON.stringify(e), /no result/i);
 });
 
-test('actionEmbed strips backticks from command and reason so the code span cannot be broken out of', () => {
+test('actionEmbed strips backticks from command, cwd, and reason so the code span cannot be broken out of', () => {
   const e = actionEmbed({
     id: 'act_4', atMs: 1, target: 'host', event: 'result',
-    command: 'echo `whoami`', cwd: null, exitCode: 1, status: 'error',
+    command: 'echo `whoami`', cwd: '/srv/`evil`', exitCode: 1, status: 'error',
     reason: 'failed: `rm -rf /`',
   });
   assert.doesNotMatch(JSON.stringify(e), /`whoami`/);
+  assert.doesNotMatch(JSON.stringify(e), /`evil`/);
   assert.doesNotMatch(JSON.stringify(e), /`rm -rf \//);
   assert.match(JSON.stringify(e), /echo whoami/);
+  assert.match(JSON.stringify(e), /\/srv\/evil/);
   assert.match(JSON.stringify(e), /failed: rm -rf/);
 });
 
