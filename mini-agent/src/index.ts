@@ -24,8 +24,8 @@ const conn = connect(cfg, (cmd: Command) => {
         throw new Error(`${tag} command execution is not yet implemented for host mode`);
       }
       const result = cmd.action === 'shell'
-        ? await execShell(cfg.policy.roots, cmd)
-        : await execFs(cfg.policy.roots, cmd);
+        ? await execShell(cfg.policy, cmd)
+        : await execFs(cfg.policy, cmd);
       if (result.status !== 'ok') console.warn(tag, result.status, result.reason);
       await conn.postResult(result);
     })

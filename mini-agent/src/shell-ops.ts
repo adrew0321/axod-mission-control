@@ -10,7 +10,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { classifyShell } from './shell-gate';
 import { validatePathReal } from './paths-real';
-import type { Roots } from './paths';
+import { isRoom, type ExecPolicy } from './policy';
 import type { Command, Result } from './protocol';
 
 export const SHELL_TIMEOUT_MS = 120_000;
@@ -21,7 +21,7 @@ export const MAX_OUTPUT_CHARS = 60_000;
 const SIGPIPE_EXIT_CODE = 141;
 
 export async function execShell(
-  roots: Roots,
+  policy: ExecPolicy,
   cmd: Command,
   timeoutMs = SHELL_TIMEOUT_MS,
 ): Promise<Result> {
@@ -32,19 +32,25 @@ export async function execShell(
   if (!command) return { id: cmd.id, status: 'error', reason: 'empty command' };
   if (command.includes('\0')) return { id: cmd.id, status: 'error', reason: 'null byte in command' };
 
-  const gate = classifyShell(command);
-  if (gate.gated && !cmd.approved) {
-    // The ONLY 'blocked' cause an operator approval can clear. Every other
-    // 'blocked' result below is a plain refusal — `gated` stays unset so
-    // room-shell.ts never mistakes it for something the operator can approve.
-    return { id: cmd.id, status: 'blocked', gated: true, reason: gate.reason ?? 'gated command' };
-  }
-
-  let cwd = roots.room;
-  if (cmd.cwd) {
-    const verdict = await validatePathReal(roots, cmd.cwd);
-    if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
-    cwd = verdict.abs;
+  let cwd: string;
+  if (isRoom(policy)) {
+    // Room only: the long-running gate (Decision 7) and the path scope.
+    const gate = classifyShell(command);
+    if (gate.gated && !cmd.approved) {
+      // The ONLY 'blocked' cause an operator approval can clear. Every other
+      // 'blocked' result below is a plain refusal — `gated` stays unset so
+      // agent-shell.ts never mistakes it for something the operator can approve.
+      return { id: cmd.id, status: 'blocked', gated: true, reason: gate.reason ?? 'gated command' };
+    }
+    cwd = policy.roots.room;
+    if (cmd.cwd) {
+      const verdict = await validatePathReal(policy.roots, cmd.cwd);
+      if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
+      cwd = verdict.abs;
+    }
+  } else {
+    // Host: no gate, no path scope. Spec D1/D2 — this is the point of slice C1.
+    cwd = cmd.cwd || policy.defaultCwd;
   }
 
   return new Promise<Result>((resolve) => {
