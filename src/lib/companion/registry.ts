@@ -10,8 +10,9 @@ export interface CompanionSink {
 }
 
 /** Which machine a command is bound for. 'laptop' is the operator's (replaceable) work
- *  machine; 'room' is AKIRA's container on the Mini. */
-export type CompanionTarget = 'laptop' | 'room';
+ *  machine; 'room' is AKIRA's container on the Mini; 'host' is the Mini itself, running
+ *  as root — see docs/superpowers/specs/2026-08-22-akira-host-reach-design.md. */
+export type CompanionTarget = 'laptop' | 'room' | 'host';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
 

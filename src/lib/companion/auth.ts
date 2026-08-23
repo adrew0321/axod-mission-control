@@ -13,10 +13,11 @@ export function tokenMatches(input: string | null | undefined, secret: string | 
   return timingSafeEqual(a, b);
 }
 
-/** The two shared secrets, one per target. Passed in so the resolver stays pure. */
+/** The three shared secrets, one per target. Passed in so the resolver stays pure. */
 export interface CompanionSecrets {
   laptop: string | null | undefined;
   room: string | null | undefined;
+  host: string | null | undefined;
 }
 
 /**
@@ -33,11 +34,16 @@ export function resolveTarget(
 ): CompanionTarget | null {
   if (tokenMatches(input, secrets.laptop)) return 'laptop';
   if (tokenMatches(input, secrets.room)) return 'room';
+  if (tokenMatches(input, secrets.host)) return 'host';
   return null;
 }
 
 function envSecrets(): CompanionSecrets {
-  return { laptop: process.env.COMPANION_TOKEN, room: process.env.ROOM_COMPANION_TOKEN };
+  return {
+    laptop: process.env.COMPANION_TOKEN,
+    room: process.env.ROOM_COMPANION_TOKEN,
+    host: process.env.HOST_COMPANION_TOKEN,
+  };
 }
 
 /** True iff the presented token authenticates as exactly `target` (constant-time). */

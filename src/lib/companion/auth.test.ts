@@ -20,7 +20,7 @@ test('tokenMatches distinguishes tokens of different lengths without throwing', 
   assert.equal(tokenMatches('short', 'a-much-longer-secret-value'), false);
 });
 
-const SECRETS = { laptop: 'laptop-secret', room: 'room-secret' };
+const SECRETS = { laptop: 'laptop-secret', room: 'room-secret', host: null };
 
 test('resolveTarget identifies the laptop secret', () => {
   assert.equal(resolveTarget('laptop-secret', SECRETS), 'laptop');
@@ -48,13 +48,32 @@ test('resolveTarget returns null when the token is empty', () => {
 test('an unset room secret authenticates nobody as the room', () => {
   // Fail closed. Falling back to COMPANION_TOKEN would silently re-create the
   // very hole this task closes.
-  assert.equal(resolveTarget('laptop-secret', { laptop: 'laptop-secret', room: undefined }), 'laptop');
-  assert.equal(resolveTarget('anything', { laptop: 'laptop-secret', room: '' }), null);
+  assert.equal(resolveTarget('laptop-secret', { laptop: 'laptop-secret', room: undefined, host: null }), 'laptop');
+  assert.equal(resolveTarget('anything', { laptop: 'laptop-secret', room: '', host: null }), null);
 });
 
 test('when both secrets are the same value, laptop wins and the room fails closed', () => {
   // A misconfiguration (operator copies COMPANION_TOKEN into ROOM_COMPANION_TOKEN)
   // must be loud, not silent: the room's connect attempts 401 in its retry loop.
-  const same = { laptop: 'shared', room: 'shared' };
+  const same = { laptop: 'shared', room: 'shared', host: null };
   assert.equal(resolveTarget('shared', same), 'laptop');
+});
+
+test('a host token resolves to the host target', () => {
+  const secrets = { laptop: 'L', room: 'R', host: 'H' };
+  assert.equal(resolveTarget('H', secrets), 'host');
+  assert.equal(resolveTarget('R', secrets), 'room');
+  assert.equal(resolveTarget('L', secrets), 'laptop');
+  assert.equal(resolveTarget('nope', secrets), null);
+});
+
+test('laptop wins a duplicated secret so host fails closed', () => {
+  // Same ordering rule the room already relies on: a mis-set env var must not
+  // silently grant the laptop's authority to another machine.
+  assert.equal(resolveTarget('SAME', { laptop: 'SAME', room: null, host: 'SAME' }), 'laptop');
+});
+
+test('an absent host secret never matches', () => {
+  assert.equal(resolveTarget('', { laptop: 'L', room: 'R', host: null }), null);
+  assert.equal(resolveTarget('H', { laptop: 'L', room: 'R', host: undefined }), null);
 });
