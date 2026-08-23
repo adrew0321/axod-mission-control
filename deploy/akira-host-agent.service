@@ -1,0 +1,19 @@
+[Unit]
+Description=AKIRA host agent (unscoped root reach on the Mini)
+After=network.target mission-control.service
+
+[Service]
+Type=simple
+# Root by design — sub-project C. See
+# docs/superpowers/specs/2026-08-22-akira-host-reach-design.md
+User=root
+WorkingDirectory=/srv/mission-control/mini-agent
+EnvironmentFile=/srv/mission-control/mini-agent/.env.host
+ExecStart=/usr/bin/env pnpm start
+Restart=on-failure
+RestartSec=5
+# Deliberately NOT bound to mission-control: the agent must survive the restarts
+# AKIRA issues through it, which is the whole point of spec D5.
+
+[Install]
+WantedBy=multi-user.target

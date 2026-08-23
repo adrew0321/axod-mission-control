@@ -234,12 +234,18 @@ async function main() {
       role: 'concierge',
       model: 'claude-haiku-4-5-20251001',
       system_prompt: AKIRA_SYSTEM_PROMPT,
-      // NO Read/Glob/Grep. These run in the Mission Control process as `mc` with
-      // cwd=/srv/mission-control, which contains .env (SESSION_SECRET,
-      // CLAUDE_CODE_OAUTH_TOKEN, COMPANION_TOKEN, AKIRA_MEMORY_PIN — the PIN that
-      // gates her own vault) and the live database. Read-only is not safe when the
-      // readable set includes the secrets. She has room_read for files and `relay`
-      // for anything needing real code access. Was:
+      // The old boundary here — no Read/Glob/Grep, because cwd=/srv/mission-control
+      // holds .env (SESSION_SECRET, CLAUDE_CODE_OAUTH_TOKEN, COMPANION_TOKEN,
+      // AKIRA_MEMORY_PIN) and the live database, and read-only isn't safe when the
+      // readable set includes the secrets — is gone. It was removed DELIBERATELY by
+      // sub-project C (docs/superpowers/specs/2026-08-22-akira-host-reach-design.md,
+      // D1: reach is total): her host `read`/`list`/`write`/`bash` reach .env and the
+      // database anyway, by design (D2: awareness via the action log, not a veto).
+      //
+      // Read/Glob/Grep are STILL absent, for a different reason: per D4, those run
+      // in-process, in the server's own event loop — a long-running one would block
+      // the process AKIRA is thinking inside. Reach goes through the host agent
+      // instead, where every action is logged. Was:
       //   ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite']
       // 'Skill' is required for her vault skills to be invocable: tools_allowlist
       // feeds the SDK's `tools` (base capability set), not just `allowedTools`.

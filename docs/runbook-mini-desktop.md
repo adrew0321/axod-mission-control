@@ -281,7 +281,7 @@ The room no longer shares the laptop's secret. On the Mini:
 
 Set it as `ROOM_COMPANION_TOKEN` in `/srv/mission-control/.env`, restart Mission
 Control, then set the SAME value as `ROOM_TOKEN` in the container's
-`/home/akira/room-agent/.env` and restart `akira-room`.
+`/home/akira/mini-agent/.env` and restart `akira-room`.
 
 **Order matters, and the failure is safe.** Between the two restarts the room's
 connect attempts return 401 and it retries on its 3s backoff; nothing is lost.
@@ -368,3 +368,67 @@ Decision 6 claims. It is not in the backup chain: `deploy/mc-backup.sh` copies e
 one file — the SQLite DB — into `/srv/backups`, and the offsite job ships only
 `/srv/backups` to R2. Moving the repo under `/srv` would not change that. Surviving the
 loss of the Mini itself needs a `git bundle` step added to the nightly backup.
+
+## Host agent (sub-project C, slice C1)
+
+The host agent gives AKIRA root reach on the Mini. Installing it is an operator
+step: root is NOPASSWD-allowlisted for `restart`/`daemon-reload` only, so this
+cannot be automated from a session.
+
+1. Mint the credential and put **the same value** in two places:
+   ```bash
+   HOST_TOKEN=$(openssl rand -hex 32)
+   # Mission Control's side:
+   echo "HOST_COMPANION_TOKEN=$HOST_TOKEN" | sudo -u mc tee -a /srv/mission-control/.env
+   # The agent's side:
+   printf 'AGENT_MODE=host\nHOST_TOKEN=%s\n' "$HOST_TOKEN" \
+     | sudo tee /srv/mission-control/mini-agent/.env.host
+   sudo chmod 600 /srv/mission-control/mini-agent/.env.host
+   ```
+   It must differ from `COMPANION_TOKEN` and `ROOM_COMPANION_TOKEN` — `resolveTarget`
+   checks laptop first, so a duplicated value silently downgrades the host.
+
+2. Pre-flight, then install and start the unit. `mini-agent/` ships without
+   `node_modules` — it will *probably* resolve `dotenv`/`tsx` upward from
+   `/srv/mission-control/node_modules` since both are root deps, but that is
+   inference, and if it's wrong the failure mode is a silent `Restart=on-failure`
+   crash-loop visible only in journald. Run it once by hand first:
+   ```bash
+   cd /srv/mission-control/mini-agent
+   set -a; source .env.host; set +a
+   pnpm start
+   # watch for: [host] connected to http://127.0.0.1:3000 — then Ctrl-C
+   ```
+   Only once that line appears:
+   ```bash
+   sudo cp /srv/mission-control/deploy/akira-host-agent.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now akira-host-agent
+   ```
+
+3. Restart Mission Control so it picks up `HOST_COMPANION_TOKEN`:
+   ```bash
+   sudo systemctl restart mission-control
+   ```
+
+4. Verify — the agent must report connected, and `systemctl --failed` must be empty:
+   ```bash
+   journalctl -u akira-host-agent -n 20 --no-pager
+   systemctl --failed
+   ```
+
+5. Re-provision the room's copy after the `room-agent` → `mini-agent` rename.
+   The container keeps running the old copy until you do this; it is safe to
+   defer, but the two will drift.
+
+6. Confirm in a live turn: ask AKIRA to run `systemctl is-active mission-control`
+   on target `host`. Then check the log carries it. `/srv/mission-control/data/akira-actions.log`
+   is only the *default* path — `src/lib/akira/action-log.ts` resolves
+   `AKIRA_ACTION_LOG`, then `ROOM_SHELL_LOG`, then that default, in that order. If
+   the Mini's `.env` sets either of those, tail the path it names instead, or you
+   will be watching an empty file and wrongly conclude logging is broken:
+   ```bash
+   sudo -u mc grep -E '^(AKIRA_ACTION_LOG|ROOM_SHELL_LOG)=' /srv/mission-control/.env
+   # tail whichever of those is set; otherwise:
+   sudo -u mc tail -5 /srv/mission-control/data/akira-actions.log
+   ```

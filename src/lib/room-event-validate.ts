@@ -1,14 +1,14 @@
 // Pure request-body validation for POST /api/companion/room-event, kept
 // separate from the route handler (which transitively imports 'server-only'
 // via room-proposals-data.ts, and so cannot be exercised directly by
-// node:test — see room-shell.ts for the same split, for the same reason).
+// node:test — see agent-shell.ts for the same split, for the same reason).
 //
 // This route trusts the room's TOKEN, not the room's JUDGMENT: `name` and
 // `path` feed straight into AKIRA's instruction text (room-proposals.ts —
 // inboxTurnInstruction/playgroundTurnInstruction), so a compromised or
 // merely buggy room agent must not be able to smuggle control characters
 // through, or write unbounded strings into the database. The room agent
-// already truncates `head` at MAX_HEAD_CHARS (room-agent/src/doorway.ts) —
+// already truncates `head` at MAX_HEAD_CHARS (mini-agent/src/doorway.ts) —
 // this is the server independently enforcing the same bound rather than
 // trusting the client actually did.
 

@@ -63,7 +63,13 @@ test('the prompt tells her to stop and wait on a gated command, not retry', () =
   assert.match(AKIRA_SYSTEM_PROMPT, /do not retry|don't retry/i);
 });
 
-test('the prompt says her room work is hers and prod is off limits', () => {
+test('the prompt says the room is hers and the host reaches Mission Control itself', () => {
   assert.match(AKIRA_SYSTEM_PROMPT, /room/i);
-  assert.match(AKIRA_SYSTEM_PROMPT, /cannot reach Mission Control's own files/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /"host" is the machine.*Mission Control/i);
+  assert.match(AKIRA_SYSTEM_PROMPT, /nothing is gated/i);
+});
+
+test('the prompt names the merged tool surface, not the old room_* names', () => {
+  assert.match(AKIRA_SYSTEM_PROMPT, /`list`\/`read`\/`write`\/`bash`/);
+  assert.doesNotMatch(AKIRA_SYSTEM_PROMPT, /room_list|room_read|room_write|room_bash/);
 });

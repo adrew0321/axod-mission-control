@@ -1,23 +1,25 @@
-// Covers the property the shell log exists for: every dispatched command
+// Covers the property the action log exists for: every dispatched command
 // reaches a terminal log line, on every path out of runShell — including the
 // paths where sendCommand's promise REJECTS rather than resolving to a status
-// (room offline / disconnected mid-command / our own transport timeout). The
-// room's egress is open by design, so those rejections are exactly the moments
-// the audit trail has to hold up.
+// (companion offline / disconnected mid-command / our own transport timeout).
+// The room's egress is open by design, so those rejections are exactly the
+// moments the audit trail has to hold up. The host path (added for
+// sub-project C) never gates, and a self-affecting host command is
+// fire-and-forget rather than awaited — see the tests at the bottom.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync, existsSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// Isolate this file's log from the real data/room-shell.log and from other
-// test files. shellLogPath() reads this lazily on every call, so setting it
+// Isolate this file's log from the real data/akira-actions.log and from other
+// test files. actionLogPath() reads this lazily on every call, so setting it
 // before runShell is ever invoked is sufficient.
-const logDir = mkdtempSync(join(tmpdir(), 'room-shell-test-'));
-const logPath = join(logDir, 'room-shell.log');
-process.env.ROOM_SHELL_LOG = logPath;
+const logDir = mkdtempSync(join(tmpdir(), 'agent-shell-test-'));
+const logPath = join(logDir, 'agent-shell.log');
+process.env.AKIRA_ACTION_LOG = logPath;
 
-import { runShell } from './room-shell';
+import { runShell } from './agent-shell';
 import { registerCompanion, resolveResult } from '@/lib/companion/registry';
 import { decideGate } from '@/lib/companion/gates';
 import type { Command } from '@/lib/companion/protocol';
@@ -45,7 +47,7 @@ test('a rejected dispatch (room companion offline) still ends in a terminal log 
   const { ctx } = freshCtx();
   // No sink registered for 'room' — sendCommand rejects immediately (registry.ts).
 
-  const result = await runShell('echo hi', undefined, ctx);
+  const result = await runShell('echo hi', undefined, 'room', ctx);
 
   assert.equal(result.isError, true, 'a transport failure must surface as an error to AKIRA');
   const lines = readLogLines();
@@ -65,7 +67,7 @@ test("a normal completion logs dispatch then result with the room's real exit co
     'room',
   );
   try {
-    const result = await runShell('echo hi', undefined, ctx);
+    const result = await runShell('echo hi', undefined, 'room', ctx);
     assert.equal(result.isError, undefined);
     const lines = readLogLines();
     assert.deepEqual(lines.map((l) => l.event), ['dispatch', 'result']);
@@ -84,7 +86,7 @@ test('a gated command the operator denies logs dispatch, gated (with its own rea
     'room',
   );
   try {
-    const promise = runShell('npm run dev', undefined, ctx);
+    const promise = runShell('npm run dev', undefined, 'room', ctx);
     // Settle the gate the same way the operator's approve/deny route does,
     // instead of waiting out the real 120s auto-deny timeout.
     await new Promise((r) => setTimeout(r, 10));
@@ -122,7 +124,7 @@ test('a gated command the operator approves logs dispatch, gated, approved, resu
     'room',
   );
   try {
-    const promise = runShell('npm run dev', undefined, ctx);
+    const promise = runShell('npm run dev', undefined, 'room', ctx);
     await new Promise((r) => setTimeout(r, 10));
     const gateId = String(emitted[0]?.gateId);
     assert.equal(decideGate(gateId, 'approved'), true);
@@ -152,7 +154,7 @@ test('a path-refused result (blocked, but NOT gated) never opens a gate, and nam
     'room',
   );
   try {
-    const result = await runShell('ls -la', '/etc', ctx);
+    const result = await runShell('ls -la', '/etc', 'room', ctx);
 
     assert.equal(emitted.length, 0, 'a path refusal must never emit a hard_gate — approval cannot fix it');
     assert.equal(result.isError, undefined, 'a refusal is content, not a thrown tool error');
@@ -177,7 +179,7 @@ test('a classifier-gated result (gated: true) still opens a real gate', async ()
     'room',
   );
   try {
-    const promise = runShell('npm run dev', undefined, ctx);
+    const promise = runShell('npm run dev', undefined, 'room', ctx);
     await new Promise((r) => setTimeout(r, 10));
     assert.equal(emitted.length, 1, 'a classifier gate must emit exactly one hard_gate');
     assert.equal(emitted[0]?.type, 'hard_gate');
@@ -204,7 +206,7 @@ test('when no operator is watching this turn, a gated command is denied immediat
   );
   const start = Date.now();
   try {
-    const result = await runShell('npm run dev', undefined, unwatchedCtx);
+    const result = await runShell('npm run dev', undefined, 'room', unwatchedCtx);
 
     assert.ok(Date.now() - start < 5_000, 'must resolve immediately, not park for GATE_TIMEOUT_MS');
     assert.equal(emitted.length, 0, 'no hard_gate — nobody is watching to answer it');
@@ -222,8 +224,97 @@ test('when no operator is watching this turn, a gated command is denied immediat
 // A real auto-deny-at-120s path is not exercised here (waiting out
 // GATE_TIMEOUT_MS in a unit test would make the suite take 2 minutes). Instead:
 // runShell branches only on `decided === 'denied'` after `await decision`
-// (room-shell.ts), and openGate's timeout callback resolves that same
+// (agent-shell.ts), and openGate's timeout callback resolves that same
 // `decision` promise to 'denied' through the identical settle() path that
 // decideGate(id, 'denied') calls explicitly (gates.ts:38-43 vs :64-70) — so the
 // "gated command the operator denies" test above and the timeout case are the
 // same code path in runShell, not two branches where only one could be tested.
+
+// --- host target (sub-project C) ---------------------------------------
+
+test('a self-affecting host command returns immediately and never awaits a result', async () => {
+  rmSync(logPath, { force: true });
+  const { ctx } = freshCtx();
+  let awaited = false;
+  const unreg = registerCompanion(
+    {
+      send: (cmd: Command) => {
+        // A restart kills the server: this result would never arrive in
+        // reality. Never resolving/rejecting proves runShell did not await it.
+        void new Promise<never>(() => {
+          awaited = true;
+          void cmd;
+        });
+      },
+    },
+    'host',
+  );
+  try {
+    const r = await runShell('sudo systemctl restart mission-control', undefined, 'host', ctx);
+
+    assert.equal(r.isError, undefined);
+    assert.match(
+      r.content[0].text,
+      /restart/i,
+      'she is told what was started, not handed a result that will never arrive',
+    );
+    assert.equal(awaited, true, 'the promise was created but runShell did not block on it');
+
+    const lines = readLogLines();
+    assert.deepEqual(lines.map((l) => l.event), ['intent'], 'an intent line is logged before the fire-and-forget dispatch, and no result line ever follows it');
+  } finally {
+    unreg();
+  }
+});
+
+test('an ordinary host command is awaited normally', async () => {
+  rmSync(logPath, { force: true });
+  const { ctx } = freshCtx();
+  const unreg = registerCompanion(
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'ok', text: 'hi', exitCode: 0 }) },
+    'host',
+  );
+  try {
+    const r = await runShell('echo hi', undefined, 'host', ctx);
+    assert.match(r.content[0].text, /hi/);
+    const lines = readLogLines();
+    assert.deepEqual(lines.map((l) => l.event), ['dispatch', 'result']);
+  } finally {
+    unreg();
+  }
+});
+
+test('the host path never opens an operator gate', async () => {
+  rmSync(logPath, { force: true });
+  const { ctx, emitted } = freshCtx();
+  const unreg = registerCompanion(
+    // Even if an agent wrongly returned gated:true, the host path must not gate.
+    { send: (cmd: Command) => resolveResult({ id: cmd.id, status: 'blocked', gated: true, reason: 'nope' }) },
+    'host',
+  );
+  try {
+    await runShell('echo hi', undefined, 'host', ctx);
+    assert.equal(emitted.length, 0);
+  } finally {
+    unreg();
+  }
+});
+
+test('a self-affecting command is refused (not dispatched) when the host agent is offline, and no intent line is logged', async () => {
+  // Ruling 12: without this check, sendCommand rejects immediately with
+  // "companion offline: host", the fire-and-forget .catch(() => {}) swallows
+  // it, and AKIRA would report "Started: ..." for a restart that never ran —
+  // while the log's 'intent' line corroborates the lie. The online check must
+  // come BEFORE the log write, so a dispatch that cannot be made leaves no
+  // intent line behind.
+  rmSync(logPath, { force: true });
+  const { ctx } = freshCtx();
+  // No sink registered for 'host' — isOnline('host') is false.
+
+  const r = await runShell('sudo systemctl restart mission-control', undefined, 'host', ctx);
+
+  assert.equal(r.isError, true, 'must surface as an error, not a fabricated "Started"');
+  assert.match(r.content[0].text, /offline/i);
+  const lines = readLogLines();
+  assert.deepEqual(lines, [], 'no intent line for a dispatch that never happened');
+});

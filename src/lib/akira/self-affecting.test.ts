@@ -1,0 +1,77 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { isSelfAffecting } from './self-affecting';
+
+test('systemctl verbs that end the turn are caught', () => {
+  for (const c of [
+    'systemctl restart mission-control',
+    'sudo systemctl restart mission-control',
+    'systemctl stop mission-control.service',
+    'sudo -n systemctl restart mission-control',
+    'systemctl  restart   mission-control',
+  ]) {
+    assert.equal(isSelfAffecting(c), true, c);
+  }
+});
+
+test('read-only systemctl verbs are NOT self-affecting', () => {
+  for (const c of [
+    'systemctl status mission-control',
+    'systemctl is-active mission-control',
+    'systemctl cat mission-control',
+    'journalctl -u mission-control -n 50',
+  ]) {
+    assert.equal(isSelfAffecting(c), false, c);
+  }
+});
+
+test('another unit is not self-affecting', () => {
+  assert.equal(isSelfAffecting('systemctl restart cloudflared'), false);
+  assert.equal(isSelfAffecting('systemctl restart akira-host-agent'), false);
+});
+
+test('a compound command containing a restart still counts', () => {
+  assert.equal(isSelfAffecting('cd /srv/mission-control && systemctl restart mission-control'), true);
+  assert.equal(isSelfAffecting('pnpm build; sudo systemctl restart mission-control'), true);
+});
+
+test('pkill / killall against the server process count', () => {
+  assert.equal(isSelfAffecting('pkill -f "next start"'), true);
+  assert.equal(isSelfAffecting('killall -9 node'), true);
+  assert.equal(isSelfAffecting('pkill -f "node .*mission"'), true);
+});
+
+test('pkill / killall against a process that merely contains node/next is NOT self-affecting', () => {
+  assert.equal(isSelfAffecting('pkill -f my-node-script'), false);
+  assert.equal(isSelfAffecting('killall node-red'), false);
+  assert.equal(isSelfAffecting('pkill -f node-exporter'), false);
+});
+
+test('ordinary commands do not', () => {
+  for (const c of ['ls -la /srv/mission-control', 'cat .env', 'git -C /srv/mission-control status']) {
+    assert.equal(isSelfAffecting(c), false, c);
+  }
+});
+
+test('an empty or whitespace command is not self-affecting', () => {
+  assert.equal(isSelfAffecting(''), false);
+  assert.equal(isSelfAffecting('   '), false);
+});
+
+test('a unit that merely shares the mission-control prefix is NOT self-affecting', () => {
+  assert.equal(isSelfAffecting('systemctl restart mission-control-canary'), false);
+  assert.equal(isSelfAffecting('systemctl restart mission-control-staging'), false);
+  assert.equal(isSelfAffecting('systemctl restart mission-control.backup'), false);
+});
+
+test('a bare newline separates statements, so an unrelated restart does not bridge', () => {
+  assert.equal(
+    isSelfAffecting('systemctl restart cloudflared\nsystemctl status mission-control'),
+    false,
+  );
+  assert.equal(isSelfAffecting('pkill nonexistent-thing\nnode myScript.js'), false);
+});
+
+test('a real restart after a newline is still caught', () => {
+  assert.equal(isSelfAffecting('echo hi\nsystemctl restart mission-control'), true);
+});

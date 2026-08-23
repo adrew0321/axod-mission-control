@@ -1,16 +1,20 @@
-// Executes `shell` commands inside the room. Two controls, both here:
+// Executes `shell` commands for both the room and the host. Two controls,
+// both room-only:
 //   1. classifyShell refuses anything that would outlive the command (Decision 7),
 //      unless the operator already approved it.
-//   2. Everything that runs gets a wall-clock timeout and its own process group,
-//      so a timeout kills the whole tree rather than orphaning children on a box
-//      that also hosts prod.
+//   2. cmd.cwd is validated against the room's path scope.
+// The host has neither (D1/D2) — see the isRoom/else branch below.
+// Everything that runs — room or host — gets a wall-clock timeout and its own
+// process group, so a timeout kills the whole tree rather than orphaning
+// children on a box that also hosts prod.
 // A refused command returns status 'blocked' — the same shape guard.ts produces
 // for the browser — never an exception.
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
+import { resolve } from 'node:path';
 import { classifyShell } from './shell-gate';
 import { validatePathReal } from './paths-real';
-import type { Roots } from './paths';
+import { isRoom, type ExecPolicy } from './policy';
 import type { Command, Result } from './protocol';
 
 export const SHELL_TIMEOUT_MS = 120_000;
@@ -21,7 +25,7 @@ export const MAX_OUTPUT_CHARS = 60_000;
 const SIGPIPE_EXIT_CODE = 141;
 
 export async function execShell(
-  roots: Roots,
+  policy: ExecPolicy,
   cmd: Command,
   timeoutMs = SHELL_TIMEOUT_MS,
 ): Promise<Result> {
@@ -32,19 +36,29 @@ export async function execShell(
   if (!command) return { id: cmd.id, status: 'error', reason: 'empty command' };
   if (command.includes('\0')) return { id: cmd.id, status: 'error', reason: 'null byte in command' };
 
-  const gate = classifyShell(command);
-  if (gate.gated && !cmd.approved) {
-    // The ONLY 'blocked' cause an operator approval can clear. Every other
-    // 'blocked' result below is a plain refusal — `gated` stays unset so
-    // room-shell.ts never mistakes it for something the operator can approve.
-    return { id: cmd.id, status: 'blocked', gated: true, reason: gate.reason ?? 'gated command' };
-  }
-
-  let cwd = roots.room;
-  if (cmd.cwd) {
-    const verdict = await validatePathReal(roots, cmd.cwd);
-    if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
-    cwd = verdict.abs;
+  let cwd: string;
+  if (isRoom(policy)) {
+    // Room only: the long-running gate (Decision 7) and the path scope.
+    const gate = classifyShell(command);
+    if (gate.gated && !cmd.approved) {
+      // The ONLY 'blocked' cause an operator approval can clear. Every other
+      // 'blocked' result below is a plain refusal — `gated` stays unset so
+      // agent-shell.ts never mistakes it for something the operator can approve.
+      return { id: cmd.id, status: 'blocked', gated: true, reason: gate.reason ?? 'gated command' };
+    }
+    cwd = policy.roots.room;
+    if (cmd.cwd) {
+      const verdict = await validatePathReal(policy.roots, cmd.cwd);
+      if (!verdict.ok) return { id: cmd.id, status: 'blocked', reason: verdict.reason };
+      cwd = verdict.abs;
+    }
+  } else {
+    // Host: no gate, no path scope. Spec D1/D2 — this is the point of slice C1.
+    // A relative cmd.cwd must not resolve against the mini-agent process's own
+    // cwd (whatever the shipped unit happens to set that to) — anchor it
+    // against the configured defaultCwd instead, mirroring execFs's host
+    // branch, so the same input means the same thing in both actions.
+    cwd = cmd.cwd ? resolve(policy.defaultCwd, cmd.cwd) : policy.defaultCwd;
   }
 
   return new Promise<Result>((resolve) => {
