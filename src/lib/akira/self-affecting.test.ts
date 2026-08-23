@@ -50,3 +50,21 @@ test('an empty or whitespace command is not self-affecting', () => {
   assert.equal(isSelfAffecting(''), false);
   assert.equal(isSelfAffecting('   '), false);
 });
+
+test('a unit that merely shares the mission-control prefix is NOT self-affecting', () => {
+  assert.equal(isSelfAffecting('systemctl restart mission-control-canary'), false);
+  assert.equal(isSelfAffecting('systemctl restart mission-control-staging'), false);
+  assert.equal(isSelfAffecting('systemctl restart mission-control.backup'), false);
+});
+
+test('a bare newline separates statements, so an unrelated restart does not bridge', () => {
+  assert.equal(
+    isSelfAffecting('systemctl restart cloudflared\nsystemctl status mission-control'),
+    false,
+  );
+  assert.equal(isSelfAffecting('pkill nonexistent-thing\nnode myScript.js'), false);
+});
+
+test('a real restart after a newline is still caught', () => {
+  assert.equal(isSelfAffecting('echo hi\nsystemctl restart mission-control'), true);
+});

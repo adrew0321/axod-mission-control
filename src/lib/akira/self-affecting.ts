@@ -15,12 +15,19 @@ const UNIT = 'mission-control';
  *  cat, is-active, show) are deliberately absent — she should use those freely. */
 const DISRUPTIVE_VERBS = ['restart', 'stop', 'kill', 'try-restart', 'reload-or-restart'];
 
+/** Same-statement run: stops at a command separator OR a line break. A bare
+ *  newline separates statements just as surely as `;` does. */
+const SEP = '[^;&|\\n\\r]*?';
+
 /** Matches e.g. `systemctl restart mission-control`, with or without a sudo
- *  prefix, extra flags, or a `.service` suffix — anywhere in a compound line. */
+ *  prefix, extra flags, or a `.service` suffix — within a single statement. */
 function hasDisruptiveSystemctl(command: string): boolean {
   const verbs = DISRUPTIVE_VERBS.join('|');
+  // The unit name is anchored, not merely prefixed: \b would let
+  // `mission-control-canary` match, which is a DIFFERENT unit. Require that no
+  // word char, dot, or hyphen sits on either side.
   const re = new RegExp(
-    `\\bsystemctl\\b[^;&|]*?\\b(?:${verbs})\\b[^;&|]*?\\b${UNIT}(?:\\.service)?\\b`,
+    `\\bsystemctl\\b${SEP}\\b(?:${verbs})\\b${SEP}(?<![\\w.-])${UNIT}(?:\\.service)?(?![\\w.-])`,
     'i',
   );
   return re.test(command);
@@ -29,7 +36,7 @@ function hasDisruptiveSystemctl(command: string): boolean {
 /** `pkill -f "next start"`, `killall node` — blunt instruments that reach the
  *  server process. Narrow on purpose: `pkill` against something else is fine. */
 function killsTheServerProcess(command: string): boolean {
-  return /\b(?:pkill|killall)\b[^;&|]*\b(?:node|next|next start)\b/i.test(command);
+  return /\b(?:pkill|killall)\b[^;&|\n\r]*\b(?:node|next)\b/i.test(command);
 }
 
 export function isSelfAffecting(command: string): boolean {
