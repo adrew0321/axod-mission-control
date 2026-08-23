@@ -36,6 +36,43 @@ test('optional fields are omitted rather than emitted as undefined', () => {
   assert.equal('reason' in row, false);
 });
 
+test('cwd, status, and reason each land in the JSON with their own value when given', () => {
+  const row = JSON.parse(formatActionLogLine({
+    at: new Date(),
+    target: 'host',
+    event: 'gated',
+    command: 'systemctl restart mission-control',
+    cwd: '/srv/mission-control',
+    status: 'blocked',
+    reason: 'this would restart the service that is running the turn',
+  }));
+  assert.equal(row.cwd, '/srv/mission-control');
+  assert.equal(row.status, 'blocked');
+  assert.equal(row.reason, 'this would restart the service that is running the turn');
+});
+
+test('a null exit code (killed) survives the round trip, distinguishable from "not recorded"', () => {
+  const row = JSON.parse(formatActionLogLine({
+    at: new Date(), target: 'host', event: 'result', command: 'sleep 9999', exitCode: null,
+  }));
+  assert.equal('exitCode' in row, true, 'a kill must be recorded, not silently dropped like an absent field');
+  assert.equal(row.exitCode, null);
+});
+
+test('status and reason can both be present at once and stay distinct', () => {
+  const row = JSON.parse(formatActionLogLine({
+    at: new Date(),
+    target: 'host',
+    event: 'result',
+    command: 'systemctl status mission-control',
+    status: 'error',
+    reason: 'companion command timeout',
+  }));
+  assert.equal(row.status, 'error');
+  assert.equal(row.reason, 'companion command timeout');
+  assert.notEqual(row.status, row.reason, 'status is reserved for outcomes, never overloaded with the reason text');
+});
+
 test('actionLogPath prefers AKIRA_ACTION_LOG, falls back to ROOM_SHELL_LOG', () => {
   const saved = { a: process.env.AKIRA_ACTION_LOG, r: process.env.ROOM_SHELL_LOG };
   try {
