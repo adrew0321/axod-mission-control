@@ -52,7 +52,15 @@ export async function runShell(
       return err(`Your host agent is offline, so I did not run: ${command}`);
     }
     appendActionLog({ at: new Date(), target, event: 'intent', command, cwd });
-    void sendCommand({ action: 'shell', command, cwd }, SHELL_TIMEOUT_MS, target).result.catch(
+    // If the restart actually kills Mission Control, the process is gone
+    // before this promise ever settles — identical to a bare .catch(() => {}).
+    // But it does not always kill it (systemctl restart exits non-zero, the
+    // unit is masked, the classifier false-positived), and when it doesn't,
+    // dropping the Result on the floor would leave this 'intent' line with no
+    // terminal line forever, after AKIRA already told the operator a restart
+    // was underway. Log the Result if anyone is still around to see it.
+    void sendCommand({ action: 'shell', command, cwd }, SHELL_TIMEOUT_MS, target).result.then(
+      (r) => appendActionLog({ at: new Date(), target, event: 'result', command, cwd, exitCode: r.exitCode, status: r.status }),
       () => { /* the server is going down; nobody is left to receive this */ },
     );
     return ok(

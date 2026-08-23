@@ -281,7 +281,7 @@ The room no longer shares the laptop's secret. On the Mini:
 
 Set it as `ROOM_COMPANION_TOKEN` in `/srv/mission-control/.env`, restart Mission
 Control, then set the SAME value as `ROOM_TOKEN` in the container's
-`/home/akira/room-agent/.env` and restart `akira-room`.
+`/home/akira/mini-agent/.env` and restart `akira-room`.
 
 **Order matters, and the failure is safe.** Between the two restarts the room's
 connect attempts return 401 and it retries on its 3s backoff; nothing is lost.
@@ -388,7 +388,18 @@ cannot be automated from a session.
    It must differ from `COMPANION_TOKEN` and `ROOM_COMPANION_TOKEN` — `resolveTarget`
    checks laptop first, so a duplicated value silently downgrades the host.
 
-2. Install and start the unit:
+2. Pre-flight, then install and start the unit. `mini-agent/` ships without
+   `node_modules` — it will *probably* resolve `dotenv`/`tsx` upward from
+   `/srv/mission-control/node_modules` since both are root deps, but that is
+   inference, and if it's wrong the failure mode is a silent `Restart=on-failure`
+   crash-loop visible only in journald. Run it once by hand first:
+   ```bash
+   cd /srv/mission-control/mini-agent
+   set -a; source .env.host; set +a
+   pnpm start
+   # watch for: [host] connected to http://127.0.0.1:3000 — then Ctrl-C
+   ```
+   Only once that line appears:
    ```bash
    sudo cp /srv/mission-control/deploy/akira-host-agent.service /etc/systemd/system/
    sudo systemctl daemon-reload
@@ -411,7 +422,13 @@ cannot be automated from a session.
    defer, but the two will drift.
 
 6. Confirm in a live turn: ask AKIRA to run `systemctl is-active mission-control`
-   on target `host`. Then check the log carries it:
+   on target `host`. Then check the log carries it. `/srv/mission-control/data/akira-actions.log`
+   is only the *default* path — `src/lib/akira/action-log.ts` resolves
+   `AKIRA_ACTION_LOG`, then `ROOM_SHELL_LOG`, then that default, in that order. If
+   the Mini's `.env` sets either of those, tail the path it names instead, or you
+   will be watching an empty file and wrongly conclude logging is broken:
    ```bash
+   sudo -u mc grep -E '^(AKIRA_ACTION_LOG|ROOM_SHELL_LOG)=' /srv/mission-control/.env
+   # tail whichever of those is set; otherwise:
    sudo -u mc tail -5 /srv/mission-control/data/akira-actions.log
    ```

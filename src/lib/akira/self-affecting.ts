@@ -34,9 +34,12 @@ function hasDisruptiveSystemctl(command: string): boolean {
 }
 
 /** `pkill -f "next start"`, `killall node` — blunt instruments that reach the
- *  server process. Narrow on purpose: `pkill` against something else is fine. */
+ *  server process. Narrow on purpose: `pkill` against something else is fine.
+ *  The process name is anchored the same way the unit name is above: a bare
+ *  `\b` is satisfied by a hyphen, so `pkill -f my-node-script`, `killall
+ *  node-red`, and `pkill -f node-exporter` would all otherwise match. */
 function killsTheServerProcess(command: string): boolean {
-  return /\b(?:pkill|killall)\b[^;&|\n\r]*\b(?:node|next)\b/i.test(command);
+  return /\b(?:pkill|killall)\b[^;&|\n\r]*(?<![\w.-])(?:node|next)(?![\w.-])/i.test(command);
 }
 
 export function isSelfAffecting(command: string): boolean {

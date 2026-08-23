@@ -30,7 +30,7 @@ const conn = connect(cfg, (cmd: Command) => {
       if (result.status !== 'ok') console.warn(tag, result.status, result.reason);
       await conn.postResult(result);
     })
-    .catch((err) => console.error(`${tag} result POST failed:`, err));
+    .catch((err) => console.error(`${tag} command chain error:`, err));
 });
 
 // Room only: there is no doorway on the host, and watchDoorway would throw on a

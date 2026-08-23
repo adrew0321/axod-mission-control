@@ -8,7 +8,7 @@
 // inboxTurnInstruction/playgroundTurnInstruction), so a compromised or
 // merely buggy room agent must not be able to smuggle control characters
 // through, or write unbounded strings into the database. The room agent
-// already truncates `head` at MAX_HEAD_CHARS (room-agent/src/doorway.ts) —
+// already truncates `head` at MAX_HEAD_CHARS (mini-agent/src/doorway.ts) —
 // this is the server independently enforcing the same bound rather than
 // trusting the client actually did.
 

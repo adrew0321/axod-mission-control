@@ -11,7 +11,7 @@ Wants=network-online.target
 # applies to uid 0 only — running as an ordinary `akira` user silently defeated it: her
 # writes mapped to host uid 1001001, leaving the doorway read-only to her and the
 # workshop remote unpushable. Do not reintroduce User=akira without remapping the idmap.
-WorkingDirectory=/home/akira/room-agent
+WorkingDirectory=/home/akira/mini-agent
 # __TSX__ is substituted by provision.sh with the container's actual tsx path
 # (/usr/bin/tsx when node came from NodeSource). Do not hardcode it here — a wrong
 # path fails as a silent restart loop.

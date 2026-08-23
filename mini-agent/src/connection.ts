@@ -12,11 +12,21 @@ export function connect(
   let controller: AbortController | null = null;
 
   async function postResult(r: Result): Promise<void> {
-    await fetch(`${cfg.miniUrl}/api/companion/result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
-      body: JSON.stringify(r),
-    }).catch((e) => console.error(`${tag} result POST failed:`, e?.message ?? e));
+    try {
+      const res = await fetch(`${cfg.miniUrl}/api/companion/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
+        body: JSON.stringify(r),
+      });
+      // A redirect (e.g. the session gate bouncing an unauthenticated request
+      // to /login) is followed silently by fetch and looks like success unless
+      // we check ok — that exact failure mode has hit this file three times.
+      if (!res.ok) {
+        console.error(`${tag} result POST rejected: ${res.status} ${res.url} (${r.id})`);
+      }
+    } catch (e) {
+      console.error(`${tag} result POST failed:`, e instanceof Error ? e.message : e);
+    }
   }
 
   async function postDrop(r: DropReport): Promise<void> {

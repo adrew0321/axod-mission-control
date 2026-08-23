@@ -38,6 +38,13 @@ test('a compound command containing a restart still counts', () => {
 test('pkill / killall against the server process count', () => {
   assert.equal(isSelfAffecting('pkill -f "next start"'), true);
   assert.equal(isSelfAffecting('killall -9 node'), true);
+  assert.equal(isSelfAffecting('pkill -f "node .*mission"'), true);
+});
+
+test('pkill / killall against a process that merely contains node/next is NOT self-affecting', () => {
+  assert.equal(isSelfAffecting('pkill -f my-node-script'), false);
+  assert.equal(isSelfAffecting('killall node-red'), false);
+  assert.equal(isSelfAffecting('pkill -f node-exporter'), false);
 });
 
 test('ordinary commands do not', () => {
