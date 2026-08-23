@@ -1,5 +1,5 @@
 {
-  "name": "akira-room-agent",
+  "name": "akira-mini-agent",
   "private": true,
   "type": "module",
   "scripts": {

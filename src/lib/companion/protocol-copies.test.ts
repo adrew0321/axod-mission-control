@@ -7,7 +7,7 @@ import { join } from 'node:path';
 const COPIES = [
   'src/lib/companion/protocol.ts',
   'companion/src/protocol.ts',
-  'room-agent/src/protocol.ts',
+  'mini-agent/src/protocol.ts',
 ];
 
 test('all protocol copies are byte-identical', () => {
