@@ -251,6 +251,23 @@ export const room_proposals = sqliteTable('room_proposals', {
   decided_at: integer('decided_at', { mode: 'timestamp' }),
 });
 
+// One row per AKIRA action that reached a terminal state. Fed by action-log.ts's
+// sink (see action-feed.ts) and read by the Discord poller.
+//
+// There is NO output column, and there must never be one: spec D7 keeps command
+// output out of the feed because she can read .env, and Discord is a third party.
+export const agent_actions = sqliteTable('agent_actions', {
+  id: text('id').primaryKey(),
+  at: integer('at', { mode: 'timestamp' }).notNull(),
+  target: text('target').notNull(), // 'laptop' | 'room' | 'host'
+  event: text('event').notNull(), // 'result' | 'intent' | 'denied'
+  command: text('command').notNull(),
+  cwd: text('cwd'),
+  exit_code: integer('exit_code'),
+  status: text('status'),
+  reason: text('reason'),
+});
+
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   project: one(projects, { fields: [sessions.project_id], references: [projects.id] }),
   messages: many(messages),
