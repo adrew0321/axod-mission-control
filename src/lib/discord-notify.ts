@@ -7,8 +7,7 @@ import { getChannelsForProject } from './discord-bindings';
 import { getProposals } from './proposals-data';
 import { getDreams } from './dreams-data';
 import { getOpenRoomProposals } from './room-proposals-data';
-import { readRecentActions } from './akira/action-feed';
-import { pickNewActions } from './akira/action-feed-diff';
+import { readLatestActionAt, readActionsSince } from './akira/action-feed';
 import {
   diffScheduleRuns,
   pickNewDreams,
@@ -40,6 +39,13 @@ let actionCursor: number | null = null;
 // its own "have I been primed" bit — priming for it may complete on a later tick than
 // the shared `primed` flag below.
 let roomProposalPrimed = false;
+// The action cursor's own primed bit. Unlike roomProposalCursor (a Set, where
+// "empty" only ever means "nothing open"), actionCursor is a number | null
+// watermark, and pickNewActions/readActionsSince against a null cursor and an
+// empty table both legitimately produce `null` too — so "cursor is null" can't
+// double as "never primed" the way it can be read for other sources. This flag
+// removes that ambiguity: it is set true only by a successful priming read.
+let actionPrimed = false;
 let primed = false;
 
 /** Send an embed to every channel bound to a project. Returns false on send failure
@@ -115,7 +121,12 @@ async function tick(): Promise<void> {
       return null;
     });
 
-  const actionRows = await readRecentActions(50).catch((err) => {
+  // Queried forward from the cursor (ascending, `at > actionCursor`), not backward
+  // from "now" — a newest-first window would let a burst larger than the limit push
+  // older, not-yet-posted rows permanently out of view. Pre-prime (actionCursor still
+  // null) this legitimately reads the oldest rows on hand; that result is discarded
+  // below rather than posted, so it never surfaces as a backlog dump.
+  const actionRows = await readActionsSince(actionCursor, 50).catch((err) => {
     console.error('[discord-notify] action gather failed:', err instanceof Error ? err.message : err);
     return null;
   });
@@ -137,7 +148,17 @@ async function tick(): Promise<void> {
       roomProposalCursor = roomGather.diff.next;
       roomProposalPrimed = true;
     }
-    if (actionRows) actionCursor = pickNewActions(actionCursor, actionRows).next;
+    // Prime from the true latest timestamp, NOT from actionRows: with a null
+    // cursor, actionRows is the OLDEST window in the table (see the gather
+    // above), so deriving "latest" from it would under-seed the cursor whenever
+    // more than `limit` actions already exist and dump that backlog on tick 2.
+    // `undefined` (thrown) vs `null` (empty table) is deliberate — see the
+    // `actionPrimed` declaration for why the cursor's own value can't carry this.
+    const latestActionAt = await readLatestActionAt().catch(() => undefined);
+    if (latestActionAt !== undefined) {
+      actionCursor = latestActionAt;
+      actionPrimed = true;
+    }
     primed = true;
     return;
   }
@@ -188,14 +209,31 @@ async function tick(): Promise<void> {
 
   // --- AKIRA's actions: route to the home project channel (not project-scoped) ---
   if (actionRows) {
-    // Oldest first, so the feed reads in the order things happened.
-    const fresh = pickNewActions(actionCursor, actionRows).newActions.slice().sort((a, b) => a.atMs - b.atMs);
-    for (const a of fresh) {
-      if (await postToProject(client, DREAM_PROJECT_ID, actionEmbed(a))) {
-        actionCursor = Math.max(actionCursor ?? 0, a.atMs);
+    if (!actionPrimed) {
+      // Priming failed on the original tick 1; this is the first successful gather
+      // since then. Seed the cursor from the true latest timestamp — not from
+      // actionRows, which (read against a still-null cursor) is the oldest window
+      // in the table, not the latest — and post nothing, same as ordinary priming.
+      const latestActionAt = await readLatestActionAt().catch(() => undefined);
+      if (latestActionAt !== undefined) {
+        actionCursor = latestActionAt;
+        actionPrimed = true;
+      }
+    } else {
+      // actionRows already arrives filtered to `at > actionCursor` and ascending
+      // (readActionsSince), so no further diff/sort is needed here.
+      for (const a of actionRows) {
+        // Stop at the first failure: the cursor stays at the last SUCCESS, so this
+        // action and everything after it retry on the next tick. Advancing past a
+        // failure (e.g. with Math.max over an ascending list) would drop it
+        // permanently — under D2 that is an action the operator never learns about.
+        if (!(await postToProject(client, DREAM_PROJECT_ID, actionEmbed(a)))) break;
+        actionCursor = a.atMs;
       }
     }
   }
+  // else: this tick's gather failed — actionCursor and actionPrimed are left
+  // untouched, so the next successful gather resumes exactly where this one would have.
 }
 
 /** Start the notification poller. Idempotent; only when the bot token is set. */

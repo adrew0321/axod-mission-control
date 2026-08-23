@@ -258,7 +258,13 @@ export const room_proposals = sqliteTable('room_proposals', {
 // output out of the feed because she can read .env, and Discord is a third party.
 export const agent_actions = sqliteTable('agent_actions', {
   id: text('id').primaryKey(),
-  at: integer('at', { mode: 'timestamp' }).notNull(),
+  // timestamp_ms (not timestamp): the poller's cursor is a strict `at > since`
+  // watermark, and second-granularity timestamps let same-second sibling actions
+  // (e.g. list+read+write in one turn) collide and permanently exclude each other.
+  // This table has no deployed data yet, so there is no stored-seconds value to
+  // migrate; the migration SQL itself (`at integer NOT NULL`) is unaffected —
+  // drizzle stores an integer either way, only the JS-side unit changes.
+  at: integer('at', { mode: 'timestamp_ms' }).notNull(),
   target: text('target').notNull(), // 'laptop' | 'room' | 'host'
   event: text('event').notNull(), // 'result' | 'intent' | 'denied'
   command: text('command').notNull(),
