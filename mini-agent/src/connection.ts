@@ -1,12 +1,13 @@
 import type { Command, Result } from './protocol';
-import type { RoomConfig } from './config';
+import type { AgentConfig } from './config';
 import type { DropReport } from './doorway';
 
 export function connect(
-  cfg: RoomConfig,
+  cfg: AgentConfig,
   onCommand: (cmd: Command) => void,
   onStatus?: (connected: boolean) => void,
 ) {
+  const tag = `[${cfg.mode}]`;
   let stopped = false;
   let controller: AbortController | null = null;
 
@@ -15,7 +16,7 @@ export function connect(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-companion-token': cfg.token },
       body: JSON.stringify(r),
-    }).catch((e) => console.error('[room] result POST failed:', e?.message ?? e));
+    }).catch((e) => console.error(`${tag} result POST failed:`, e?.message ?? e));
   }
 
   async function postDrop(r: DropReport): Promise<void> {
@@ -29,10 +30,10 @@ export function connect(
       // to /login) is followed silently by fetch and looks like success unless
       // we check ok — that exact failure mode has hit this file three times.
       if (!res.ok) {
-        console.error(`[room] drop POST rejected: ${res.status} ${res.url} (${r.path})`);
+        console.error(`${tag} drop POST rejected: ${res.status} ${res.url} (${r.path})`);
       }
     } catch (e) {
-      console.error('[room] drop POST failed:', e instanceof Error ? e.message : e);
+      console.error(`${tag} drop POST failed:`, e instanceof Error ? e.message : e);
     }
   }
 
@@ -40,13 +41,13 @@ export function connect(
     while (!stopped) {
       controller = new AbortController();
       try {
-        const url = `${cfg.miniUrl}/api/companion/stream?token=${encodeURIComponent(cfg.token)}&target=room`;
+        const url = `${cfg.miniUrl}/api/companion/stream?token=${encodeURIComponent(cfg.token)}&target=${cfg.mode}`;
         const res = await fetch(url, {
           headers: { Accept: 'text/event-stream' },
           signal: controller.signal,
         });
         if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
-        console.log('[room] connected to', cfg.miniUrl);
+        console.log(`${tag} connected to`, cfg.miniUrl);
         onStatus?.(true);
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -66,7 +67,7 @@ export function connect(
         }
       } catch (e) {
         onStatus?.(false);
-        if (!stopped) console.error('[room] stream error, retrying:', (e as Error).message);
+        if (!stopped) console.error(`${tag} stream error, retrying:`, (e as Error).message);
       }
       if (!stopped) await new Promise((r) => setTimeout(r, 3000)); // backoff
     }
