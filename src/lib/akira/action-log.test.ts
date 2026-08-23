@@ -1,6 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatActionLogLine, actionLogPath } from './action-log';
+import { readFileSync, existsSync } from 'node:fs';
+import { formatActionLogLine, actionLogPath, registerActionSink, clearActionSinks, appendActionLog, type ActionLogEvent } from './action-log';
+
+function readLogLines(): Record<string, unknown>[] {
+  const p = actionLogPath();
+  if (!existsSync(p)) return [];
+  return readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+}
 
 test('a log line carries the target and is one JSON object', () => {
   const line = formatActionLogLine({
@@ -85,4 +92,54 @@ test('actionLogPath prefers AKIRA_ACTION_LOG, falls back to ROOM_SHELL_LOG', () 
     if (saved.a === undefined) delete process.env.AKIRA_ACTION_LOG; else process.env.AKIRA_ACTION_LOG = saved.a;
     if (saved.r === undefined) delete process.env.ROOM_SHELL_LOG; else process.env.ROOM_SHELL_LOG = saved.r;
   }
+});
+
+test('a registered sink receives every event, and unregister stops it', () => {
+  clearActionSinks();
+  const seen: string[] = [];
+  const unregister = registerActionSink((e) => seen.push(e.event));
+  try {
+    appendActionLog({ at: new Date(), target: 'host', event: 'dispatch', command: 'echo one' });
+    appendActionLog({ at: new Date(), target: 'host', event: 'result', command: 'echo one', status: 'ok' });
+    assert.deepEqual(seen, ['dispatch', 'result']);
+    unregister();
+    appendActionLog({ at: new Date(), target: 'host', event: 'result', command: 'echo two', status: 'ok' });
+    assert.deepEqual(seen, ['dispatch', 'result'], 'no events after unregister');
+  } finally { clearActionSinks(); }
+});
+
+test('a throwing sink never breaks the caller and never blocks other sinks', () => {
+  clearActionSinks();
+  const seen: string[] = [];
+  try {
+    registerActionSink(() => { throw new Error('sink exploded'); });
+    registerActionSink((e) => seen.push(e.command));
+    // Must not throw: logging is best-effort and a turn must survive it.
+    appendActionLog({ at: new Date(), target: 'host', event: 'result', command: 'still logged', status: 'ok' });
+    assert.deepEqual(seen, ['still logged'], 'the second sink still ran');
+  } finally { clearActionSinks(); }
+});
+
+test('the file log is still written when a sink throws', () => {
+  clearActionSinks();
+  try {
+    registerActionSink(() => { throw new Error('sink exploded'); });
+    const before = readLogLines().length;
+    appendActionLog({ at: new Date(), target: 'room', event: 'result', command: 'file still written', status: 'ok' });
+    assert.equal(readLogLines().length, before + 1);
+  } finally { clearActionSinks(); }
+});
+
+test('unregister is idempotent and removes only its own registration', () => {
+  clearActionSinks();
+  const seen: string[] = [];
+  const fn = (e: ActionLogEvent) => seen.push(e.command);
+  try {
+    const unregisterA = registerActionSink(fn);
+    registerActionSink(fn); // the SAME reference, registered twice
+    unregisterA();
+    unregisterA(); // calling it again must NOT remove the second registration
+    appendActionLog({ at: new Date(), target: 'host', event: 'result', command: 'once', status: 'ok' });
+    assert.deepEqual(seen, ['once'], 'exactly one registration survives');
+  } finally { clearActionSinks(); }
 });

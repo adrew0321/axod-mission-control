@@ -59,6 +59,45 @@ export function formatActionLogLine(e: ActionLogEvent): string {
   return JSON.stringify(row) + '\n';
 }
 
+/**
+ * Extra destinations for action events. The DB write lives here rather than in
+ * a direct import because this module is unit-tested by `pnpm test`, and pulling
+ * in the db client would drag `server-only` with it — which throws outside the
+ * react-server resolve condition. A server-only module registers its sink at
+ * boot (see action-feed.ts, wired in instrumentation.ts).
+ */
+type ActionSink = (e: ActionLogEvent) => void;
+// Survive Next dev HMR / a distinct instrumentation module graph: keep the
+// registry on globalThis, matching preview.ts's idiom. action-log.ts is
+// imported from BOTH request-handling code (appendActionLog, below) and the
+// instrumentation entrypoint (action-feed.ts's startActionFeed, registering
+// the sink) — if those two import graphs ever resolved to separate module
+// instances of this file, a bare module-level array would leave each graph
+// with its own empty `sinks`: the sink would register into one array while
+// appendActionLog iterates the other, and the feed would go dark with no
+// error anywhere (see action-feed.ts's IMPORTANT-2 note for the paired half
+// of this fix — it must be backed the same way, or not at all).
+const sinks: ActionSink[] =
+  (globalThis as { __mcActionLogSinks?: ActionSink[] }).__mcActionLogSinks ??
+  ((globalThis as { __mcActionLogSinks?: ActionSink[] }).__mcActionLogSinks = []);
+
+/** Register a sink. Returns an unregister function. */
+export function registerActionSink(fn: ActionSink): () => void {
+  sinks.push(fn);
+  let removed = false;
+  return () => {
+    if (removed) return;
+    removed = true;
+    const i = sinks.indexOf(fn);
+    if (i >= 0) sinks.splice(i, 1);
+  };
+}
+
+/** Drop every sink. For tests. */
+export function clearActionSinks(): void {
+  sinks.length = 0;
+}
+
 /** Append to the log and mirror to stdout (journald). Best-effort: a logging
  *  failure must never take down a turn. */
 export function appendActionLog(e: ActionLogEvent): void {
@@ -70,5 +109,15 @@ export function appendActionLog(e: ActionLogEvent): void {
     appendFileSync(p, line, 'utf8');
   } catch (err) {
     console.warn('[akira-action] log append failed:', err instanceof Error ? err.message : err);
+  }
+
+  // Sinks are best-effort and independent: one throwing must neither break the
+  // turn nor stop the others. The file write above already happened.
+  for (const sink of sinks) {
+    try {
+      sink(e);
+    } catch (err) {
+      console.warn('[akira-action] sink failed:', err instanceof Error ? err.message : err);
+    }
   }
 }

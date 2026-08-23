@@ -2,6 +2,7 @@ import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } 
 import type { ScheduleRunRow, DreamRowLite } from './discord-notify-diff';
 import type { Proposal } from './proposals';
 import type { RoomProposal } from './room-proposals';
+import type { ActionLite } from '@/lib/akira/action-feed-diff';
 
 const GREEN = 0x10b981;
 const RED = 0xef4444;
@@ -117,5 +118,42 @@ export function roomProposalEmbed(p: RoomProposal): APIEmbed {
     fields: [{ name: 'path', value: `\`${safePath}\``, inline: false }],
     footer: { text: 'Approve it in Proposals to have her work on it' },
     timestamp: p.createdAt,
+  };
+}
+
+/**
+ * One completed AKIRA action. SPEC D7: metadata only — target, command, cwd,
+ * exit code, status. NEVER command output: she can read .env, and Discord is a
+ * third party. `discord-format.test.ts` has a test whose only job is to fail if
+ * an output field is ever added here.
+ */
+export function actionEmbed(a: ActionLite): APIEmbed {
+  // A command, cwd, or reason isn't fully operator-authored (AKIRA composes
+  // commands and passes a cwd freely on every bash/read/write tool call); a
+  // backtick in any of them would close the code span early, so strip
+  // backticks before interpolating — same precedent as roomProposalEmbed's
+  // safePath above. This is a trust concern (the operator must read exactly
+  // what ran), not a D7 concern (no secret exposure).
+  const safe = (s: string) => s.replace(/`/g, '');
+  const ok = a.event === 'result' && a.status === 'ok' && (a.exitCode ?? 0) === 0;
+  const lines = [`\`${safe(a.command)}\``];
+  if (a.cwd) lines.push(`in \`${safe(a.cwd)}\``);
+  if (a.event === 'intent') {
+    lines.push('_Started — this restarts Mission Control, so no result follows if it succeeds._');
+  } else {
+    if (a.exitCode !== null) lines.push(`exit ${a.exitCode}`);
+    if (a.reason) lines.push(safe(a.reason));
+  }
+  // A `denied` gate and a failed `result` both render red with an exit code the
+  // operator has to decode — neither says WHY on its own. Surface the event in
+  // the title for anything but the common terminal case (a plain `result`), and
+  // the status whenever it isn't 'ok', so "refused" and "failed" read apart.
+  const titleSuffix =
+    a.event !== 'result' ? ` · ${a.event}` : a.status && a.status !== 'ok' ? ` · ${a.status}` : '';
+  return {
+    title: `AKIRA · ${a.target}${titleSuffix}`,
+    description: lines.join('\n').slice(0, 4000),
+    color: ok ? GREEN : RED,
+    timestamp: new Date(a.atMs).toISOString(),
   };
 }

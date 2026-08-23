@@ -17,6 +17,8 @@ export async function register() {
     startReflecting();
     const { startDiscordBot } = await import('@/lib/discord-bot');
     startDiscordBot();
+    const { startActionFeed } = await import('@/lib/akira/action-feed');
+    startActionFeed();
     const { startDiscordNotify } = await import('@/lib/discord-notify');
     startDiscordNotify();
 
