@@ -4,7 +4,7 @@ import { execFs } from './fs-ops';
 import { execShell } from './shell-ops';
 import { watchDoorway } from './watcher';
 import { isRoom } from './policy';
-import type { Command } from './protocol';
+import type { Command, Result } from './protocol';
 
 const cfg = loadConfig();
 const tag = `[${cfg.mode}]`;
@@ -17,21 +17,24 @@ const conn = connect(cfg, (cmd: Command) => {
   chain = chain
     .then(async () => {
       console.log(`${tag} exec`, cmd.action, cmd.command ?? cmd.path ?? '');
-      // Task 5 teaches execShell/execFs to consume cfg.policy directly (room
-      // roots vs. the host's unrestricted defaultCwd). Host-mode dispatch is
-      // deliberately not wired here — that is out of scope for this task.
-      if (!isRoom(cfg.policy)) {
-        throw new Error(`${tag} command execution is not yet implemented for host mode`);
+      let result: Result;
+      try {
+        result = cmd.action === 'shell'
+          ? await execShell(cfg.policy, cmd)
+          : await execFs(cfg.policy, cmd);
+      } catch (e) {
+        // An unexpected throw must still come back as a Result: never leave
+        // Mission Control waiting on a promise that will not settle (spec D2).
+        result = { id: cmd.id, status: 'error', reason: e instanceof Error ? e.message : String(e) };
       }
-      const result = cmd.action === 'shell'
-        ? await execShell(cfg.policy, cmd)
-        : await execFs(cfg.policy, cmd);
       if (result.status !== 'ok') console.warn(tag, result.status, result.reason);
       await conn.postResult(result);
     })
-    .catch((err) => console.error(`${tag} command chain error:`, err));
+    .catch((err) => console.error(`${tag} result POST failed:`, err));
 });
 
+// Room only: there is no doorway on the host, and watchDoorway would throw on a
+// path that isn't there.
 const watcher = isRoom(cfg.policy)
   ? watchDoorway(cfg.policy.roots, (drop) => {
       console.log(`${tag} drop`, drop.zone, drop.name, `${drop.sizeBytes}b`);
@@ -40,10 +43,10 @@ const watcher = isRoom(cfg.policy)
   : null;
 
 console.log(
-  `${tag} AKIRA agent started;`,
+  `${tag} AKIRA mini agent started;`,
   isRoom(cfg.policy)
     ? `room: ${cfg.policy.roots.room} doorway: ${cfg.policy.roots.doorway}`
-    : `defaultCwd: ${cfg.policy.defaultCwd}`,
+    : `host, default cwd: ${cfg.policy.defaultCwd}`,
 );
 
 function shutdown() {
