@@ -2,6 +2,7 @@ import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } 
 import type { ScheduleRunRow, DreamRowLite } from './discord-notify-diff';
 import type { Proposal } from './proposals';
 import type { RoomProposal } from './room-proposals';
+import type { ActionLite } from '@/lib/akira/action-feed-diff';
 
 const GREEN = 0x10b981;
 const RED = 0xef4444;
@@ -117,5 +118,28 @@ export function roomProposalEmbed(p: RoomProposal): APIEmbed {
     fields: [{ name: 'path', value: `\`${safePath}\``, inline: false }],
     footer: { text: 'Approve it in Proposals to have her work on it' },
     timestamp: p.createdAt,
+  };
+}
+
+/**
+ * One completed AKIRA action. SPEC D7: metadata only — target, command, cwd,
+ * exit code, status. NEVER command output: she can read .env, and Discord is a
+ * third party. `discord-format.test.ts` has a test whose only job is to fail if
+ * an output field is ever added here.
+ */
+export function actionEmbed(a: ActionLite): APIEmbed {
+  const ok = a.event === 'result' && a.status === 'ok' && (a.exitCode ?? 0) === 0;
+  const lines = [`\`${a.command}\``];
+  if (a.cwd) lines.push(`in \`${a.cwd}\``);
+  if (a.event === 'intent') {
+    lines.push('_Started — this restarts Mission Control, so no result will follow._');
+  } else {
+    if (a.exitCode !== null) lines.push(`exit ${a.exitCode}`);
+    if (a.reason) lines.push(a.reason);
+  }
+  return {
+    title: `AKIRA · ${a.target}`,
+    description: lines.join('\n').slice(0, 4000),
+    color: ok ? GREEN : RED,
   };
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chunkReply, roomProposalEmbed } from './discord-format';
+import { chunkReply, roomProposalEmbed, actionEmbed } from './discord-format';
 
 test('short text → single chunk', () => {
   assert.deepEqual(chunkReply('hello'), ['hello']);
@@ -146,4 +146,41 @@ test('a room proposal embed sets a color, like every sibling embed', () => {
   // leaving it Discord's default grey instead of matching the rest of the
   // bot's visual language.
   assert.equal(roomProposalEmbed(drop).color, 0x3b82f6);
+});
+
+test('actionEmbed carries the metadata the operator needs', () => {
+  const e = actionEmbed({
+    id: 'act_1', atMs: 1, target: 'host', event: 'result',
+    command: 'systemctl status mission-control', cwd: '/srv/mission-control',
+    exitCode: 0, status: 'ok', reason: null,
+  });
+  assert.match(JSON.stringify(e), /systemctl status mission-control/);
+  assert.match(JSON.stringify(e), /host/);
+});
+
+// SPEC D7 — this test exists to fail if anyone ever adds command output to the
+// embed. AKIRA can `cat .env`; Discord is a third party. Do not relax it.
+test('actionEmbed NEVER carries command output', () => {
+  const secret = 'SESSION_SECRET=hunter2-do-not-ship-this';
+  const e = actionEmbed({
+    id: 'act_2', atMs: 1, target: 'host', event: 'result',
+    // A field that does not exist on ActionLite today. If someone widens the type
+    // and pipes stdout through, this cast is what makes the test still catch it.
+    command: 'cat .env', cwd: null, exitCode: 0, status: 'ok', reason: null,
+    ...({ text: secret, output: secret, stdout: secret } as unknown as object),
+  } as never);
+  assert.doesNotMatch(
+    JSON.stringify(e),
+    /hunter2-do-not-ship-this/,
+    'command output must never reach the Discord embed (spec D7)',
+  );
+});
+
+test('actionEmbed marks an intent as having no result to follow', () => {
+  const e = actionEmbed({
+    id: 'act_3', atMs: 1, target: 'host', event: 'intent',
+    command: 'systemctl restart mission-control', cwd: null,
+    exitCode: null, status: null, reason: null,
+  });
+  assert.match(JSON.stringify(e), /no result/i);
 });
