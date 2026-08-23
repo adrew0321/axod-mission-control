@@ -14,9 +14,17 @@ export const AKIRA_AGENT = {
   // (brief runs every landing); far lighter on the Pro cap than Opus.
   model: 'claude-haiku-4-5-20251001',
   system_prompt: AKIRA_SYSTEM_PROMPT,
-  // NO Read/Glob/Grep — see the note in scripts/seed.ts. These execute in the MC
-  // process as `mc` with cwd=/srv/mission-control, so they reach .env and the live
-  // database. room_read covers files; relay covers code.
+  // The old boundary here — no Read/Glob/Grep because they'd reach .env and the
+  // live database as `mc` — is gone. It was removed DELIBERATELY by sub-project C
+  // (docs/superpowers/specs/2026-08-22-akira-host-reach-design.md, D1: reach is
+  // total): she now has host `read`/`list`/`write`/`bash` via the host agent, and
+  // that reaches .env and the database anyway, by design (D2: awareness via the
+  // action log, not a veto — see action-log.ts).
+  //
+  // Read/Glob/Grep are STILL absent, for a different reason: per D4, those run
+  // in-process, in the server's own event loop — a long-running one would block
+  // the process AKIRA is thinking inside. Reach goes through the host agent
+  // instead (see scripts/seed.ts), where every action is logged.
   // 'Skill' is required for her vault skills to be invocable at all: this codebase
   // feeds tools_allowlist into the SDK's `tools` (the base capability set), not
   // just `allowedTools`, so without it skills are discovered but uncallable.

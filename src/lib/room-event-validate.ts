@@ -1,7 +1,7 @@
 // Pure request-body validation for POST /api/companion/room-event, kept
 // separate from the route handler (which transitively imports 'server-only'
 // via room-proposals-data.ts, and so cannot be exercised directly by
-// node:test — see room-shell.ts for the same split, for the same reason).
+// node:test — see agent-shell.ts for the same split, for the same reason).
 //
 // This route trusts the room's TOKEN, not the room's JUDGMENT: `name` and
 // `path` feed straight into AKIRA's instruction text (room-proposals.ts —

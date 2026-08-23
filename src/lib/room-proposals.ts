@@ -60,7 +60,7 @@ export function inboxTurnInstruction(p: { name: string; path: string; summary: s
     ``,
     `First look: ${p.summary}`,
     ``,
-    `Work on it now with your room tools. Read it (convert it first with room_bash if it isn't plain text),`,
+    `Work on it now with your list/read/write/bash tools on target "room". Read it (convert it first with bash if it isn't plain text),`,
     `do what it plainly asks for, and write your result back into the doorway so he can open it.`,
     `Tell him in a few sentences what you did and where the result is.`,
   ].join('\n');

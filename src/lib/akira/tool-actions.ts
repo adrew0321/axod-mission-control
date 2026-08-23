@@ -13,6 +13,10 @@ export const AKIRA_GET_SESSION = 'mcp__akira__get_session_detail';
 export const AKIRA_REMEMBER = 'mcp__akira__remember';
 export const AKIRA_FORGET = 'mcp__akira__forget';
 export const AKIRA_VAULT_WRITE = 'mcp__akira__vault_write';
+export const AKIRA_LIST = 'mcp__akira__list';
+export const AKIRA_READ = 'mcp__akira__read';
+export const AKIRA_WRITE = 'mcp__akira__write';
+export const AKIRA_BASH = 'mcp__akira__bash';
 
 export interface AkiraToolContext {
   emit: (e: { type: string; [k: string]: unknown }) => void;
