@@ -7,6 +7,8 @@ import { getChannelsForProject } from './discord-bindings';
 import { getProposals } from './proposals-data';
 import { getDreams } from './dreams-data';
 import { getOpenRoomProposals } from './room-proposals-data';
+import { readRecentActions } from './akira/action-feed';
+import { pickNewActions } from './akira/action-feed-diff';
 import {
   diffScheduleRuns,
   pickNewDreams,
@@ -14,7 +16,14 @@ import {
   type ScheduleRunRow,
   type DreamRowLite,
 } from './discord-notify-diff';
-import { scheduleEmbed, dreamEmbed, proposalEmbed, proposalActionRow, roomProposalEmbed } from './discord-format';
+import {
+  scheduleEmbed,
+  dreamEmbed,
+  proposalEmbed,
+  proposalActionRow,
+  roomProposalEmbed,
+  actionEmbed,
+} from './discord-format';
 import type { APIEmbed, APIActionRowComponent, APIComponentInMessageActionRow } from 'discord.js';
 import { onShutdown } from './shutdown';
 
@@ -26,6 +35,7 @@ let scheduleCursor = new Map<string, number>();
 let dreamCursor: number | null = null;
 let proposalCursor = new Set<string>();
 let roomProposalCursor = new Set<string>();
+let actionCursor: number | null = null;
 // The room gather can fail independently of the other three (see tick()), so it needs
 // its own "have I been primed" bit — priming for it may complete on a later tick than
 // the shared `primed` flag below.
@@ -105,6 +115,11 @@ async function tick(): Promise<void> {
       return null;
     });
 
+  const actionRows = await readRecentActions(50).catch((err) => {
+    console.error('[discord-notify] action gather failed:', err instanceof Error ? err.message : err);
+    return null;
+  });
+
   const sched = diffScheduleRuns(scheduleCursor, schedRows);
   const dreamD = pickNewDreams(dreamCursor, dreamRows);
   const prop = diffProposals(proposalCursor, currIds);
@@ -122,6 +137,7 @@ async function tick(): Promise<void> {
       roomProposalCursor = roomGather.diff.next;
       roomProposalPrimed = true;
     }
+    if (actionRows) actionCursor = pickNewActions(actionCursor, actionRows).next;
     primed = true;
     return;
   }
@@ -169,6 +185,17 @@ async function tick(): Promise<void> {
   }
   // else: this tick's gather failed — cursor and roomProposalPrimed are left untouched,
   // so the next successful gather resumes exactly where this one would have.
+
+  // --- AKIRA's actions: route to the home project channel (not project-scoped) ---
+  if (actionRows) {
+    // Oldest first, so the feed reads in the order things happened.
+    const fresh = pickNewActions(actionCursor, actionRows).newActions.slice().sort((a, b) => a.atMs - b.atMs);
+    for (const a of fresh) {
+      if (await postToProject(client, DREAM_PROJECT_ID, actionEmbed(a))) {
+        actionCursor = Math.max(actionCursor ?? 0, a.atMs);
+      }
+    }
+  }
 }
 
 /** Start the notification poller. Idempotent; only when the bot token is set. */
