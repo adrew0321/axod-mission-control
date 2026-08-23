@@ -251,6 +251,33 @@ export const room_proposals = sqliteTable('room_proposals', {
   decided_at: integer('decided_at', { mode: 'timestamp' }),
 });
 
+// One row per AKIRA action that reached a terminal state. Fed by action-log.ts's
+// sink (see action-feed.ts) and read by the Discord poller.
+//
+// There is NO output column, and there must never be one: spec D7 keeps command
+// output out of the feed because she can read .env, and Discord is a third party.
+export const agent_actions = sqliteTable('agent_actions', {
+  id: text('id').primaryKey(),
+  // timestamp_ms (not timestamp): the poller's cursor is a strict `at > since`
+  // watermark, and second-granularity timestamps let same-second sibling actions
+  // (e.g. list+read+write in one turn) collide and permanently exclude each other.
+  // This table has no deployed data yet, so there is no stored-seconds value to
+  // migrate; the migration SQL itself (`at integer NOT NULL`) is unaffected —
+  // drizzle stores an integer either way, only the JS-side unit changes.
+  at: integer('at', { mode: 'timestamp_ms' }).notNull(),
+  target: text('target').notNull(), // 'laptop' | 'room' | 'host'
+  event: text('event').notNull(), // 'result' | 'intent' | 'denied'
+  command: text('command').notNull(),
+  cwd: text('cwd'),
+  exit_code: integer('exit_code'),
+  status: text('status'),
+  reason: text('reason'),
+  // NULL until this row has been successfully posted to the feed. Delivery state
+  // must be durable: a module-level cursor is lost on restart, and per D5 AKIRA
+  // restarting Mission Control is routine — the unposted tail would vanish.
+  posted_at: integer('posted_at', { mode: 'timestamp_ms' }),
+});
+
 export const sessionsRelations = relations(sessions, ({ one, many }) => ({
   project: one(projects, { fields: [sessions.project_id], references: [projects.id] }),
   messages: many(messages),
