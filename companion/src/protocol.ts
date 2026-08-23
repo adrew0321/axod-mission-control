@@ -1,6 +1,6 @@
 // Shared wire types for the AKIRA Local Companion and the room agent. Pure — no deps.
 // THREE byte-identical copies exist: src/lib/companion/protocol.ts,
-// companion/src/protocol.ts, room-agent/src/protocol.ts.
+// companion/src/protocol.ts, mini-agent/src/protocol.ts.
 // protocol-copies.test.ts enforces that they stay identical.
 
 export type CommandAction =

@@ -112,3 +112,34 @@ test('resolveResult with no target still settles (back-compat)', async () => {
   assert.equal((await cmd.result).text, 'ok');
   unreg();
 });
+
+test('a disconnecting host fails only host commands', () => {
+  const hostSink = { send() {}, close() {} };
+  const roomSink = { send() {}, close() {} };
+  const unregisterHost = registerCompanion(hostSink, 'host');
+  const unregisterRoom = registerCompanion(roomSink, 'room');
+
+  const hostCmd = sendCommand({ action: 'shell', command: 'true' }, 5000, 'host');
+  const roomCmd = sendCommand({ action: 'shell', command: 'true' }, 5000, 'room');
+  const roomSettled = { done: false };
+  roomCmd.result.then(() => { roomSettled.done = true; }, () => { roomSettled.done = true; });
+
+  unregisterHost();
+
+  return hostCmd.result.then(
+    () => assert.fail('host command should have rejected'),
+    (e) => {
+      assert.match(String(e.message), /disconnected/);
+      assert.equal(roomSettled.done, false, "the room's in-flight command must survive");
+      unregisterRoom();
+    },
+  );
+});
+
+test('isOnline is per target', () => {
+  assert.equal(isOnline('host'), false);
+  const un = registerCompanion({ send() {} }, 'host');
+  assert.equal(isOnline('host'), true);
+  assert.equal(isOnline('room'), false);
+  un();
+});

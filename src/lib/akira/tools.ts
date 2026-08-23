@@ -58,7 +58,7 @@ export async function getSessionDetailHandler(args: { sessionId: string }): Prom
 }
 
 import { browserToolDefs } from './browser-tools';
-import { roomToolDefs } from './room-tools';
+import { agentToolDefs } from './agent-tools';
 import { isOnline } from '@/lib/companion/registry';
 
 /**
@@ -165,7 +165,7 @@ export function createAkiraServer(ctx: AkiraToolContext) {
   const tools = [
     ...base,
     ...(isOnline('laptop') ? browserToolDefs(ctx) : []),
-    ...(isOnline('room') ? roomToolDefs(ctx) : []),
+    ...(isOnline('room') || isOnline('host') ? agentToolDefs(ctx) : []),
   ];
 
   return createSdkMcpServer({

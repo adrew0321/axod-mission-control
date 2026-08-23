@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { execShell } from './shell-ops';
 import type { Command } from './protocol';
+import { type ExecPolicy } from './policy';
 
 async function roots() {
   const base = await mkdtemp(join(tmpdir(), 'room-shell-'));
@@ -99,21 +100,21 @@ const groupKillSkip = skip
     : 'process.kill(-pid) cannot even address a process group on this host — cannot verify the child was really killed, only that execShell reports a timeout');
 
 test('runs a command and returns its output', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'echo hello' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'echo hello' }));
   assert.equal(r.status, 'ok');
   assert.equal(r.exitCode, 0);
   assert.match(r.text ?? '', /hello/);
 });
 
 test('a non-zero exit is ok with the code reported, not a transport error', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'exit 3' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'exit 3' }));
   assert.equal(r.status, 'ok', 'the command ran; its exit code is information');
   assert.equal(r.exitCode, 3);
   assert.match(r.text ?? '', /exit code 3/i);
 });
 
 test('stderr is captured alongside stdout', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'echo oops >&2' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'echo oops >&2' }));
   assert.match(r.text ?? '', /oops/);
 });
 
@@ -127,19 +128,19 @@ test('runs in the room root by default', { skip }, async () => {
   // renders paths, and it holds identically on the room's real target (Linux).
   const rts = await roots();
   await writeFile(join(rts.room, 'marker.txt'), 'here');
-  const r = await execShell(rts, cmd({ command: 'ls' }));
+  const r = await execShell({ mode: 'room', roots: rts }, cmd({ command: 'ls' }));
   assert.match(r.text ?? '', /marker\.txt/, 'the default cwd is the room root');
 });
 
 test('a cwd outside the room is blocked', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'ls', cwd: '/etc' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'ls', cwd: '/etc' }));
   assert.equal(r.status, 'blocked');
   assert.match(r.reason ?? '', /outside/i);
 });
 
 // The gate is pure and platform-independent — no skip.
 test('a gated command is blocked with the classifier reason', async () => {
-  const r = await execShell(await roots(), cmd({ command: 'npm run dev' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'npm run dev' }));
   assert.equal(r.status, 'blocked');
   assert.match(r.reason ?? '', /long-running|server/i);
 });
@@ -155,23 +156,23 @@ test('an approved gated command runs', { skip }, async () => {
   // it fails fast (`npm error enoent … Could not read package.json`) instead of
   // actually starting a dev server — no sleep, no orphan risk, and the
   // security-relevant path (approval reaching the spawn) gets real coverage.
-  const r = await execShell(await roots(), cmd({ command: 'npm run dev', approved: true }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'npm run dev', approved: true }));
   assert.equal(r.status, 'ok', 'approval let the gated command reach the spawn and run to completion');
 });
 
 test('an empty command is an error, not a block', async () => {
-  const r = await execShell(await roots(), cmd({ command: '   ' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: '   ' }));
   assert.equal(r.status, 'error');
 });
 
 test('a null byte in the command is an error, not an uncaught exception', async () => {
-  const r = await execShell(await roots(), cmd({ command: 'echo a\0b' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'echo a\0b' }));
   assert.equal(r.status, 'error');
   assert.match(r.reason ?? '', /null byte/i);
 });
 
 test('a non-shell action is rejected before anything else', async () => {
-  const r = await execShell(await roots(), cmd({ action: 'fs_read', path: 'x' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ action: 'fs_read', path: 'x' }));
   assert.equal(r.status, 'error');
   assert.match(r.reason ?? '', /unsupported action/i);
 });
@@ -186,7 +187,7 @@ test('a non-shell action is rejected before anything else', async () => {
 // this host can genuinely address a process group).
 
 test('a command that overruns the timeout is reported as a killed error, not a transport failure', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'sleep 5' }), 200);
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'sleep 5' }), 200);
   assert.equal(r.status, 'error');
   assert.equal(r.exitCode, null);
   assert.match(r.reason ?? '', /timeout|killed/i);
@@ -196,7 +197,7 @@ test('a timed-out leader is genuinely dead at the OS level, not merely reported 
   const rts = await roots();
   // `echo $$` reports the spawned leader's own pid; it's captured in `out` well
   // before the 250ms timeout fires, so it survives into the killed result's text.
-  const r = await execShell(rts, cmd({ command: 'echo $$; sleep 5' }), 250);
+  const r = await execShell({ mode: 'room', roots: rts }, cmd({ command: 'echo $$; sleep 5' }), 250);
   assert.equal(r.status, 'error');
   const pid = Number((r.text ?? '').trim().split(/\s+/)[0]);
   assert.ok(Number.isInteger(pid) && pid > 0, `expected the leader's pid in captured output, got: ${r.text}`);
@@ -222,7 +223,7 @@ test('a timeout kills a grandchild too, not just the leader', { skip: groupKillS
   // 500ms rather than the leader test's 250ms: this command does more before
   // the timeout fires (fork the background job, print its pid, enter `wait`),
   // and needs a touch more headroom for the shell to actually get there.
-  const r = await execShell(rts, cmd({ command: 'sleep 300 & echo $!; wait', approved: true }), 500);
+  const r = await execShell({ mode: 'room', roots: rts }, cmd({ command: 'sleep 300 & echo $!; wait', approved: true }), 500);
   assert.equal(r.status, 'error');
   const grandchildPid = Number((r.text ?? '').trim().split(/\s+/)[0]);
   assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0, `expected the backgrounded pid in captured output, got: ${r.text}`);
@@ -235,7 +236,7 @@ test('a timeout kills a grandchild too, not just the leader', { skip: groupKillS
 });
 
 test('output is truncated rather than returned unbounded', { skip }, async () => {
-  const r = await execShell(await roots(), cmd({ command: 'head -c 200000 /dev/zero | tr "\\0" "x"' }));
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'head -c 200000 /dev/zero | tr "\\0" "x"' }));
   assert.ok((r.text ?? '').length < 70_000, 'output must be capped');
   assert.match(r.text ?? '', /truncated/i);
 });
@@ -249,7 +250,7 @@ test('the output cap bounds memory, not just the returned string', { skip }, asy
   // heap does not track the command's real output size.
   if (global.gc) global.gc();
   const before = process.memoryUsage().heapUsed;
-  const r = await execShell(await roots(), cmd({ command: 'head -c 120000000 /dev/zero | tr "\\0" "x"' }), 30_000);
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: 'head -c 120000000 /dev/zero | tr "\\0" "x"' }), 30_000);
   if (global.gc) global.gc();
   const after = process.memoryUsage().heapUsed;
   assert.equal(r.status, 'ok');
@@ -291,7 +292,7 @@ test('a simple (non-pipeline) command whose output exceeds the cap still reports
   // combinations, not by executing it — this host cannot reach it. See the
   // fix report for the full reasoning and the reviewer's own measured table.
   const command = 'for ((i=0; i<3000; i++)); do echo "padding line $i to exceed the output cap for the test with enough characters to matter"; done';
-  const r = await execShell(await roots(), cmd({ command }), 15_000);
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command }), 15_000);
   assert.equal(r.status, 'ok', `expected a truncated-but-successful run, got: ${JSON.stringify(r)}`);
   assert.equal(typeof r.exitCode, 'number', 'a command that ran (even if cut short by the cap) must report a real exit code, not null — null specifically means "killed by our own timeout"');
   assert.ok((r.text ?? '').length < 70_000, 'output must be capped');
@@ -307,7 +308,7 @@ test('the output cap never splits a UTF-16 surrogate pair at the boundary', { sk
   // straddles exactly the 59999/60000 cap boundary, and assert no lone
   // surrogate and no U+FFFD replacement character survive into the result.
   const command = "printf 'x%.0s' $(seq 1 59999); printf '\\xf0\\x9f\\x98\\x80'; printf 'y%.0s' $(seq 1 100)";
-  const r = await execShell(await roots(), cmd({ command }), 15_000);
+  const r = await execShell({ mode: 'room', roots: await roots() }, cmd({ command }), 15_000);
   const text = r.text ?? '';
   assert.equal(r.status, 'ok');
   assert.match(text, /truncated/i);
@@ -324,4 +325,80 @@ test('the output cap never splits a UTF-16 surrogate pair at the boundary', { sk
       assert.ok(prev >= 0xd800 && prev <= 0xdbff, `lone low surrogate at index ${i}`);
     }
   }
+});
+
+const hostPolicy: ExecPolicy = { mode: 'host', defaultCwd: '/' };
+
+// Host mode has no path validation at all (D1/D2) — cmd.cwd goes straight to
+// spawn's cwd option. On the room's real Linux target that's exactly the
+// point. On this Windows dev laptop, spawn interprets a POSIX-style absolute
+// path like '/tmp' as a literal Win32 path (root of the current drive), and
+// since no such directory exists there, Node reports it as `spawn bash
+// ENOENT` — a path-form artifact of this dev host, not a defect in the
+// no-validation design being tested. Probe the real capability (same idiom
+// as `canSpawnBash`/`canAddressProcessGroup` above) rather than guessing from
+// `process.platform`, and throw loudly if it's ever unavailable somewhere
+// other than this Windows box — this is the one test proving host mode's
+// no-validation cwd handling, and the deployment target is Linux, so a
+// silent Linux-side skip would hide exactly the property it exists to prove.
+function canUseSlashTmpAsCwd(): boolean {
+  const probe = spawnSync('bash', ['-lc', 'pwd'], { cwd: '/tmp', timeout: 15_000 });
+  return probe.error === undefined && probe.status === 0;
+}
+
+function tmpCwdCapability(): boolean {
+  const ok = canUseSlashTmpAsCwd();
+  if (!ok && process.platform !== 'win32') {
+    throw new Error("'/tmp' unexpectedly unusable as a spawn cwd on a non-Windows host — this must not be a silent skip");
+  }
+  return ok;
+}
+
+const tmpCwdSkip = skip
+  || (tmpCwdCapability()
+    ? false
+    : "this host can't use '/tmp' as a literal spawn cwd (Windows path-form artifact — see task-5 report, not a room/host logic issue)");
+
+test('a command the room gate refuses runs ungated on the host', { skip }, async () => {
+  const gatedCommand = 'nohup echo hi';
+
+  // Room: the classifier refuses it, and this is the one 'blocked' an operator can clear.
+  const roomResult = await execShell({ mode: 'room', roots: await roots() }, cmd({ command: gatedCommand }));
+  assert.equal(roomResult.status, 'blocked');
+  assert.equal(roomResult.gated, true);
+
+  // Host: no gate at all (spec D2) — same command, it simply runs.
+  const hostResult = await execShell(hostPolicy, cmd({ command: gatedCommand }), 10_000);
+  assert.equal(hostResult.status, 'ok');
+  assert.equal(hostResult.gated, undefined, 'host mode must never return a gated result');
+});
+
+test('host mode honours an absolute cwd outside any room root', { skip: tmpCwdSkip }, async () => {
+  const r = await execShell(hostPolicy, {
+    id: 'c2', action: 'shell', command: 'pwd', cwd: '/tmp',
+  }, 10_000);
+  assert.equal(r.status, 'ok');
+  assert.match(r.text ?? '', /tmp/);
+});
+
+test('host mode resolves a relative cwd against defaultCwd, not the process cwd', { skip }, async () => {
+  // Mirrors the room's own "runs in the room root by default" test above: a
+  // filesystem marker proves where the command actually ran without
+  // depending on how a given shell renders paths. A relative cmd.cwd must
+  // anchor to defaultCwd (matching execFs's host branch) rather than
+  // resolving against wherever the mini-agent process itself happens to be
+  // running from.
+  const base = await mkdtemp(join(tmpdir(), 'mini-host-cwd-'));
+  const sub = join(base, 'sub');
+  await mkdir(sub, { recursive: true });
+  await writeFile(join(sub, 'marker.txt'), 'here');
+  const r = await execShell({ mode: 'host', defaultCwd: base }, cmd({ command: 'ls', cwd: 'sub' }), 10_000);
+  assert.equal(r.status, 'ok');
+  assert.match(r.text ?? '', /marker\.txt/, 'a relative cwd must resolve against defaultCwd, not the mini-agent process cwd');
+});
+
+test('host mode still reports a non-zero exit code truthfully', { skip }, async () => {
+  const r = await execShell(hostPolicy, { id: 'c3', action: 'shell', command: 'exit 3' }, 10_000);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.exitCode, 3);
 });

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFs } from './fs-ops';
@@ -18,7 +19,7 @@ async function makeRoots(): Promise<Roots> {
 test('fs_list lists a directory', async () => {
   const roots = await makeRoots();
   await writeFile(join(roots.room, 'a.txt'), 'x');
-  const r = await execFs(roots, { id: 'c1', action: 'fs_list', path: '.' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c1', action: 'fs_list', path: '.' });
   assert.equal(r.status, 'ok');
   assert.equal(r.text, 'a.txt');
 });
@@ -26,14 +27,14 @@ test('fs_list lists a directory', async () => {
 test('fs_read returns file contents', async () => {
   const roots = await makeRoots();
   await writeFile(join(roots.room, 'note.md'), 'hello room');
-  const r = await execFs(roots, { id: 'c2', action: 'fs_read', path: 'note.md' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c2', action: 'fs_read', path: 'note.md' });
   assert.equal(r.status, 'ok');
   assert.equal(r.text, 'hello room');
 });
 
 test('fs_write creates parent directories', async () => {
   const roots = await makeRoots();
-  const r = await execFs(roots, { id: 'c3', action: 'fs_write', path: 'deep/nested/out.txt', content: 'written' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c3', action: 'fs_write', path: 'deep/nested/out.txt', content: 'written' });
   assert.equal(r.status, 'ok');
   assert.equal(await readFile(join(roots.room, 'deep/nested/out.txt'), 'utf8'), 'written');
 });
@@ -41,35 +42,55 @@ test('fs_write creates parent directories', async () => {
 test('fs_write into the doorway works', async () => {
   const roots = await makeRoots();
   const target = join(roots.doorway, 'inbox', 'reply.md');
-  const r = await execFs(roots, { id: 'c4', action: 'fs_write', path: target, content: 'hi' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c4', action: 'fs_write', path: target, content: 'hi' });
   assert.equal(r.status, 'ok');
   assert.equal(await readFile(target, 'utf8'), 'hi');
 });
 
 test('a path outside the roots is blocked, not errored', async () => {
   const roots = await makeRoots();
-  const r = await execFs(roots, { id: 'c5', action: 'fs_read', path: '/etc/passwd' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c5', action: 'fs_read', path: '/etc/passwd' });
   assert.equal(r.status, 'blocked');
   assert.match(r.reason ?? '', /outside/i);
 });
 
 test('a missing file errors rather than throwing', async () => {
   const roots = await makeRoots();
-  const r = await execFs(roots, { id: 'c6', action: 'fs_read', path: 'nope.txt' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c6', action: 'fs_read', path: 'nope.txt' });
   assert.equal(r.status, 'error');
 });
 
 test('an oversized file is refused', async () => {
   const roots = await makeRoots();
   await writeFile(join(roots.room, 'big.bin'), 'x'.repeat(300_000));
-  const r = await execFs(roots, { id: 'c7', action: 'fs_read', path: 'big.bin' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c7', action: 'fs_read', path: 'big.bin' });
   assert.equal(r.status, 'error');
   assert.match(r.reason ?? '', /too large/i);
 });
 
 test('a non-fs action is an error, not a boundary refusal', async () => {
   const roots = await makeRoots();
-  const r = await execFs(roots, { id: 'c8', action: 'click', ref: 'e1' });
+  const r = await execFs({ mode: 'room', roots }, { id: 'c8', action: 'click', ref: 'e1' });
   assert.equal(r.status, 'error');
   assert.match(r.reason ?? '', /unsupported action/i);
+});
+
+test('host mode reads a path no room root contains', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'mini-host-'));
+  try {
+    writeFileSync(join(d, 'x.txt'), 'hello');
+    const r = await execFs({ mode: 'host', defaultCwd: '/' }, {
+      id: 'f1', action: 'fs_read', path: join(d, 'x.txt'),
+    });
+    assert.equal(r.status, 'ok');
+    assert.equal(r.text, 'hello');
+  } finally { rmSync(d, { recursive: true, force: true }); }
+});
+
+test('host mode still refuses a path that does not exist, as an error not a block', async () => {
+  const r = await execFs({ mode: 'host', defaultCwd: '/' }, {
+    id: 'f2', action: 'fs_read', path: '/definitely/not/here.txt',
+  });
+  assert.equal(r.status, 'error');
+  assert.equal(r.reason?.includes('ENOENT'), true);
 });

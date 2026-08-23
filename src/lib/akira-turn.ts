@@ -29,7 +29,7 @@ import { soulLessonsPreamble } from './akira/preamble';
 import { readVaultMap, vaultBlock } from './akira/memory/vault-map';
 
 import { BROWSER_TOOL_NAMES } from './akira/browser-tools';
-import { ROOM_TOOL_NAMES } from './akira/room-tools';
+import { AGENT_TOOL_NAMES } from './akira/agent-tools';
 import { isOnline as companionOnline } from '@/lib/companion/registry';
 
 export type TurnEmit = (e: { type: string; [k: string]: unknown }) => void;
@@ -123,7 +123,7 @@ export async function runAkiraTurn(
     // (the /api/akira/stream route wires one to the HUD's SSE connection) as
     // opposed to the no-op default used by headless, doorway-triggered turns
     // (room-proposals-data.ts's runRoomTurn calls runAkiraTurn with no emit
-    // at all). See room-shell.ts for why this matters for shell gates.
+    // at all). See agent-shell.ts for why this matters for shell gates.
     const server = createAkiraServer({ emit, watched: Boolean(opts.emit) });
 
     emit({ type: 'start' });
@@ -165,7 +165,7 @@ export async function runAkiraTurn(
         AKIRA_FORGET,
         AKIRA_VAULT_WRITE,
         ...BROWSER_TOOL_NAMES,
-        ...ROOM_TOOL_NAMES,
+        ...AGENT_TOOL_NAMES,
       ],
       signal: opts.signal,
     })) {
