@@ -184,3 +184,26 @@ test('actionEmbed marks an intent as having no result to follow', () => {
   });
   assert.match(JSON.stringify(e), /no result/i);
 });
+
+test('actionEmbed strips backticks from command and reason so the code span cannot be broken out of', () => {
+  const e = actionEmbed({
+    id: 'act_4', atMs: 1, target: 'host', event: 'result',
+    command: 'echo `whoami`', cwd: null, exitCode: 1, status: 'error',
+    reason: 'failed: `rm -rf /`',
+  });
+  assert.doesNotMatch(JSON.stringify(e), /`whoami`/);
+  assert.doesNotMatch(JSON.stringify(e), /`rm -rf \//);
+  assert.match(JSON.stringify(e), /echo whoami/);
+  assert.match(JSON.stringify(e), /failed: rm -rf/);
+});
+
+test('actionEmbed timestamp round-trips the action’s atMs', () => {
+  const atMs = Date.UTC(2026, 7, 22, 3, 30, 0);
+  const e = actionEmbed({
+    id: 'act_5', atMs, target: 'host', event: 'result',
+    command: 'systemctl status mission-control', cwd: null,
+    exitCode: 0, status: 'ok', reason: null,
+  });
+  assert.ok(e.timestamp, 'expected a timestamp on the embed');
+  assert.equal(new Date(e.timestamp as string).getTime(), atMs);
+});
