@@ -368,3 +368,50 @@ Decision 6 claims. It is not in the backup chain: `deploy/mc-backup.sh` copies e
 one file — the SQLite DB — into `/srv/backups`, and the offsite job ships only
 `/srv/backups` to R2. Moving the repo under `/srv` would not change that. Surviving the
 loss of the Mini itself needs a `git bundle` step added to the nightly backup.
+
+## Host agent (sub-project C, slice C1)
+
+The host agent gives AKIRA root reach on the Mini. Installing it is an operator
+step: root is NOPASSWD-allowlisted for `restart`/`daemon-reload` only, so this
+cannot be automated from a session.
+
+1. Mint the credential and put **the same value** in two places:
+   ```bash
+   HOST_TOKEN=$(openssl rand -hex 32)
+   # Mission Control's side:
+   echo "HOST_COMPANION_TOKEN=$HOST_TOKEN" | sudo -u mc tee -a /srv/mission-control/.env
+   # The agent's side:
+   printf 'AGENT_MODE=host\nHOST_TOKEN=%s\n' "$HOST_TOKEN" \
+     | sudo tee /srv/mission-control/mini-agent/.env.host
+   sudo chmod 600 /srv/mission-control/mini-agent/.env.host
+   ```
+   It must differ from `COMPANION_TOKEN` and `ROOM_COMPANION_TOKEN` — `resolveTarget`
+   checks laptop first, so a duplicated value silently downgrades the host.
+
+2. Install and start the unit:
+   ```bash
+   sudo cp /srv/mission-control/deploy/akira-host-agent.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now akira-host-agent
+   ```
+
+3. Restart Mission Control so it picks up `HOST_COMPANION_TOKEN`:
+   ```bash
+   sudo systemctl restart mission-control
+   ```
+
+4. Verify — the agent must report connected, and `systemctl --failed` must be empty:
+   ```bash
+   journalctl -u akira-host-agent -n 20 --no-pager
+   systemctl --failed
+   ```
+
+5. Re-provision the room's copy after the `room-agent` → `mini-agent` rename.
+   The container keeps running the old copy until you do this; it is safe to
+   defer, but the two will drift.
+
+6. Confirm in a live turn: ask AKIRA to run `systemctl is-active mission-control`
+   on target `host`. Then check the log carries it:
+   ```bash
+   sudo -u mc tail -5 /srv/mission-control/data/akira-actions.log
+   ```

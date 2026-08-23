@@ -1,4 +1,4 @@
-// The shell dispatch/gate/log logic, kept pure and separate from room-tools.ts
+// The shell dispatch/gate/log logic, kept pure and separate from agent-tools.ts
 // (which is 'server-only') so it can be exercised directly by node:test via
 // tsx — 'server-only' throws on import outside the react-server resolve
 // condition, and `pnpm test` doesn't set that condition. See action-log.ts for
