@@ -7,6 +7,10 @@ export interface Insight {
   category: InsightCategory;
   title: string;
   detail: string;
+  /** 1 = most useful. Always populated: a missing or malformed rank from the
+   *  model falls back to the insight's position among the parsed results
+   *  (spec D4) rather than discarding it. */
+  rank: number;
 }
 
 const CATEGORIES = new Set<InsightCategory>(["pattern", "risk", "suggestion", "praise"]);
@@ -34,11 +38,20 @@ export function parseInsights(text: string): Insight[] {
   const out: Insight[] = [];
   for (const item of arr) {
     if (!item || typeof item !== "object") continue;
-    const { category, title, detail } = item as Record<string, unknown>;
+    const { category, title, detail, rank } = item as Record<string, unknown>;
     if (typeof category !== "string" || !CATEGORIES.has(category as InsightCategory)) continue;
     if (typeof title !== "string" || !title.trim()) continue;
     if (typeof detail !== "string" || !detail.trim()) continue;
-    out.push({ category: category as InsightCategory, title: title.trim(), detail: detail.trim() });
+    // Position among the insights we are KEEPING, so a dropped item does not
+    // leave a gap in the ranking.
+    const fallback = out.length + 1;
+    const usable = typeof rank === "number" && Number.isInteger(rank) && rank > 0 && rank <= 100;
+    out.push({
+      category: category as InsightCategory,
+      title: title.trim(),
+      detail: detail.trim(),
+      rank: usable ? rank : fallback,
+    });
   }
   return out;
 }
