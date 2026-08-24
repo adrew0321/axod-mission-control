@@ -6,16 +6,22 @@ import { dreams, dream_insights, sessions, messages, agents } from '@/db/schema'
 import { runClaudeAgent } from '@/lib/agent-runner-sdk';
 import { parseInsights } from '@/lib/dream-insights';
 import { isDreamDue } from '@/lib/dream-due';
+import { formatTriageExamples } from '@/lib/dream-calibration';
+import { readTriagedInsights } from '@/lib/dreams-data';
 import { onShutdown } from './shutdown';
 
 export const CURATOR_MODEL = 'claude-opus-4-7';
 
 export const CURATOR_SYSTEM_PROMPT = `You are the Curator of AXOD Mission Control — a reflective observer of an AI agent team (Sage the orchestrator plus specialists) working for a single operator on real code.
 
-You are given a transcript of the team's RECENT activity (sessions and messages since the last time you reflected). Your job is to surface a small number of genuinely useful insights about how the work is going — patterns worth noticing, risks worth flagging, concrete suggestions, and earned praise. Be specific and ground every insight in what the transcript actually shows. Do not invent activity that isn't there. Quality over quantity: 0 to 6 insights. If nothing is worth surfacing, return an empty array.
+You are given a transcript of the team's RECENT activity (sessions and messages since the last time you reflected). Your job is to surface a small number of genuinely useful insights about how the work is going — patterns worth noticing, risks worth flagging, concrete suggestions, and earned praise. Be specific and ground every insight in what the transcript actually shows. Do not invent activity that isn't there. Quality over quantity: 0 to 3 insights, and fewer is a good answer. If nothing is worth surfacing, return an empty array.
+
+You may be shown, below, a record of insights this operator has actually starred or dismissed in past reflections. Read the dismissed ones as a volume signal, not only a taste signal: he ends up dismissing (or simply never opening) most of what gets surfaced to him. Emitting more than the best two or three is how an insight lands in that pile unread — it is not a way to be more helpful. Fewer is a better answer than filling the cap.
 
 Respond with ONLY a JSON array (optionally inside a \`\`\`json fence), each element:
-{ "category": "pattern" | "risk" | "suggestion" | "praise", "title": "<one concise line>", "detail": "<1-3 sentences>" }
+{ "category": "pattern" | "risk" | "suggestion" | "praise", "title": "<one concise line>", "detail": "<1-3 sentences>", "rank": <1 = most useful> }
+
+Rank what you emit: 1 is the single most useful thing here. In the rank-1 insight's detail, say in one clause why it outranks the others.
 
 No prose outside the array.`;
 
@@ -89,6 +95,15 @@ export async function runDream(): Promise<RunDreamResult> {
       role === 'user' ? 'Operator' : allAgents.find((a) => a.id === agentId)?.name ?? agentId ?? 'System';
 
     let context = formatContext(rows, nameFor);
+    // The operator's own triage history. Prepended rather than appended so a
+    // long transcript cannot push it out of the model's attention, and
+    // prepended BEFORE truncation so the calibration block itself never gets
+    // cut — the transcript absorbs the truncation loss instead. Read
+    // best-effort: a failure here must degrade to today's behaviour, not lose
+    // the night's dream.
+    const triage = await readTriagedInsights(10).catch(() => ({ starred: [], dismissed: [] }));
+    const calibration = formatTriageExamples(triage.starred, triage.dismissed);
+    if (calibration) context = `${calibration}\n\n---\n\n${context}`;
     if (context.length > MAX_CONTEXT_CHARS) context = context.slice(0, MAX_CONTEXT_CHARS);
 
     let fullText = '';
@@ -125,6 +140,7 @@ export async function runDream(): Promise<RunDreamResult> {
         title: ins.title,
         detail: ins.detail,
         status: 'new',
+        rank: ins.rank,
         created_at: new Date(),
       });
     }

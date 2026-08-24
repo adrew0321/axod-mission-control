@@ -62,6 +62,17 @@ test("a malformed rank falls back rather than dropping the insight", () => {
   assert.deepEqual(out.map((i) => i.rank), [1, 2, 3, 4]);
 });
 
+test("an absurd rank falls back to position rather than being stored", () => {
+  // SQLite's INTEGER max is ~9.2e18; a value like 1e21 would fail the insert
+  // and take the whole night's dream with it, so anything past a small bound
+  // (the cap is 3 insights) is treated the same as a malformed rank.
+  const out = parseInsights(JSON.stringify([
+    { category: "risk", title: "A", detail: "D", rank: 1e21 },
+  ]));
+  assert.equal(out.length, 1);
+  assert.equal(out[0].rank, 1);
+});
+
 test("fallback positions count parsed insights, not raw array indexes", () => {
   // The middle item is invalid for a reason that DOES drop it (bad category),
   // so the survivors must be ranked 1 and 2 — not 1 and 3.

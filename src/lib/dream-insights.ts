@@ -45,7 +45,7 @@ export function parseInsights(text: string): Insight[] {
     // Position among the insights we are KEEPING, so a dropped item does not
     // leave a gap in the ranking.
     const fallback = out.length + 1;
-    const usable = typeof rank === "number" && Number.isInteger(rank) && rank > 0;
+    const usable = typeof rank === "number" && Number.isInteger(rank) && rank > 0 && rank <= 100;
     out.push({
       category: category as InsightCategory,
       title: title.trim(),
