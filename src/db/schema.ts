@@ -147,6 +147,10 @@ export const dream_insights = sqliteTable('dream_insights', {
   title: text('title').notNull(),
   detail: text('detail').notNull(),
   status: text('status').notNull().default('new'), // 'new' | 'starred' | 'dismissed'
+  // 1 = most useful. Nullable: the insights that predate calibrated ranking
+  // keep NULL and are left alone (spec D5), and a malformed rank from the model
+  // never discards an insight (spec D4) — the parser falls back to array order.
+  rank: integer('rank'),
   created_at: integer('created_at', { mode: 'timestamp' }).notNull(),
 });
 
