@@ -10,15 +10,22 @@ test('both lists empty yields an empty string', () => {
   assert.equal(formatTriageExamples([], []), '');
 });
 
-test('starred and dismissed both appear, labelled distinctly', () => {
+test('starred and dismissed appear under their own distinct headings', () => {
   const out = formatTriageExamples([ins('kept-one')], [ins('binned-one')]);
-  assert.match(out, /kept-one/);
-  assert.match(out, /binned-one/);
-  // The two groups must be distinguishable, or the examples teach nothing.
-  const keptAt = out.indexOf('kept-one');
-  const binnedAt = out.indexOf('binned-one');
-  assert.notEqual(keptAt, binnedAt);
-  assert.ok(keptAt >= 0 && binnedAt >= 0);
+
+  const keptHeading = out.indexOf('KEPT');
+  const binnedHeading = out.indexOf('THREW AWAY');
+  assert.ok(keptHeading >= 0, 'the starred group has a heading');
+  assert.ok(binnedHeading >= 0, 'the dismissed group has a heading');
+  assert.ok(keptHeading < binnedHeading, 'kept is introduced before dismissed');
+
+  // Each example must sit under ITS OWN heading. An unlabelled concatenation,
+  // or the two groups merged, fails here — which the previous version of this
+  // test did not catch.
+  const keptItem = out.indexOf('kept-one');
+  const binnedItem = out.indexOf('binned-one');
+  assert.ok(keptItem > keptHeading && keptItem < binnedHeading, 'the starred item sits under the starred heading');
+  assert.ok(binnedItem > binnedHeading, 'the dismissed item sits under the dismissed heading');
 });
 
 test('only one side present still produces a usable block', () => {
