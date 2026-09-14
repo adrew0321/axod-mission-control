@@ -117,6 +117,16 @@ function flattenToolResultContent(content: unknown): string {
 }
 
 export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<AgentEvent> {
+  // Internal Shim: If we are using DeepSeek/LiteLLM, the SDK still requires 
+  // an Anthropic key and base URL to be present in the environment.
+  // We inject dummy values here so the user doesn't have to manage them in .env.
+  if (!process.env.ANTHROPIC_API_KEY && process.env.DEEPSEEK_API_KEY) {
+    process.env.ANTHROPIC_API_KEY = 'dummy-key-for-proxy';
+  }
+  if (!process.env.ANTHROPIC_BASE_URL && process.env.DEEPSEEK_API_KEY) {
+    process.env.ANTHROPIC_BASE_URL = 'http://localhost:9203';
+  }
+
   const {
     prompt,
     workingDir,
@@ -255,7 +265,9 @@ export async function* runClaudeAgent(opts: RunAgentOptions): AsyncIterable<Agen
         // it only on success meant every errored, timed-out, or capped run
         // recorded zero tokens — precisely the runs worth accounting for.
         const usage = {
-          costUsd: message.total_cost_usd,
+          costUsd: model?.includes('deepseek') 
+            ? ( (message.usage?.input_tokens ?? 0) * 0.14 / 1000000 ) + ( (message.usage?.output_tokens ?? 0) * 0.28 / 1000000 )
+            : message.total_cost_usd,
           tokensIn: message.usage?.input_tokens,
           tokensOut: message.usage?.output_tokens,
           cacheReadTokens: message.usage?.cache_read_input_tokens,
