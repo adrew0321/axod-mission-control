@@ -2,7 +2,7 @@
 
 > A self-hosted command center for running a team of AI agents that do real development work — from a web app or from Discord.
 
-**Status:** 🟢 **Live** — running 24/7 at **https://bridge.axodcreative.com** (`v1.8.0`), self-hosted on a home Mac Mini behind a Cloudflare Tunnel.
+**Status:** 🟢 **Live** — running 24/7 at **https://bridge.axodcreative.com** (`v1.28.0`), self-hosted on a home Mac Mini behind a Cloudflare Tunnel.
 **Owner:** [@adrew0321](https://github.com/adrew0321) (AXOD CREATIVE) · **License:** MIT
 
 ## What it is
@@ -39,6 +39,7 @@ The roster is **DB-driven** — each agent is a row (id, role, model, system pro
 - **Review & merge** — a Proposals inbox: approve→merge a session's worktree changes (or discard).
 - **Automation** — headless turn runner; **Scheduler** (recurring tasks; a nightly health-check that runs the test suite and reports pass/fail); **Dreaming/Curator** (nightly insights).
 - **Discord** — channel-per-project chat with Sage + proactive notifications (scheduled-task / dream / proposal embeds).
+- **Decoupled Brain** — AKIRA now runs on DeepSeek V4.1 Flash via a local proxy, removing the dependency on Claude subscriptions.
 - **Self-hosted & live** — home Mac Mini on Ubuntu, systemd services, Cloudflare named tunnel → `bridge.axodcreative.com`, nightly local DB backups.
 
 ## What's next
